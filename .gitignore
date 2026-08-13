@@ -1,0 +1,60 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+
+# Node / Next.js
+**/node_modules/
+**/.next/
+**/dist/
+**/out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup do VPS antigo (contém webshells + dados sensíveis, não commitar)
+backup-vps-*/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+appsettings.Local.json
+appsettings.*.local.json
+appsettings.Development.json
+appsettings.Production.json
+*.pem
+*.key
+CREDENCIAIS-LOCAIS.md
+.local-postgres-password
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Database dumps
+*.dump
+*.sql
+*.bak
+
+# Test PDFs
+pdf-test*.pdf
+
+# Deploy logs (gerados em runtime)
+_deploy/logs-*.txt
+
+# OS
+Thumbs.db
+.DS_Store

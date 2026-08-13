@@ -1,0 +1,44 @@
+@page "/sites"
+@attribute [Authorize]
+@inject SiteAdminService SiteAdmin
+@rendermode InteractiveServer
+
+<PageTitle>Configuração dos sites · AOB</PageTitle>
+
+<h1 class="h3 mb-3">Configuração dos sites</h1>
+<p class="text-muted">Edite tagline, missão, áreas de atuação, estatísticas, CTA e banda de aviso da homepage.</p>
+
+@if (Items is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var s in Items)
+        {
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h5">@s.Name</h2>
+                        <div class="text-muted small mb-2">@s.Domain · slug <code>@s.Slug</code></div>
+                        @if (!string.IsNullOrWhiteSpace(s.Tagline))
+                        {
+                            <div class="small text-muted mb-2"><em>@s.Tagline</em></div>
+                        }
+                        <a class="btn btn-sm btn-primary" href="/sites/@s.Id">Editar homepage</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Site>? Items;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Items = await SiteAdmin.ListAsync();
+    }
+}

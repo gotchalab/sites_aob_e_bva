@@ -1,0 +1,199 @@
+@page "/downloads/novo"
+@page "/downloads/{Id:int}"
+@attribute [Authorize]
+@using AOB.Core.Utilities
+@inject ContentService Content
+@inject UploadService Uploads
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(IsNew ? "Novo download" : Model?.Title ?? "Download") · AOB</PageTitle>
+
+@if (Model is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/downloads" class="text-decoration-none small">← Downloads</a>
+            <h1 class="h3 mb-0">@(IsNew ? "Novo download" : Model.Title)</h1>
+        </div>
+        @if (!IsNew)
+        {
+            <button class="btn btn-outline-danger" @onclick="OnDelete">Eliminar</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+    @if (!string.IsNullOrEmpty(ErrorMsg)) { <div class="alert alert-danger">@ErrorMsg</div> }
+
+    <EditForm Model="Model" OnValidSubmit="OnSave" FormName="DlForm">
+        <div class="row g-3">
+            <div class="col-md-8">
+                <label class="form-label">Titulo <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="Model.Title" @bind:after="OnTitleChanged" required />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Slug <span class="text-danger">*</span></label>
+                <input class="form-control font-monospace" @bind="Model.Slug" @bind:after="OnSlugTouched" required />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Site <span class="text-danger">*</span></label>
+                <select class="form-select" @bind="Model.SiteId" @bind:after="ReloadCategories" required>
+                    <option value="0">-- escolha uma opção --</option>
+                    @foreach (var s in AllSites)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Categoria (opcional)</label>
+                <select class="form-select" @bind="Model.CategoryId">
+                    <option value="">-- sem categoria --</option>
+                    @foreach (var n in Categories)
+                    {
+                        <option value="@n.Category.Id">@n.IndentedName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="pub" @bind="Model.IsPublished" />
+                    <label class="form-check-label" for="pub">Publicado</label>
+                </div>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Descricao (rich editor)</label>
+                <HtmlEditor Content="@(Model.Description ?? string.Empty)"
+                            ContentChanged="v => Model.Description = v"
+                            UploadUrl="@($"/admin/upload-inline?site={CurrentSiteSlug}")" />
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h6">Ficheiro</h2>
+                        @if (!string.IsNullOrEmpty(Model.StoragePath))
+                        {
+                            <div class="mb-2">
+                                <a href="@Model.StoragePath" target="_blank" class="text-decoration-none small font-monospace">@Model.StoragePath</a>
+                                <span class="text-muted small ms-2">(@Model.FileSize bytes · @Model.MimeType)</span>
+                            </div>
+                        }
+                        <InputFile OnChange="OnUpload" class="form-control" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Guardar</button>
+                <a href="/downloads" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public int Site { get; set; }
+
+    private bool IsNew => Id is null || Id.Value == 0;
+    private Download? Model;
+    private List<Site> AllSites = new();
+    private string CurrentSiteSlug => AllSites.FirstOrDefault(s => s.Id == (Model?.SiteId ?? 0))?.Slug ?? "aob";
+    private List<ContentService.CategoryNode> Categories = new();
+    private string? Message;
+    private string? ErrorMsg;
+    private bool SlugTouched;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (IsNew)
+        {
+            Model = new Download { SiteId = Site, IsPublished = false };
+            SlugTouched = false;
+        }
+        else
+        {
+            Model = await Content.GetDownload(Id!.Value);
+            if (Model is null)
+            {
+                Nav.NavigateTo("/downloads");
+                return;
+            }
+            SlugTouched = true;
+        }
+        await ReloadCategories();
+    }
+
+    private void OnTitleChanged()
+    {
+        if (Model is null || SlugTouched) return;
+        Model.Slug = SlugHelper.Slugify(Model.Title ?? "");
+    }
+
+    private void OnSlugTouched()
+    {
+        if (Model is null) return;
+        SlugTouched = !string.IsNullOrWhiteSpace(Model.Slug);
+    }
+
+    private async Task ReloadCategories()
+    {
+        if (Model is null) return;
+        Categories = await Content.ListCategoryTree(Model.SiteId, includeDownloads: true);
+    }
+
+    private async Task OnSave()
+    {
+        if (Model is null) return;
+        if (Model.SiteId <= 0)
+        {
+            ErrorMsg = "Escolha um site.";
+            Message = null;
+            return;
+        }
+        try
+        {
+            if (Model.CategoryId == 0) Model.CategoryId = null;
+            await Content.SaveDownload(Model);
+            Message = "Guardado.";
+            ErrorMsg = null;
+            if (IsNew) Nav.NavigateTo($"/downloads/{Model.Id}");
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+
+    private async Task OnDelete()
+    {
+        if (Model is null || IsNew) return;
+        var oldPath = Model.StoragePath;
+        await Content.DeleteDownload(Model.Id);
+        Uploads.DeleteStored(oldPath);
+        Nav.NavigateTo("/downloads");
+    }
+
+    private async Task OnUpload(InputFileChangeEventArgs e)
+    {
+        if (Model is null) return;
+        try
+        {
+            var site = AllSites.FirstOrDefault(s => s.Id == Model.SiteId)?.Slug ?? "aob";
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+            var res = await Uploads.SaveAsync(stream, e.File.Name, site, "downloads");
+            var previousPath = Model.StoragePath;
+            Model.StoragePath = res.PublicPath;
+            Model.FileName = res.FileName;
+            Model.FileSize = res.FileSize;
+            Model.MimeType = res.MimeType;
+            if (!string.IsNullOrEmpty(previousPath) && previousPath != res.PublicPath)
+                Uploads.DeleteStored(previousPath);
+            Message = $"Ficheiro carregado ({res.FileSize} bytes)";
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+}

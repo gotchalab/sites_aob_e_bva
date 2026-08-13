@@ -1,0 +1,116 @@
+@page "/artigos"
+@attribute [Authorize]
+@inject ContentService Content
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Artigos · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Artigos</h1>
+    <a class="btn btn-primary" href="/artigos/novo?site=@SelectedSiteId">+ Novo artigo</a>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-6">
+        <input class="form-control" placeholder="Procurar por titulo..." @bind="Search" @bind:event="oninput" @bind:after="ReloadAsync" />
+    </div>
+</div>
+
+@if (Articles is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Articles.Count == 0)
+{
+    <p class="text-muted">Sem artigos.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Titulo</th>
+                    <th>Categoria</th>
+                    <th>Data</th>
+                    <th class="text-end">Views</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Articles)
+                {
+                    <tr>
+                        <td class="text-muted small">#@a.Id</td>
+                        <td>
+                            <a href="/artigos/@a.Id" class="text-decoration-none">@a.Title</a>
+                            @if (!a.IsPublished) { <span class="badge bg-warning text-dark ms-2">rascunho</span> }
+                        </td>
+                        <td class="small">@a.Category?.Name</td>
+                        <td class="small">@(a.PublishedAt?.ToString("yyyy-MM-dd") ?? "")</td>
+                        <td class="text-end small">@a.ViewCount</td>
+                        <td class="text-end">
+                            <a href="/artigos/@a.Id" class="btn btn-sm btn-outline-primary">Editar</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (TotalPages > 1)
+    {
+        <nav>
+            <ul class="pagination">
+                @for (int p = 1; p <= TotalPages; p++)
+                {
+                    var pp = p;
+                    <li class="page-item @(pp == Page ? "active" : "")">
+                        <button class="page-link" @onclick="() => GoTo(pp)">@pp</button>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    private List<Site> AllSites = new();
+    private List<Article>? Articles;
+    private int SelectedSiteId = 1;
+    private string? Search;
+    private int Page = 1;
+    private const int PageSize = 25;
+    private int Total;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Total / (double)PageSize));
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0) SelectedSiteId = AllSites[0].Id;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Page = 1;
+        Total = await Content.CountArticles(SelectedSiteId, Search);
+        Articles = await Content.ListArticles(SelectedSiteId, Search, Page, PageSize);
+    }
+
+    private async Task GoTo(int page)
+    {
+        Page = page;
+        Articles = await Content.ListArticles(SelectedSiteId, Search, Page, PageSize);
+    }
+}

@@ -1,0 +1,169 @@
+@page "/categorias/nova"
+@page "/categorias/{Id:int}"
+@attribute [Authorize]
+@using AOB.Core.Utilities
+@inject ContentService Content
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(IsNew ? "Nova categoria" : Model?.Name ?? "Categoria") · AOB</PageTitle>
+
+@if (Model is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/categorias" class="text-decoration-none small">← Categorias</a>
+            <h1 class="h3 mb-0">@(IsNew ? "Nova categoria" : Model.Name)</h1>
+        </div>
+        @if (!IsNew)
+        {
+            <button class="btn btn-outline-danger" @onclick="OnDelete">Eliminar</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+    @if (!string.IsNullOrEmpty(ErrorMsg)) { <div class="alert alert-danger">@ErrorMsg</div> }
+
+    <EditForm Model="Model" OnValidSubmit="OnSave" FormName="CatForm">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Nome <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="Model.Name" @bind:after="OnNameChanged" required />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Slug <span class="text-danger">*</span></label>
+                <input class="form-control font-monospace" @bind="Model.Slug" @bind:after="OnSlugTouched" required />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Site <span class="text-danger">*</span></label>
+                <select class="form-select" @bind="Model.SiteId" @bind:after="ReloadParentsAsync" required>
+                    <option value="0">-- escolha uma opção --</option>
+                    @foreach (var s in AllSites)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Categoria pai</label>
+                <select class="form-select" @bind="Model.ParentId">
+                    <option value="">-- raiz (sem pai) --</option>
+                    @foreach (var n in ParentOptions)
+                    {
+                        <option value="@n.Category.Id">@n.IndentedName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Ordem</label>
+                <input class="form-control" type="number" @bind="Model.SortOrder" />
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="pub" @bind="Model.IsPublished" />
+                    <label class="form-check-label" for="pub">Publicada</label>
+                </div>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Descricao</label>
+                <textarea class="form-control" rows="3" @bind="Model.Description"></textarea>
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Guardar</button>
+                <a href="/categorias" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public int Site { get; set; }
+
+    private bool IsNew => Id is null || Id.Value == 0;
+    private Category? Model;
+    private List<Site> AllSites = new();
+    private List<ContentService.CategoryNode> ParentOptions = new();
+    private string? Message;
+    private string? ErrorMsg;
+    private bool SlugTouched;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (IsNew)
+        {
+            Model = new Category { SiteId = Site, IsPublished = true };
+            SlugTouched = false;
+        }
+        else
+        {
+            Model = await Content.GetCategory(Id!.Value);
+            if (Model is null) { Nav.NavigateTo("/categorias"); return; }
+            SlugTouched = true;
+        }
+        await ReloadParentsAsync();
+    }
+
+    private void OnNameChanged()
+    {
+        if (Model is null || SlugTouched) return;
+        Model.Slug = SlugHelper.Slugify(Model.Name ?? "");
+    }
+
+    private void OnSlugTouched()
+    {
+        if (Model is null) return;
+        SlugTouched = !string.IsNullOrWhiteSpace(Model.Slug);
+    }
+
+    private async Task ReloadParentsAsync()
+    {
+        if (Model is null) return;
+        var tree = await Content.ListCategoryTree(Model.SiteId, includeDownloads: true);
+        if (!IsNew)
+        {
+            var forbidden = await Content.GetDescendantIds(Model.SiteId, Model.Id);
+            tree = tree.Where(n => !forbidden.Contains(n.Category.Id)).ToList();
+        }
+        ParentOptions = tree;
+        if (Model.ParentId is int pid && !tree.Any(n => n.Category.Id == pid))
+        {
+            Model.ParentId = null;
+        }
+    }
+
+    private async Task OnSave()
+    {
+        if (Model is null) return;
+        if (Model.SiteId <= 0)
+        {
+            ErrorMsg = "Escolha um site.";
+            Message = null;
+            return;
+        }
+        try
+        {
+            await Content.SaveCategory(Model);
+            Message = "Guardada.";
+            ErrorMsg = null;
+            if (IsNew) Nav.NavigateTo($"/categorias/{Model.Id}");
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+
+    private async Task OnDelete()
+    {
+        if (Model is null || IsNew) return;
+        try
+        {
+            await Content.DeleteCategory(Model.Id);
+            Nav.NavigateTo("/categorias");
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+}

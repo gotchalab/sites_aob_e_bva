@@ -1,0 +1,14 @@
+{
+  "name": "@aob/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:aob": "playwright test --project=aob",
+    "test:bva": "playwright test --project=bva",
+    "install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.0"
+  }
+}

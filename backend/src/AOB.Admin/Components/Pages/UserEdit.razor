@@ -1,0 +1,132 @@
+@page "/users/{Id}"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@inject UserAdminService Users
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Utilizador · AOB</PageTitle>
+
+@if (User is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/users" class="text-decoration-none small">← Utilizadores</a>
+            <h1 class="h3 mb-0">@User.Email</h1>
+        </div>
+        <button class="btn btn-outline-danger" @onclick="OnDelete">Eliminar</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+    @if (!string.IsNullOrEmpty(ErrorMsg)) { <div class="alert alert-danger">@ErrorMsg</div> }
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h5">Dados</h2>
+                    <div class="mb-2"><span class="text-muted small">Id:</span> <code>@User.Id</code></div>
+                    <div class="mb-2"><span class="text-muted small">Nome:</span> @User.FullName</div>
+                    <div class="mb-2"><span class="text-muted small">Criado em:</span> @User.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                    <div class="mb-2"><span class="text-muted small">Ultimo login:</span> @(User.LastLoginAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h2 class="h5">Roles</h2>
+                    @foreach (var r in AllRoles)
+                    {
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox"
+                                checked="@SelectedRoles.Contains(r)"
+                                @onchange="e => ToggleRole(r, (bool)e.Value!)"
+                                id="r-@r" />
+                            <label class="form-check-label" for="r-@r">@r</label>
+                        </div>
+                    }
+                    <button class="btn btn-primary btn-sm mt-3" @onclick="OnSaveRoles">Guardar roles</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h5">Password</h2>
+                    <div class="mb-3">
+                        <label class="form-label small">Nova password</label>
+                        <input class="form-control" @bind="NewPassword" type="text" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="OnResetPassword">Definir password</button>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h2 class="h5">Bloqueio</h2>
+                    <p class="small text-muted mb-2">Reset das tentativas de login falhadas.</p>
+                    <button class="btn btn-outline-warning btn-sm" @onclick="OnUnlock">Desbloquear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private ApplicationUser? User;
+    private List<string> AllRoles = new();
+    private HashSet<string> SelectedRoles = new();
+    private string NewPassword = "";
+    private string? Message, ErrorMsg;
+
+    protected override async Task OnInitializedAsync()
+    {
+        User = await Users.Get(Id);
+        if (User is null) { Nav.NavigateTo("/users"); return; }
+        AllRoles = await Users.AllRoles();
+        var rows = await Users.ListAsync();
+        var mine = rows.FirstOrDefault(r => r.Id == Id);
+        if (mine != null) SelectedRoles = mine.Roles.ToHashSet();
+    }
+
+    private void ToggleRole(string role, bool add)
+    {
+        if (add) SelectedRoles.Add(role);
+        else SelectedRoles.Remove(role);
+    }
+
+    private async Task OnSaveRoles()
+    {
+        var (ok, msg) = await Users.SetRolesAsync(Id, SelectedRoles);
+        Message = ok ? msg : null;
+        ErrorMsg = ok ? null : msg;
+    }
+
+    private async Task OnResetPassword()
+    {
+        var (ok, msg) = await Users.ResetPasswordAsync(Id, NewPassword);
+        Message = ok ? msg : null;
+        ErrorMsg = ok ? null : msg;
+        if (ok) NewPassword = "";
+    }
+
+    private async Task OnUnlock()
+    {
+        var (ok, msg) = await Users.UnlockAsync(Id);
+        Message = ok ? msg : null;
+        ErrorMsg = ok ? null : msg;
+    }
+
+    private async Task OnDelete()
+    {
+        var (ok, msg) = await Users.DeleteAsync(Id);
+        if (ok) Nav.NavigateTo("/users");
+        else ErrorMsg = msg;
+    }
+}

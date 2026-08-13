@@ -1,0 +1,113 @@
+@page "/menus"
+@attribute [Authorize]
+@inject MenuAdminService Menus
+@inject ContentService Content
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Menus · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Menus</h1>
+    <a class="btn btn-primary" href="/menus/novo?site=@SelectedSiteId&type=@SelectedType">+ Novo item</a>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadTypesAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedType" @bind:after="ReloadAsync">
+            @foreach (var t in Types)
+            {
+                <option value="@t">@t</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (Items is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Items.Count == 0)
+{
+    <p class="text-muted">Sem items para este menu.</p>
+}
+else
+{
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th style="width:60px;">Ordem</th>
+                <th>Titulo</th>
+                <th>Tipo</th>
+                <th>URL / Target</th>
+                <th class="text-center">Publicado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var m in Items)
+            {
+                <tr>
+                    <td class="small">
+                        <button class="btn btn-sm btn-link p-0" @onclick="() => Move(m.Id, -1)">▲</button>
+                        <span class="mx-1">@m.SortOrder</span>
+                        <button class="btn btn-sm btn-link p-0" @onclick="() => Move(m.Id, 1)">▼</button>
+                    </td>
+                    <td>
+                        @if (m.ParentId is not null) { <span class="text-muted me-1">└</span> }
+                        @m.Title
+                    </td>
+                    <td class="small">@m.TargetType</td>
+                    <td class="small font-monospace">@m.Url</td>
+                    <td class="text-center">
+                        @if (m.IsPublished) { <span class="badge bg-success">sim</span> }
+                        else { <span class="badge bg-secondary">nao</span> }
+                    </td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/menus/@m.Id">Editar</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Site> AllSites = new();
+    private List<string> Types = new() { "mainmenu" };
+    private List<MenuItem>? Items;
+    private int SelectedSiteId = 1;
+    private string SelectedType = "mainmenu";
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0) SelectedSiteId = AllSites[0].Id;
+        await ReloadTypesAsync();
+    }
+
+    private async Task ReloadTypesAsync()
+    {
+        Types = await Menus.MenuTypesAsync(SelectedSiteId);
+        if (Types.Count == 0) Types.Add("mainmenu");
+        if (!Types.Contains(SelectedType)) SelectedType = Types[0];
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Items = await Menus.ListAsync(SelectedSiteId, SelectedType);
+    }
+
+    private async Task Move(int id, int delta)
+    {
+        await Menus.MoveAsync(id, delta);
+        await ReloadAsync();
+    }
+}

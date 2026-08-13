@@ -1,0 +1,57 @@
+# Legacy Joomla -> new URLs for bva-p.aobarcelos.pt
+# Generated 2026-07-15T15:04:24.8012059Z — DO NOT EDIT BY HAND
+
+# Use in nginx:
+#   map $request_uri $legacy_redirect {
+#     default "";
+#     include /etc/nginx/redirects.bva.map;
+#   }
+
+~^/index\.php\?option=com_content&view=article&id=1(?:&.*)?$   /artigos/quem-somos;
+~^/index\.php\?option=com_content&view=article&id=2(?:&.*)?$   /artigos/institucional;
+~^/index\.php\?option=com_content&view=article&id=3(?:&.*)?$   /artigos/comissao-tecnica;
+~^/index\.php\?option=com_content&view=article&id=4(?:&.*)?$   /artigos/agapornis-info;
+~^/index\.php\?option=com_content&view=article&id=5(?:&.*)?$   /artigos/standards-dos-agapornis;
+~^/index\.php\?option=com_content&view=article&id=6(?:&.*)?$   /artigos/historia;
+~^/index\.php\?option=com_content&view=article&id=7(?:&.*)?$   /artigos/direitos-e-deveres;
+~^/index\.php\?option=com_content&view=article&id=8(?:&.*)?$   /artigos/inscricao-de-socios;
+~^/index\.php\?option=com_content&view=article&id=9(?:&.*)?$   /artigos/morinha-lab;
+~^/index\.php\?option=com_content&view=article&id=10(?:&.*)?$   /artigos/pedido-de-anilhas;
+~^/index\.php\?option=com_content&view=article&id=11(?:&.*)?$   /artigos/bva-masters-2022;
+~^/index\.php\?option=com_content&view=article&id=12(?:&.*)?$   /artigos/5-exposicao-bva-p-aob-2022;
+~^/index\.php\?option=com_content&view=article&id=13(?:&.*)?$   /artigos/convoyage-5-exposic-a-o-bva-portugal-aob-2022;
+~^/index\.php\?option=com_content&view=article&id=14(?:&.*)?$   /artigos/resultados-provisorios;
+~^/index\.php\?option=com_content&view=article&id=15(?:&.*)?$   /artigos/6-exposicao-bva-p-aob-2023;
+~^/index\.php\?option=com_content&view=article&id=16(?:&.*)?$   /artigos/pedido-de-anilhas-2024;
+~^/index\.php\?option=com_content&view=article&id=17(?:&.*)?$   /artigos/bva-masters-2023;
+~^/index\.php\?option=com_content&view=article&id=18(?:&.*)?$   /artigos/inscricoes-6-exposicao-bva-p-aob-2022;
+~^/index\.php\?option=com_content&view=article&id=19(?:&.*)?$   /artigos/convoyage-6-exposic-a-o-bva-portugal-aob-2023;
+~^/index\.php\?option=com_content&view=article&id=20(?:&.*)?$   /artigos/premios-por-criador-bva-portugal-2023;
+~^/index\.php\?option=com_content&view=article&id=21(?:&.*)?$   /artigos/criador-nuno-cruz;
+~^/index\.php\?option=com_content&view=article&id=25(?:&.*)?$   /artigos/7-exposicao-bva-p-aob-2024;
+~^/index\.php\?option=com_content&view=article&id=26(?:&.*)?$   /artigos/pedido-de-anilhas-2025;
+~^/index\.php\?option=com_content&view=article&id=27(?:&.*)?$   /artigos/bva-masters-2024;
+~^/index\.php\?option=com_content&view=article&id=28(?:&.*)?$   /artigos/inscricoes-7-exposicao-bva-p-aob-2024;
+~^/index\.php\?option=com_content&view=article&id=29(?:&.*)?$   /artigos/premios-por-criador-bva-portugal-2024;
+~^/index\.php\?option=com_content&view=article&id=30(?:&.*)?$   /artigos/bva-masters-2025;
+~^/index\.php\?option=com_content&view=article&id=31(?:&.*)?$   /artigos/informacao-convoyage-ao-5-international-show-for-colored-budgerigars-in-aalst-belgium;
+~^/index\.php\?option=com_content&view=article&id=32(?:&.*)?$   /artigos/8-exposicao-bva-p-aob-2025;
+~^/index\.php\?option=com_content&view=article&id=33(?:&.*)?$   /artigos/premios-provisorios-8-exposicao-bva-p-aob-xvi-aeca-2025;
+~^/index\.php\?option=com_content&view=article&id=34(?:&.*)?$   /artigos/pedidos-de-anilhas-2027;
+~^/index\.php\?option=com_content&view=article&id=35(?:&.*)?$   /artigos/wbo-world-show-2025-mundial-wbo-2026-reggio-emilia-italia;
+~^/index\.php\?option=com_content&view=category&id=2(?:&.*)?$   /categoria/uncategorised;
+~^/index\.php\?option=com_content&view=category&id=9(?:&.*)?$   /categoria/exposicao-bva-p-aob;
+~^/index\.php\?option=com_content&view=category&id=10(?:&.*)?$   /categoria/associados;
+~^/index\.php\?option=com_content&view=category&id=11(?:&.*)?$   /categoria/menu;
+~^/index\.php\?option=com_content&view=category&id=12(?:&.*)?$   /categoria/socios;
+~^/index\.php\?option=com_content&view=category&id=16(?:&.*)?$   /categoria/bva-masters;
+~^/index\.php\?option=com_content&view=category&id=17(?:&.*)?$   /categoria/bva-masters-2022;
+~^/index\.php\?option=com_content&view=category&id=18(?:&.*)?$   /categoria/6-exposicao-bva-p-aob-2023;
+~^/index\.php\?option=com_content&view=category&id=19(?:&.*)?$   /categoria/5-exposicao-bva-p-aob-2022;
+~^/index\.php\?option=com_content&view=category&id=20(?:&.*)?$   /categoria/pedidos-de-anilhas;
+~^/index\.php\?option=com_content&view=category&id=21(?:&.*)?$   /categoria/bva-masters-2023;
+~^/index\.php\?option=com_content&view=category&id=22(?:&.*)?$   /categoria/divulgacao-de-criadores;
+~^/index\.php\?option=com_content&view=category&id=23(?:&.*)?$   /categoria/7-exposicao-bva-p-aob-2024;
+~^/index\.php\?option=com_content&view=category&id=24(?:&.*)?$   /categoria/bva-masters-2024;
+~^/index\.php\?option=com_content&view=category&id=25(?:&.*)?$   /categoria/bva-masters-2025;
+~^/index\.php\?option=com_content&view=category&id=26(?:&.*)?$   /categoria/8-exposicao-bva-p-aob-2025;

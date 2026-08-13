@@ -1,0 +1,243 @@
+@page "/formularios"
+@attribute [Authorize]
+@inject FormAdminService Forms
+@inject ContentService Content
+@rendermode InteractiveServer
+
+<PageTitle>Formularios · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Submissoes de formularios</h1>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" @bind="StatusFilter" @bind:after="ReloadAsync">
+            <option value="">Todos os estados</option>
+            @foreach (var st in Enum.GetValues<FormStatus>())
+            {
+                <option value="@((int)st)">@st</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" @bind="TypeFilter" @bind:after="ReloadAsync">
+            <option value="">Todos os tipos</option>
+            @foreach (var t in Enum.GetValues<FormType>())
+            {
+                <option value="@((int)t)">@t</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (Items is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Items.Count == 0)
+{
+    <p class="text-muted">Sem submissoes.</p>
+}
+else
+{
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Tipo</th>
+                <th>Recebido em</th>
+                <th>Estado</th>
+                <th>Dados</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var f in Items)
+            {
+                <tr>
+                    <td class="text-muted small">#@f.Id</td>
+                    <td><span class="badge bg-info">@f.FormType</span></td>
+                    <td class="small">@f.SubmittedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>
+                        @{
+                            var (badge, cls) = f.Status switch
+                            {
+                                FormStatus.Pending => ("Pendente", "bg-warning text-dark"),
+                                FormStatus.InProgress => ("Em curso", "bg-primary"),
+                                FormStatus.Handled => ("Tratada", "bg-success"),
+                                FormStatus.Rejected => ("Rejeitada", "bg-secondary"),
+                                FormStatus.Spam => ("Spam", "bg-danger"),
+                                _ => (f.Status.ToString(), "bg-secondary")
+                            };
+                        }
+                        <span class="badge @cls">@badge</span>
+                    </td>
+                    <td>
+                        @if (f.FormType == FormType.InscricaoSocio)
+                        {
+                            var meta = ParseInscricao(f.DataJson);
+                            <div class="small">
+                                <div><b>@meta.Nome</b> — @meta.Email</div>
+                                <div class="text-muted">CC: @meta.CC · NIF: @meta.NIF · Tel: @meta.Telefone</div>
+                                @if (!string.IsNullOrWhiteSpace(meta.Morada) || !string.IsNullOrWhiteSpace(meta.CodigoPostal))
+                                {
+                                    <div class="text-muted">@meta.Morada @meta.CodigoPostal @meta.Localidade</div>
+                                }
+                                <div class="text-muted">
+                                    @if (meta.SocioApoiante) { <span class="badge bg-light text-dark border me-1">Apoiante</span> }
+                                    @if (meta.SocioCriador) { <span class="badge bg-light text-dark border me-1">Criador</span> }
+                                    @if (meta.SocioBva) { <span class="badge bg-light text-dark border me-1">BVA</span> }
+                                    @if (!string.IsNullOrWhiteSpace(meta.StamFonp)) { <span class="badge bg-light text-dark border me-1">STAM FONP: @meta.StamFonp @meta.StamFonpNr</span> }
+                                    @if (!string.IsNullOrWhiteSpace(meta.StamBva)) { <span class="badge bg-light text-dark border me-1">STAM BVA: @meta.StamBva @meta.StamBvaNr</span> }
+                                </div>
+                                <details class="mt-1">
+                                    <summary class="text-muted">Mais detalhes / JSON</summary>
+                                    <pre class="small font-monospace mt-2 bg-light p-2 rounded" style="max-width:500px;white-space:pre-wrap;word-break:break-word;">@f.DataJson</pre>
+                                </details>
+                            </div>
+                        }
+                        else
+                        {
+                            <details>
+                                <summary class="small text-muted">JSON</summary>
+                                <pre class="small font-monospace mt-2 bg-light p-2 rounded" style="max-width: 500px; white-space: pre-wrap; word-break: break-word;">@f.DataJson</pre>
+                            </details>
+                        }
+                    </td>
+                    <td class="text-end">
+                        @if (f.FormType == FormType.InscricaoConvoyage)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary me-1" href="@($"/formularios/{f.Id}")" title="Ver detalhes">Detalhes</a>
+                        }
+                        @if ((f.FormType == FormType.InscricaoSocio || f.FormType == FormType.InscricaoConvoyage) && HasPdf(f.DataJson))
+                        {
+                            <a class="btn btn-sm btn-outline-primary me-1" href="@($"/formularios/{f.Id}/pdf")" target="_blank" title="Descarregar PDF">PDF</a>
+                        }
+                        <select class="form-select form-select-sm d-inline-block" style="width:auto;"
+                                @onchange="e => OnStatusChange(f.Id, e.Value?.ToString())">
+                            <option value="">— acao —</option>
+                            <option value="@((int)FormStatus.Handled)">Marcar tratada</option>
+                            <option value="@((int)FormStatus.InProgress)">Em curso</option>
+                            <option value="@((int)FormStatus.Rejected)">Rejeitar</option>
+                            <option value="@((int)FormStatus.Spam)">Spam</option>
+                            <option value="delete">Eliminar</option>
+                        </select>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (TotalPages > 1)
+    {
+        <nav>
+            <ul class="pagination">
+                @for (int p = 1; p <= TotalPages; p++)
+                {
+                    var pp = p;
+                    <li class="page-item @(pp == Page ? "active" : "")">
+                        <button class="page-link" @onclick="() => GoTo(pp)">@pp</button>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    private List<Site> AllSites = new();
+    private List<FormSubmission>? Items;
+    private int SelectedSiteId = 1;
+    private string StatusFilter = "";
+    private string TypeFilter = "";
+    private int Page = 1;
+    private const int PageSize = 25;
+    private int Total;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Total / (double)PageSize));
+
+    [CascadingParameter] public Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0) SelectedSiteId = AllSites[0].Id;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Page = 1;
+        FormStatus? statusEnum = int.TryParse(StatusFilter, out var s) ? (FormStatus)s : null;
+        FormType? typeEnum = int.TryParse(TypeFilter, out var t) ? (FormType)t : null;
+        Total = await Forms.CountAsync(SelectedSiteId, statusEnum, typeEnum);
+        Items = await Forms.ListAsync(SelectedSiteId, statusEnum, typeEnum, Page, PageSize);
+    }
+
+    private async Task GoTo(int page)
+    {
+        Page = page;
+        FormStatus? statusEnum = int.TryParse(StatusFilter, out var s) ? (FormStatus)s : null;
+        FormType? typeEnum = int.TryParse(TypeFilter, out var t) ? (FormType)t : null;
+        Items = await Forms.ListAsync(SelectedSiteId, statusEnum, typeEnum, Page, PageSize);
+    }
+
+    private record InscricaoMeta(string? Nome, string? Email, string? CC, string? NIF, string? Telefone,
+        string? Morada, string? CodigoPostal, string? Localidade,
+        bool SocioApoiante, bool SocioCriador, bool SocioBva,
+        string? StamFonp, string? StamFonpNr, string? StamBva, string? StamBvaNr);
+
+    private static InscricaoMeta ParseInscricao(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var r = doc.RootElement;
+            string? S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+            bool B(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.True;
+            return new InscricaoMeta(
+                S("NomeCompleto"), S("Email"), S("CartaoCidadao"), S("NIF"), S("Telefone"),
+                S("Morada"), S("CodigoPostal"), S("Localidade"),
+                B("SocioApoiante"), B("SocioCriador"), B("SocioBvaPortugal"),
+                S("StamFonp"), S("StamFonpNumero"), S("StamBva"), S("StamBvaNumero"));
+        }
+        catch
+        {
+            return new InscricaoMeta(null, null, null, null, null, null, null, null, false, false, false, null, null, null, null);
+        }
+    }
+
+    private static bool HasPdf(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("PdfPath", out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString());
+        }
+        catch { return false; }
+    }
+
+    private async Task OnStatusChange(int id, string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        if (value == "delete")
+        {
+            await Forms.DeleteAsync(id);
+        }
+        else if (int.TryParse(value, out var st))
+        {
+            var user = (await (AuthState ?? Task.FromResult<AuthenticationState>(null!)))?.User;
+            var userId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            await Forms.SetStatusAsync(id, (FormStatus)st, userId, null);
+        }
+        await ReloadAsync();
+    }
+}

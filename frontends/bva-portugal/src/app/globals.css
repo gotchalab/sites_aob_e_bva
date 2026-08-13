@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+@theme {
+  /* Marca BVA — azul institucional */
+  --color-brand-50: #EEF3FD;
+  --color-brand-100: #DCE7FB;
+  --color-brand-400: #2E6BD9;
+  --color-brand-500: #0345BF;
+  --color-brand-600: #033A9F;
+  --color-brand-700: #022A73;
+  --color-brand-800: #011E52;
+  --color-brand-hover: #044CD0;
+
+  /* Accent teal — complementar quente ao azul */
+  --color-accent-100: #D6F1F5;
+  --color-accent-400: #4FB3C2;
+  --color-accent-500: #1D8FA0;
+  --color-accent-600: #14707F;
+  --color-accent-700: #0F5561;
+
+  /* Neutros de fundo — sand/off-white para dar calor institucional */
+  --color-sand-50: #FAFBFD;
+  --color-sand-100: #F4F6FB;
+  --color-sand-200: #ECEFF6;
+  --color-sand-300: #DDE3EE;
+
+  /* Ink — texto e superfícies escuras */
+  --color-ink-900: #0B1730;
+  --color-ink-800: #172341;
+  --color-ink-700: #2B3654;
+  --color-ink-600: #495474;
+  --color-ink-500: #6B7593;
+  --color-ink-400: #96A0BC;
+
+  --font-sans: var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-playfair, "Playfair Display"), Georgia, serif;
+}
+
+:root { color-scheme: light; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-sans);
+  color: #172341;
+  background: #FAFBFD;
+}
+
+h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.015em; }
+
+/* Conteúdo dos artigos (HTML vindo do backoffice) */
+.prose-article a { color: var(--color-brand-600); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.prose-article a:hover { color: var(--color-brand-700); }
+.prose-article img { max-width: 100%; height: auto; border-radius: 0.75rem; margin: 1.25rem auto; display: block; }
+.prose-article figure.image { margin: 1.25rem auto; }
+.prose-article figure.image_resized { max-width: 100%; }
+@media (max-width: 640px) {
+  .prose-article img,
+  .prose-article figure.image_resized { width: 100% !important; max-width: 100% !important; }
+}
+.prose-article h2 { font-family: var(--font-display); font-size: 1.75rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--color-ink-900); }
+.prose-article h3 { font-family: var(--font-display); font-size: 1.35rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: var(--color-ink-900); }
+.prose-article p { margin: 0.9rem 0; line-height: 1.75; }
+.prose-article ul { margin: 0.9rem 0; padding-left: 1.5rem; list-style: disc; }
+.prose-article ol { margin: 0.9rem 0; padding-left: 1.5rem; list-style: decimal; }
+.prose-article blockquote { border-left: 4px solid var(--color-brand-500); padding: 0.25rem 1rem; margin: 1.25rem 0; background: var(--color-brand-50); color: var(--color-ink-800); font-style: italic; border-radius: 0 0.5rem 0.5rem 0; }
+.prose-article table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; font-size: 0.95rem; }
+.prose-article th, .prose-article td { border: 1px solid var(--color-sand-300); padding: 0.5rem 0.75rem; text-align: left; }
+.prose-article th { background: var(--color-brand-50); font-weight: 600; }
+
+/* Descrição de categoria em HTML — serve de "lead" no topo da listagem */
+.category-lead {
+  margin-top: 1.25rem;
+  padding: 1rem 1.25rem 1rem 1.5rem;
+  border-left: 3px solid var(--color-brand-500);
+  background: linear-gradient(90deg, rgba(3, 69, 191, 0.08), rgba(3, 69, 191, 0));
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-style: italic;
+  line-height: 1.7;
+  color: var(--color-ink-800);
+}
+.category-lead p { margin: 0.5rem 0; }
+.category-lead p:first-child { margin-top: 0; }
+.category-lead p:last-child { margin-bottom: 0; }
+.category-lead a { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: 3px; font-style: normal; }
+.category-lead a:hover { color: var(--color-brand-600); }
+.category-lead strong, .category-lead b { font-weight: 600; color: var(--color-ink-900); }
+@media (min-width: 768px) {
+  .category-lead { font-size: 1.2rem; padding: 1.15rem 1.5rem 1.15rem 1.75rem; }
+}
+
+/* Hero — gradient azul institucional com toque teal */
+.hero-pattern {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(3, 69, 191, 0.12), transparent 60%),
+    radial-gradient(900px 400px at 5% 110%, rgba(29, 143, 160, 0.10), transparent 60%),
+    linear-gradient(180deg, #FAFBFD 0%, #ECEFF6 100%);
+}
+
+/* Faixa CTA — gradient azul brand */
+.cta-gradient {
+  background: linear-gradient(135deg, #022A73 0%, #0345BF 55%, #033A9F 100%);
+}

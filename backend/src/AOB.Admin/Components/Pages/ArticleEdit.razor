@@ -1,0 +1,305 @@
+@page "/artigos/novo"
+@page "/artigos/{Id:int}"
+@attribute [Authorize]
+@using AOB.Core.Utilities
+@inject ContentService Content
+@inject UploadService Uploads
+@inject RevalidateNotifier Revalidate
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(IsNew ? "Novo artigo" : Model?.Title ?? "Artigo") · AOB</PageTitle>
+
+@if (Model is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/artigos" class="text-decoration-none small">← Artigos</a>
+            <h1 class="h3 mb-0">@(IsNew ? "Novo artigo" : Model.Title)</h1>
+            <span class="badge @(Model.IsPublished ? "bg-success" : "bg-secondary") ms-1">
+                @(Model.IsPublished ? "Publicado" : "Rascunho")
+            </span>
+        </div>
+        @if (!IsNew)
+        {
+            <button class="btn btn-outline-danger" @onclick="OnDelete">Eliminar</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="alert alert-success">@Message</div>
+    }
+    @if (!string.IsNullOrEmpty(WarnMsg))
+    {
+        <div class="alert alert-warning">@WarnMsg</div>
+    }
+    @if (!string.IsNullOrEmpty(ErrorMsg))
+    {
+        <div class="alert alert-danger">@ErrorMsg</div>
+    }
+
+    <EditForm Model="Model" OnValidSubmit="OnSave" FormName="ArticleForm">
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="mb-3">
+                    <label class="form-label">Titulo <span class="text-danger">*</span></label>
+                    <input class="form-control" @bind="Model.Title" @bind:after="OnTitleChanged" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Slug <span class="text-danger">*</span></label>
+                    <input class="form-control font-monospace" @bind="Model.Slug" @bind:after="OnSlugTouched" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Excerpt</label>
+                    <textarea class="form-control" rows="2" @bind="Model.Excerpt"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Conteudo (rich editor — sanitizado ao guardar)</label>
+                    <HtmlEditor Content="@Model.Content"
+                                ContentChanged="v => Model.Content = v"
+                                UploadUrl="@($"/admin/upload-inline?site={CurrentSiteSlug}")" />
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h6">Publicacao</h2>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="feat" @bind="Model.IsFeatured" />
+                            <label class="form-check-label" for="feat" title="Aparece no destaque editorial da homepage">Destaque na homepage</label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Site <span class="text-danger">*</span></label>
+                            <select @ref="SiteInput"
+                                    class="form-select form-select-sm @(InvalidFields.Contains("Site") ? "is-warning" : "")"
+                                    @bind="Model.SiteId" @bind:after="OnSiteChanged" required>
+                                <option value="0">-- escolha uma opção --</option>
+                                @foreach (var s in AllSites)
+                                {
+                                    <option value="@s.Id">@s.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Categoria <span class="text-danger">*</span></label>
+                            <select @ref="CategoryInput"
+                                    class="form-select form-select-sm @(InvalidFields.Contains("Categoria") ? "is-warning" : "")"
+                                    @bind="Model.CategoryId" @bind:after="OnCategoryChanged" required>
+                                <option value="0">-- escolha uma opção --</option>
+                                @foreach (var n in Categories)
+                                {
+                                    <option value="@n.Category.Id">@n.IndentedName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Data de publicacao (opcional)</label>
+                            <input class="form-control form-control-sm" type="datetime-local"
+                                @bind="PublishedAtLocal" @bind:format="yyyy-MM-ddTHH:mm" />
+                            <div class="form-text small">Vazia usa a data atual ao publicar.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h2 class="h6">Cover</h2>
+                        @if (!string.IsNullOrEmpty(Model.CoverImagePath))
+                        {
+                            <img src="@Model.CoverImagePath" class="img-fluid mb-2 rounded" style="max-height: 180px;" />
+                        }
+                        <InputFile OnChange="OnUploadCover" accept="image/*" class="form-control form-control-sm" />
+                        <input class="form-control form-control-sm mt-2" placeholder="ou URL"
+                            @bind="Model.CoverImagePath" />
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h2 class="h6">SEO</h2>
+                        <input class="form-control form-control-sm mb-2" placeholder="Meta title" @bind="Model.MetaTitle" />
+                        <textarea class="form-control form-control-sm" rows="2" placeholder="Meta description" @bind="Model.MetaDescription"></textarea>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 mt-3">
+                    @if (Model.IsPublished)
+                    {
+                        <button type="submit" class="btn btn-primary" @onclick="() => IntendedPublish = true">Atualizar</button>
+                        <button type="submit" class="btn btn-outline-warning" @onclick="() => IntendedPublish = false">Despublicar</button>
+                    }
+                    else
+                    {
+                        <button type="submit" class="btn btn-primary" @onclick="() => IntendedPublish = true">Publicar</button>
+                        <button type="submit" class="btn btn-outline-secondary" @onclick="() => IntendedPublish = false">Guardar rascunho</button>
+                    }
+                    <a href="/artigos" class="btn btn-link text-secondary">Cancelar</a>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public int Site { get; set; }
+
+    private bool IsNew => Id is null || Id.Value == 0;
+    private Article? Model;
+    private List<Site> AllSites = new();
+    private string CurrentSiteSlug => AllSites.FirstOrDefault(s => s.Id == (Model?.SiteId ?? 0))?.Slug ?? "aob";
+    private List<ContentService.CategoryNode> Categories = new();
+    private DateTime? PublishedAtLocal;
+    // Definido pelo botao clicado antes do submit correr: true = Publicar/Atualizar, false = Rascunho/Despublicar.
+    private bool IntendedPublish;
+    private string? Message;
+    private string? WarnMsg;
+    private string? ErrorMsg;
+    private bool SlugTouched;
+    private HashSet<string> InvalidFields = new();
+    private ElementReference SiteInput;
+    private ElementReference CategoryInput;
+    private string? FocusFieldAfterRender;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+
+        if (IsNew)
+        {
+            Model = new Article { SiteId = Site, CategoryId = 0, IsPublished = false };
+            SlugTouched = false;
+        }
+        else
+        {
+            Model = await Content.GetArticle(Id!.Value);
+            if (Model is null)
+            {
+                Nav.NavigateTo("/artigos");
+                return;
+            }
+            SlugTouched = true;
+        }
+
+        Categories = await Content.ListCategoryTree(Model.SiteId);
+        PublishedAtLocal = ToLocalNullable(Model.PublishedAt);
+        IntendedPublish = Model.IsPublished;
+    }
+
+    // Npgsql pode devolver DateTime com Kind=Unspecified para timestamptz — force Utc antes de converter.
+    private static DateTime? ToLocalNullable(DateTime? dt)
+    {
+        if (dt is null) return null;
+        var utc = dt.Value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc)
+            : dt.Value.ToUniversalTime();
+        return utc.ToLocalTime();
+    }
+
+    private void OnTitleChanged()
+    {
+        if (Model is null || SlugTouched) return;
+        Model.Slug = SlugHelper.Slugify(Model.Title ?? "");
+    }
+
+    private void OnSlugTouched()
+    {
+        if (Model is null) return;
+        SlugTouched = !string.IsNullOrWhiteSpace(Model.Slug);
+    }
+
+    private async Task OnSiteChanged()
+    {
+        if (Model is null) return;
+        InvalidFields.Remove("Site");
+        Model.CategoryId = 0;
+        Categories = await Content.ListCategoryTree(Model.SiteId);
+    }
+
+    private void OnCategoryChanged()
+    {
+        if (Model is null) return;
+        if (Model.CategoryId > 0) InvalidFields.Remove("Categoria");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (FocusFieldAfterRender is null) return;
+        var target = FocusFieldAfterRender switch
+        {
+            "Site" => SiteInput,
+            "Categoria" => CategoryInput,
+            _ => default
+        };
+        FocusFieldAfterRender = null;
+        try { await target.FocusAsync(); } catch { }
+    }
+
+    private async Task OnSave()
+    {
+        if (Model is null) return;
+        InvalidFields.Clear();
+        if (Model.SiteId <= 0) InvalidFields.Add("Site");
+        if (Model.CategoryId <= 0) InvalidFields.Add("Categoria");
+        if (InvalidFields.Count > 0)
+        {
+            WarnMsg = "Preencha os campos assinalados.";
+            Message = null;
+            ErrorMsg = null;
+            FocusFieldAfterRender = InvalidFields.First();
+            return;
+        }
+        try
+        {
+            Model.IsPublished = IntendedPublish;
+            Model.PublishedAt = PublishedAtLocal?.ToUniversalTime();
+            await Content.SaveArticle(Model);
+            PublishedAtLocal = ToLocalNullable(Model.PublishedAt);
+            Message = IntendedPublish ? "Publicado." : "Rascunho guardado.";
+            WarnMsg = null;
+            ErrorMsg = null;
+
+            var siteSlug = AllSites.FirstOrDefault(s => s.Id == Model.SiteId)?.Slug;
+            if (!string.IsNullOrEmpty(siteSlug))
+            {
+                _ = Revalidate.NotifyAsync(siteSlug, "/");
+                _ = Revalidate.NotifyAsync(siteSlug, $"/artigos/{Model.Slug}");
+            }
+
+            if (IsNew) Nav.NavigateTo($"/artigos/{Model.Id}");
+        }
+        catch (Exception ex)
+        {
+            ErrorMsg = ex.Message;
+        }
+    }
+
+    private async Task OnDelete()
+    {
+        if (Model is null || IsNew) return;
+        await Content.DeleteArticle(Model.Id);
+        Nav.NavigateTo("/artigos");
+    }
+
+    private async Task OnUploadCover(InputFileChangeEventArgs e)
+    {
+        if (Model is null) return;
+        try
+        {
+            var site = AllSites.FirstOrDefault(s => s.Id == Model.SiteId)?.Slug ?? "aob";
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var res = await Uploads.SaveAsync(stream, e.File.Name, site, "images");
+            Model.CoverImagePath = res.PublicPath;
+            Message = $"Cover carregada ({res.FileSize} bytes)";
+        }
+        catch (Exception ex)
+        {
+            ErrorMsg = ex.Message;
+        }
+    }
+}

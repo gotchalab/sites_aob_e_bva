@@ -1,0 +1,132 @@
+@page "/pedidos-anilhas"
+@attribute [Authorize]
+@inject SocioAdminService Socios
+@inject ContentService Content
+@rendermode InteractiveServer
+
+<PageTitle>Pedidos de anilhas · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Pedidos de anilhas</h1>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <div class="form-check pt-2">
+            <input class="form-check-input" type="checkbox" id="only-pending"
+                   @bind="OnlyPending" @bind:after="ReloadAsync" />
+            <label class="form-check-label" for="only-pending">Só pendentes</label>
+        </div>
+    </div>
+</div>
+
+@if (Items is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Items.Count == 0)
+{
+    <p class="text-muted">Sem pedidos.</p>
+}
+else
+{
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Socio</th>
+                <th>Especie</th>
+                <th>Ano</th>
+                <th>Ø / Qtd</th>
+                <th>Pedido em</th>
+                <th>Estado</th>
+                <th class="text-end">Acao</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in Items)
+            {
+                <tr>
+                    <td>
+                        <a href="/socios/@p.SocioId" class="text-decoration-none">@p.Socio?.NomeCompleto</a>
+                        <div class="small text-muted">Nº @p.Socio?.NumeroSocio</div>
+                    </td>
+                    <td>
+                        @p.EspecieCientifica
+                        @if (!string.IsNullOrEmpty(p.EspecieNomeComum))
+                        {
+                            <div class="small text-muted">@p.EspecieNomeComum</div>
+                        }
+                    </td>
+                    <td>@p.Ano</td>
+                    <td class="small">Ø @p.Diametro mm · @p.Quantidade un</td>
+                    <td class="small">@p.DataPedido.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                    <td>
+                        @{
+                            var (label, cls) = p.Estado switch
+                            {
+                                PedidoAnilhaEstado.Pendente => ("Pendente", "bg-warning text-dark"),
+                                PedidoAnilhaEstado.Aprovado => ("Aprovado", "bg-primary"),
+                                PedidoAnilhaEstado.Encomendado => ("Encomendado", "bg-info"),
+                                PedidoAnilhaEstado.Entregue => ("Entregue", "bg-success"),
+                                PedidoAnilhaEstado.Cancelado => ("Cancelado", "bg-secondary"),
+                                _ => (p.Estado.ToString(), "bg-secondary")
+                            };
+                        }
+                        <span class="badge @cls">@label</span>
+                    </td>
+                    <td class="text-end">
+                        <select class="form-select form-select-sm d-inline-block" style="width:auto;"
+                                @onchange="e => OnChangeEstado(p.Id, e.Value?.ToString())">
+                            <option value="">— acao —</option>
+                            <option value="@((int)PedidoAnilhaEstado.Aprovado)">Aprovar</option>
+                            <option value="@((int)PedidoAnilhaEstado.Encomendado)">Marcar encomendado</option>
+                            <option value="@((int)PedidoAnilhaEstado.Entregue)">Marcar entregue</option>
+                            <option value="@((int)PedidoAnilhaEstado.Cancelado)">Cancelar</option>
+                        </select>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Site> AllSites = new();
+    private List<PedidoAnilha>? Items;
+    private int SelectedSiteId = 1;
+    private bool OnlyPending = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0) SelectedSiteId = AllSites[0].Id;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (OnlyPending)
+        {
+            Items = await Socios.ListPedidosPendentesAsync(SelectedSiteId);
+        }
+        else
+        {
+            Items = await Socios.ListPedidosAsync(SelectedSiteId);
+        }
+    }
+
+    private async Task OnChangeEstado(int id, string? value)
+    {
+        if (!int.TryParse(value, out var st)) return;
+        await Socios.UpdatePedidoEstadoAsync(id, (PedidoAnilhaEstado)st, null);
+        await ReloadAsync();
+    }
+}

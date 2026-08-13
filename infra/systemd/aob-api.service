@@ -1,0 +1,37 @@
+[Unit]
+Description=AOB API (ASP.NET Core)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+User=aob-api
+Group=aob-api
+Type=notify
+WorkingDirectory=/opt/aob/api
+ExecStart=/opt/dotnet/dotnet /opt/aob/api/AOB.Api.dll
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=aob-api
+
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+EnvironmentFile=-/etc/aob/api.env
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aob /var/www/uploads
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

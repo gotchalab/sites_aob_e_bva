@@ -1,0 +1,301 @@
+@page "/socios/novo"
+@page "/socios/{Id:int}"
+@attribute [Authorize]
+@inject SocioAdminService Socios
+@inject ContentService Content
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(IsNew ? "Novo socio" : Model?.NomeCompleto ?? "Socio") · AOB</PageTitle>
+
+@if (Model is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/socios" class="text-decoration-none small">← Socios</a>
+            <h1 class="h3 mb-0">@(IsNew ? "Novo socio" : Model.NomeCompleto)</h1>
+        </div>
+        @if (!IsNew)
+        {
+            <button class="btn btn-outline-danger" @onclick="OnDelete">Eliminar</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message)) { <div class="alert alert-success">@Message</div> }
+    @if (!string.IsNullOrEmpty(ErrorMsg)) { <div class="alert alert-danger">@ErrorMsg</div> }
+
+    <EditForm Model="Model" OnValidSubmit="OnSave" FormName="SocioForm">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Nº Socio <span class="text-danger">*</span></label>
+                <input class="form-control font-monospace" @bind="Model.NumeroSocio" required />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Nome completo <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="Model.NomeCompleto" required />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Site <span class="text-danger">*</span></label>
+                <select class="form-select" @bind="Model.SiteId" required>
+                    <option value="0">-- escolha uma opção --</option>
+                    @foreach (var s in AllSites)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Email <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="Model.Email" required type="email" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Telefone</label>
+                <input class="form-control" @bind="Model.Telefone" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">NIF</label>
+                <input class="form-control" @bind="Model.NIF" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Data nascimento</label>
+                <input class="form-control" type="date" @bind="Model.DataNascimento" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Data inscricao</label>
+                <input class="form-control" type="date" @bind="Model.DataInscricao" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Estado</label>
+                <select class="form-select" @bind="Model.Estado">
+                    @foreach (var e in Enum.GetValues<SocioEstado>())
+                    {
+                        <option value="@e">@e</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label">Morada</label>
+                <input class="form-control" @bind="Model.Morada" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Cod. Postal</label>
+                <input class="form-control" @bind="Model.CodigoPostal" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Localidade</label>
+                <input class="form-control" @bind="Model.Localidade" />
+            </div>
+            <div class="col-12">
+                <label class="form-label">Notas internas</label>
+                <textarea class="form-control" rows="3" @bind="Model.Notas"></textarea>
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Guardar</button>
+                <a href="/socios" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </EditForm>
+
+    @if (!IsNew)
+    {
+        <div class="card mt-4">
+            <div class="card-body">
+                <h2 class="h5">Acesso online</h2>
+                @if (Model.UserId is null)
+                {
+                    <p class="text-muted small">Sem user Identity ligado — o socio nao pode fazer login online.</p>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label small">Password inicial</label>
+                            <input class="form-control" type="text" @bind="NewUserPassword" />
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary" @onclick="OnCreateUser">Criar user Socio</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <p class="small">User ligado: <code>@Model.UserId</code></p>
+                }
+            </div>
+        </div>
+
+        <div class="row g-3 mt-2">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Quotas</h2>
+                        @if (Model.Quotas.Count == 0)
+                        {
+                            <p class="text-muted small">Sem quotas registadas.</p>
+                        }
+                        else
+                        {
+                            <table class="table table-sm">
+                                <thead><tr><th>Ano</th><th>Valor</th><th>Pago em</th><th></th></tr></thead>
+                                <tbody>
+                                    @foreach (var q in Model.Quotas.OrderByDescending(x => x.Ano))
+                                    {
+                                        <tr>
+                                            <td>@q.Ano</td>
+                                            <td>@q.Valor.ToString("F2")€</td>
+                                            <td class="small">@(q.DataPagamento?.ToString("yyyy-MM-dd") ?? "-")</td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnDeleteQuota(q.Id)">×</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        <hr />
+                        <div class="row g-2 align-items-end">
+                            <div class="col-3">
+                                <label class="form-label small">Ano</label>
+                                <input class="form-control form-control-sm" type="number" @bind="NewQuotaAno" />
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label small">Valor €</label>
+                                <input class="form-control form-control-sm" type="number" step="0.01" @bind="NewQuotaValor" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small">Pago em</label>
+                                <input class="form-control form-control-sm" type="date" @bind="NewQuotaData" />
+                            </div>
+                            <div class="col-2">
+                                <button type="button" class="btn btn-primary btn-sm w-100" @onclick="OnAddQuota">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Pedidos de anilhas</h2>
+                        @if (Model.Pedidos.Count == 0)
+                        {
+                            <p class="text-muted small">Sem pedidos.</p>
+                        }
+                        else
+                        {
+                            <table class="table table-sm">
+                                <thead><tr><th>Ano</th><th>Especie</th><th>Qtd</th><th>Estado</th></tr></thead>
+                                <tbody>
+                                    @foreach (var p in Model.Pedidos.OrderByDescending(x => x.DataPedido))
+                                    {
+                                        <tr>
+                                            <td>@p.Ano</td>
+                                            <td class="small">@p.EspecieCientifica</td>
+                                            <td>@p.Quantidade</td>
+                                            <td><span class="badge bg-info">@p.Estado</span></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public int Site { get; set; }
+
+    private bool IsNew => Id is null || Id.Value == 0;
+    private Socio? Model;
+    private List<Site> AllSites = new();
+    private string NewUserPassword = "";
+    private int NewQuotaAno = DateTime.Now.Year;
+    private decimal NewQuotaValor = 10;
+    private DateTime? NewQuotaData = DateTime.Today;
+    private string? Message, ErrorMsg;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (IsNew)
+        {
+            Model = new Socio { SiteId = Site, DataInscricao = DateTime.UtcNow };
+        }
+        else
+        {
+            Model = await Socios.GetAsync(Id!.Value);
+            if (Model is null) Nav.NavigateTo("/socios");
+        }
+    }
+
+    private async Task OnSave()
+    {
+        if (Model is null) return;
+        if (Model.SiteId <= 0)
+        {
+            ErrorMsg = "Escolha um site.";
+            Message = null;
+            return;
+        }
+        try
+        {
+            await Socios.SaveAsync(Model);
+            Message = "Guardado.";
+            ErrorMsg = null;
+            if (IsNew) Nav.NavigateTo($"/socios/{Model.Id}");
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+
+    private async Task OnDelete()
+    {
+        if (Model is null || IsNew) return;
+        try
+        {
+            await Socios.DeleteAsync(Model.Id);
+            Nav.NavigateTo("/socios");
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+
+    private async Task OnCreateUser()
+    {
+        if (Model is null || IsNew) return;
+        var (ok, msg) = await Socios.CreateUserForSocioAsync(Model.Id, NewUserPassword);
+        Message = ok ? msg : null;
+        ErrorMsg = ok ? null : msg;
+        if (ok) Model = await Socios.GetAsync(Model.Id);
+    }
+
+    private async Task OnAddQuota()
+    {
+        if (Model is null || IsNew) return;
+        var q = new Quota
+        {
+            SocioId = Model.Id,
+            Ano = NewQuotaAno,
+            Valor = NewQuotaValor,
+            DataPagamento = NewQuotaData?.ToUniversalTime(),
+        };
+        try
+        {
+            await Socios.SaveQuotaAsync(q);
+            Model = await Socios.GetAsync(Model.Id);
+            Message = $"Quota {q.Ano} registada.";
+            NewQuotaAno++;
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+
+    private async Task OnDeleteQuota(int id)
+    {
+        if (Model is null) return;
+        await Socios.DeleteQuotaAsync(id);
+        Model = await Socios.GetAsync(Model.Id);
+    }
+}

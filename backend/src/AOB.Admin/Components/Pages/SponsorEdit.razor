@@ -1,0 +1,209 @@
+@page "/patrocinadores/novo"
+@page "/patrocinadores/{Id:int}"
+@attribute [Authorize]
+@inject SponsorAdminService Sponsors
+@inject ContentService Content
+@inject UploadService Uploads
+@inject RevalidateNotifier Revalidate
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(IsNew ? "Novo patrocinador" : Model?.Name ?? "Patrocinador") · AOB</PageTitle>
+
+@if (Model is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/patrocinadores" class="text-decoration-none small">← Patrocinadores</a>
+            <h1 class="h3 mb-0">@(IsNew ? "Novo patrocinador" : Model.Name)</h1>
+        </div>
+        @if (!IsNew)
+        {
+            <button class="btn btn-outline-danger" @onclick="OnDelete">Eliminar</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="alert alert-success">@Message</div>
+    }
+    @if (!string.IsNullOrEmpty(ErrorMsg))
+    {
+        <div class="alert alert-danger">@ErrorMsg</div>
+    }
+
+    <EditForm Model="Model" OnValidSubmit="OnSave" FormName="SponsorForm">
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="mb-3">
+                    <label class="form-label">Nome <span class="text-danger">*</span></label>
+                    <input class="form-control" @bind="Model.Name" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Slug</label>
+                    <input class="form-control font-monospace" @bind="Model.Slug" placeholder="deixe vazio para gerar automaticamente" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">URL de destino (para onde vai ao clicar no logo)</label>
+                    <input class="form-control" type="url" @bind="Model.ClickUrl" placeholder="https://..." />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Notas internas</label>
+                    <textarea class="form-control" rows="3" @bind="Model.Notes" placeholder="Detalhes do contrato, contactos, renovação, etc."></textarea>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h6">Publicação</h2>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="pub" @bind="Model.IsPublished" />
+                            <label class="form-check-label" for="pub">Publicado</label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Site <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" @bind="Model.SiteId" required>
+                                <option value="0">-- escolha uma opção --</option>
+                                @foreach (var s in AllSites)
+                                {
+                                    <option value="@s.Id">@s.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Tier</label>
+                            <select class="form-select form-select-sm" @bind="Model.Tier">
+                                <option value="@SponsorTier.Principal">Principal</option>
+                                <option value="@SponsorTier.Institucional">Institucional</option>
+                                <option value="@SponsorTier.Apoio">Apoio</option>
+                                <option value="@SponsorTier.Parceiro">Parceiro</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Ordem (menor = primeiro)</label>
+                            <input class="form-control form-control-sm" type="number" @bind="Model.SortOrder" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h2 class="h6">Logo <span class="text-danger">*</span></h2>
+                        @if (!string.IsNullOrEmpty(Model.LogoPath))
+                        {
+                            <div class="bg-light p-2 rounded mb-2 text-center">
+                                <img src="@Model.LogoPath" alt="@Model.Name" style="max-height: 100px; max-width: 100%;" />
+                            </div>
+                        }
+                        <InputFile OnChange="OnUploadLogo" accept="image/*" class="form-control form-control-sm" />
+                        <input class="form-control form-control-sm mt-2" placeholder="ou URL" @bind="Model.LogoPath" />
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 mt-3">
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                    <a href="/patrocinadores" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public int Site { get; set; }
+
+    private bool IsNew => Id is null || Id.Value == 0;
+    private Sponsor? Model;
+    private List<Site> AllSites = new();
+    private string? Message;
+    private string? ErrorMsg;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+
+        if (IsNew)
+        {
+            Model = new Sponsor
+            {
+                SiteId = Site > 0 ? Site : (AllSites.FirstOrDefault()?.Id ?? 0),
+                Tier = SponsorTier.Parceiro,
+                IsPublished = true,
+                SortOrder = 100,
+            };
+        }
+        else
+        {
+            Model = await Sponsors.GetAsync(Id!.Value);
+            if (Model is null)
+            {
+                Nav.NavigateTo("/patrocinadores");
+                return;
+            }
+        }
+    }
+
+    private async Task OnSave()
+    {
+        if (Model is null) return;
+        if (Model.SiteId <= 0)
+        {
+            ErrorMsg = "Escolha um site.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(Model.LogoPath))
+        {
+            ErrorMsg = "Carregue o logo antes de guardar.";
+            return;
+        }
+        try
+        {
+            await Sponsors.SaveAsync(Model);
+            Message = "Guardado.";
+            ErrorMsg = null;
+
+            var siteSlug = AllSites.FirstOrDefault(s => s.Id == Model.SiteId)?.Slug;
+            if (!string.IsNullOrEmpty(siteSlug))
+                _ = Revalidate.NotifyAsync(siteSlug, "/");
+
+            if (IsNew) Nav.NavigateTo($"/patrocinadores/{Model.Id}");
+        }
+        catch (Exception ex)
+        {
+            ErrorMsg = ex.Message;
+        }
+    }
+
+    private async Task OnDelete()
+    {
+        if (Model is null || IsNew) return;
+        var siteSlug = AllSites.FirstOrDefault(s => s.Id == Model.SiteId)?.Slug;
+        await Sponsors.DeleteAsync(Model.Id);
+        if (!string.IsNullOrEmpty(siteSlug))
+            _ = Revalidate.NotifyAsync(siteSlug, "/");
+        Nav.NavigateTo("/patrocinadores");
+    }
+
+    private async Task OnUploadLogo(InputFileChangeEventArgs e)
+    {
+        if (Model is null) return;
+        try
+        {
+            var site = AllSites.FirstOrDefault(s => s.Id == Model.SiteId)?.Slug ?? "aob";
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            var res = await Uploads.SaveAsync(stream, e.File.Name, site, "sponsors");
+            Model.LogoPath = res.PublicPath;
+            Message = $"Logo carregado ({res.FileSize} bytes)";
+            ErrorMsg = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMsg = ex.Message;
+        }
+    }
+}

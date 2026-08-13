@@ -1,0 +1,102 @@
+@page "/patrocinadores"
+@attribute [Authorize]
+@inject SponsorAdminService Sponsors
+@inject ContentService Content
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Patrocinadores · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Patrocinadores</h1>
+    <a class="btn btn-primary" href="/patrocinadores/novo?site=@SelectedSiteId">+ Novo patrocinador</a>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-6">
+        <input class="form-control" placeholder="Procurar por nome..." @bind="Search" @bind:event="oninput" @bind:after="ReloadAsync" />
+    </div>
+</div>
+
+@if (Items is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Items.Count == 0)
+{
+    <p class="text-muted">Sem patrocinadores.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Logo</th>
+                    <th>Nome</th>
+                    <th>Tier</th>
+                    <th>Link</th>
+                    <th class="text-end">Ordem</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Items)
+                {
+                    <tr>
+                        <td class="text-muted small">#@s.Id</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(s.LogoPath))
+                            {
+                                <img src="@s.LogoPath" alt="@s.Name" style="max-height: 40px; max-width: 100px;" />
+                            }
+                        </td>
+                        <td>
+                            <a href="/patrocinadores/@s.Id" class="text-decoration-none">@s.Name</a>
+                            @if (!s.IsPublished) { <span class="badge bg-warning text-dark ms-2">rascunho</span> }
+                        </td>
+                        <td class="small">@s.Tier</td>
+                        <td class="small text-truncate" style="max-width: 260px;">
+                            @if (!string.IsNullOrEmpty(s.ClickUrl))
+                            {
+                                <a href="@s.ClickUrl" target="_blank" rel="noopener">@s.ClickUrl</a>
+                            }
+                        </td>
+                        <td class="text-end small">@s.SortOrder</td>
+                        <td class="text-end">
+                            <a href="/patrocinadores/@s.Id" class="btn btn-sm btn-outline-primary">Editar</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Site> AllSites = new();
+    private List<Sponsor>? Items;
+    private int SelectedSiteId = 1;
+    private string? Search;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0) SelectedSiteId = AllSites[0].Id;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Items = await Sponsors.ListAsync(SelectedSiteId, Search);
+    }
+}

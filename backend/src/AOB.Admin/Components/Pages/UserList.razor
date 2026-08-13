@@ -1,0 +1,132 @@
+@page "/users"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@inject UserAdminService Users
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Utilizadores · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Utilizadores</h1>
+    <button class="btn btn-primary" @onclick="() => ShowCreate = true">+ Novo utilizador</button>
+</div>
+
+@if (Rows is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Email</th><th>Nome</th><th>Roles</th><th>Criado</th><th>Ultimo login</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var u in Rows)
+            {
+                <tr>
+                    <td>
+                        @u.Email
+                        @if (u.LockedOut) { <span class="badge bg-danger ms-2">bloqueado</span> }
+                    </td>
+                    <td>@u.FullName</td>
+                    <td>
+                        @foreach (var r in u.Roles)
+                        {
+                            <span class="badge bg-info me-1">@r</span>
+                        }
+                    </td>
+                    <td class="small">@u.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td class="small">@(u.LastLoginAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-primary" href="/users/@u.Id">Gerir</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (ShowCreate)
+{
+    <div class="modal show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo utilizador</h5>
+                    <button type="button" class="btn-close" @onclick="() => ShowCreate = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(CreateError))
+                    {
+                        <div class="alert alert-danger small">@CreateError</div>
+                    }
+                    <div class="mb-3">
+                        <label class="form-label small">Email</label>
+                        <input class="form-control" @bind="NewEmail" type="email" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Nome completo</label>
+                        <input class="form-control" @bind="NewFullName" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Password inicial</label>
+                        <input class="form-control" @bind="NewPassword" type="text" />
+                        <div class="form-text small">Min 12, com maiuscula, minuscula, digito e simbolo</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Roles</label>
+                        @foreach (var r in AllRoles)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                    checked="@NewRoles.Contains(r)"
+                                    @onchange="e => ToggleNewRole(r, (bool)e.Value!)"
+                                    id="nr-@r" />
+                                <label class="form-check-label" for="nr-@r">@r</label>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="() => ShowCreate = false">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="OnCreate">Criar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<UserRow>? Rows;
+    private List<string> AllRoles = new();
+    private bool ShowCreate;
+    private string NewEmail = "", NewFullName = "", NewPassword = "";
+    private HashSet<string> NewRoles = new();
+    private string? CreateError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllRoles = await Users.AllRoles();
+        Rows = await Users.ListAsync();
+    }
+
+    private void ToggleNewRole(string role, bool add)
+    {
+        if (add) NewRoles.Add(role);
+        else NewRoles.Remove(role);
+    }
+
+    private async Task OnCreate()
+    {
+        CreateError = null;
+        var (ok, msg) = await Users.CreateAsync(NewEmail, NewFullName, NewPassword, NewRoles);
+        if (!ok) { CreateError = msg; return; }
+        ShowCreate = false;
+        NewEmail = NewFullName = NewPassword = "";
+        NewRoles.Clear();
+        Rows = await Users.ListAsync();
+    }
+}

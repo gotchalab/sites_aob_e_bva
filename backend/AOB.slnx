@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AOB.Admin/AOB.Admin.csproj" />
+    <Project Path="src/AOB.Api/AOB.Api.csproj" />
+    <Project Path="src/AOB.Application/AOB.Application.csproj" />
+    <Project Path="src/AOB.Core/AOB.Core.csproj" />
+    <Project Path="src/AOB.Infrastructure/AOB.Infrastructure.csproj" />
+    <Project Path="src/AOB.Migrator/AOB.Migrator.csproj" />
+  </Folder>
+</Solution>

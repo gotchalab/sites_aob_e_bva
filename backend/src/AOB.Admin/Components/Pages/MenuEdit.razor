@@ -1,0 +1,286 @@
+@page "/menus/novo"
+@page "/menus/{Id:int}"
+@attribute [Authorize]
+@inject MenuAdminService Menus
+@inject ContentService Content
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(IsNew ? "Novo menu item" : Model?.Title ?? "Menu item") · AOB</PageTitle>
+
+@if (Model is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/menus" class="text-decoration-none small">← Menus</a>
+            <h1 class="h3 mb-0">@(IsNew ? "Novo menu item" : Model.Title)</h1>
+        </div>
+        @if (!IsNew)
+        {
+            <button class="btn btn-outline-danger" @onclick="OnDelete">Eliminar</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(ErrorMsg)) { <div class="alert alert-danger">@ErrorMsg</div> }
+
+    <EditForm Model="Model" OnValidSubmit="OnSave" FormName="MenuForm">
+        <div class="row g-3">
+            <div class="col-md-8">
+                <label class="form-label">Titulo <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="Model.Title" required />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Ordem</label>
+                <input class="form-control" type="number" @bind="Model.SortOrder" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Site <span class="text-danger">*</span></label>
+                <select class="form-select" @bind="Model.SiteId" @bind:after="ReloadForSite" required>
+                    <option value="0">-- escolha uma opção --</option>
+                    @foreach (var s in AllSites)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Menu type</label>
+                <input class="form-control font-monospace" @bind="Model.MenuType" @bind:after="ReloadParents" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Parent</label>
+                <select class="form-select" @bind="Model.ParentId" @bind:after="OnParentChanged">
+                    <option value="">-- root --</option>
+                    @foreach (var (item, depth) in ParentsHierarchical)
+                    {
+                        @if (item.Id != Model.Id)
+                        {
+                            <option value="@item.Id">@(new string(' ', depth * 4))@(depth > 0 ? "└ " : "")@item.Title</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Target type</label>
+                <select class="form-select" @bind="Model.TargetType" @bind:after="OnTargetTypeChanged">
+                    @foreach (var t in Enum.GetValues<MenuTargetType>())
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            </div>
+            @if (Model.TargetType == MenuTargetType.Category)
+            {
+                <div class="col-md-8">
+                    <label class="form-label">Categoria</label>
+                    <select class="form-select" @bind="Model.TargetId">
+                        <option value="">-- seleccionar --</option>
+                        @foreach (var n in CategoryOptions)
+                        {
+                            <option value="@n.Category.Id">@n.IndentedName</option>
+                        }
+                    </select>
+                    <div class="form-text">URL será <code>/categoria/{slug}</code> ao guardar.</div>
+                </div>
+            }
+            else if (Model.TargetType == MenuTargetType.Article)
+            {
+                <div class="col-md-8">
+                    <label class="form-label">Artigo</label>
+                    <select class="form-select" @bind="Model.TargetId">
+                        <option value="">-- seleccionar --</option>
+                        @foreach (var a in ArticleOptions)
+                        {
+                            <option value="@a.Id">@a.Title</option>
+                        }
+                    </select>
+                    <div class="form-text">URL será <code>/artigos/{slug}</code> ao guardar.</div>
+                </div>
+            }
+            else
+            {
+                <div class="col-md-8">
+                    <label class="form-label">URL</label>
+                    <input class="form-control font-monospace" @bind="Model.Url" placeholder="/artigos/... ou https://..." />
+                </div>
+            }
+            <div class="col-md-12 d-flex align-items-end gap-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="pub" @bind="Model.IsPublished" />
+                    <label class="form-check-label" for="pub">Publicado</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="nt" @bind="Model.OpenInNewTab" />
+                    <label class="form-check-label" for="nt">Nova janela</label>
+                </div>
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Guardar</button>
+                <a href="/menus" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public int Site { get; set; }
+    [SupplyParameterFromQuery] public string? Type { get; set; }
+
+    private bool IsNew => Id is null || Id.Value == 0;
+    private MenuItem? Model;
+    private List<Site> AllSites = new();
+    private List<MenuItem> Parents = new();
+    private List<(MenuItem Item, int Depth)> ParentsHierarchical = new();
+    private List<ContentService.CategoryNode> CategoryOptions = new();
+    private List<Article> ArticleOptions = new();
+    private string? ErrorMsg;
+    private bool _initialSortFilled;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (IsNew)
+        {
+            Model = new MenuItem
+            {
+                SiteId = Site,
+                MenuType = string.IsNullOrWhiteSpace(Type) ? "mainmenu" : Type,
+                IsPublished = true,
+                TargetType = MenuTargetType.Internal,
+            };
+        }
+        else
+        {
+            Model = await Menus.GetAsync(Id!.Value);
+            if (Model is null) { Nav.NavigateTo("/menus"); return; }
+        }
+        await ReloadForSite();
+    }
+
+    private async Task ReloadForSite()
+    {
+        if (Model is null) return;
+        await ReloadParents();
+        await ReloadTargetOptions();
+    }
+
+    private async Task ReloadParents()
+    {
+        if (Model is null) return;
+        Parents = await Menus.ListAsync(Model.SiteId, Model.MenuType);
+        ParentsHierarchical = FlattenHierarchy(Parents);
+        // No load inicial de um item novo, arranca com a ordem já certa (max + 1 na raiz).
+        if (IsNew && !_initialSortFilled)
+        {
+            AutoFillSortOrder();
+            _initialSortFilled = true;
+        }
+    }
+
+    private void OnParentChanged()
+    {
+        // Mudança explícita de parent recalcula a ordem sempre (novo ou existente),
+        // porque a ordem anterior refere-se ao parent antigo e deixa de fazer sentido.
+        AutoFillSortOrder();
+    }
+
+    private void AutoFillSortOrder()
+    {
+        if (Model is null) return;
+        var siblings = Parents.Where(m => m.ParentId == Model.ParentId && m.Id != Model.Id).ToList();
+        Model.SortOrder = siblings.Count == 0 ? 0 : siblings.Max(s => s.SortOrder) + 1;
+    }
+
+    private async Task ReloadTargetOptions()
+    {
+        if (Model is null) return;
+        CategoryOptions = await Content.ListCategoryTree(Model.SiteId);
+        // Limite generoso; se o site tiver mais artigos que isto o dropdown fica cortado — logo se vê.
+        ArticleOptions = await Content.ListArticles(Model.SiteId, null, 1, 1000);
+        ArticleOptions = ArticleOptions.OrderBy(a => a.Title).ToList();
+    }
+
+    private void OnTargetTypeChanged()
+    {
+        if (Model is null) return;
+        // Ao trocar de tipo, limpa o TargetId para não ficar a apontar para o mundo errado
+        // (ex: id de artigo a ser reinterpretado como id de categoria).
+        Model.TargetId = null;
+    }
+
+    private static List<(MenuItem Item, int Depth)> FlattenHierarchy(List<MenuItem> items)
+    {
+        const int RootKey = -1;
+        var byParent = items
+            .GroupBy(m => m.ParentId ?? RootKey)
+            .ToDictionary(g => g.Key, g => g.OrderBy(m => m.SortOrder).ThenBy(m => m.Title).ToList());
+
+        var result = new List<(MenuItem, int)>();
+        void Visit(int parentKey, int depth)
+        {
+            if (!byParent.TryGetValue(parentKey, out var children)) return;
+            foreach (var c in children)
+            {
+                result.Add((c, depth));
+                Visit(c.Id, depth + 1);
+            }
+        }
+        Visit(RootKey, 0);
+
+        // Fallback: apanha itens cujo ParentId aponta para um pai que não está na lista (evita perder órfãos).
+        var covered = new HashSet<int>(result.Select(r => r.Item1.Id));
+        foreach (var orphan in items.Where(i => !covered.Contains(i.Id)))
+            result.Add((orphan, 0));
+
+        return result;
+    }
+
+    private async Task OnSave()
+    {
+        if (Model is null) return;
+        if (Model.SiteId <= 0)
+        {
+            ErrorMsg = "Escolha um site.";
+            return;
+        }
+        try
+        {
+            // Deriva a URL a partir do slug quando o item aponta para artigo/categoria concretos,
+            // para que o frontend (que lê Url directamente) continue a funcionar sem tocar em código.
+            if (Model.TargetType == MenuTargetType.Category && Model.TargetId is int catId)
+            {
+                var cat = await Content.GetCategory(catId);
+                Model.Url = cat is null ? null : $"/categoria/{cat.Slug}";
+            }
+            else if (Model.TargetType == MenuTargetType.Article && Model.TargetId is int artId)
+            {
+                var art = await Content.GetArticle(artId);
+                Model.Url = art is null ? null : $"/artigos/{art.Slug}";
+            }
+            else
+            {
+                Model.TargetId = null;
+            }
+
+            await Menus.SaveAsync(Model);
+            Nav.NavigateTo("/menus");
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+
+    private async Task OnDelete()
+    {
+        if (Model is null || IsNew) return;
+        try
+        {
+            await Menus.DeleteAsync(Model.Id);
+            Nav.NavigateTo("/menus");
+        }
+        catch (Exception ex) { ErrorMsg = ex.Message; }
+    }
+}

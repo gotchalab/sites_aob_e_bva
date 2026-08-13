@@ -1,0 +1,26 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.log
+
+# EF Core migrations bundle
+*.dll.mdb
+*.exe.mdb
+
+# Secrets (nunca commitar)
+appsettings.Local.json
+appsettings.*.local.json
+.env
+.env.local
+*.pem
+*.key
+
+# Rider / VS Code
+.idea/
+.vscode/
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json

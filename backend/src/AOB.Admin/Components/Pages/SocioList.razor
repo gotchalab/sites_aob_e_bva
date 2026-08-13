@@ -1,0 +1,116 @@
+@page "/socios"
+@attribute [Authorize]
+@inject SocioAdminService Socios
+@inject ContentService Content
+@rendermode InteractiveServer
+
+<PageTitle>Socios · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Socios</h1>
+    <a class="btn btn-primary" href="/socios/novo?site=@SelectedSiteId">+ Novo socio</a>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-6">
+        <input class="form-control" placeholder="Procurar por nome/email/numero..."
+               @bind="Search" @bind:event="oninput" @bind:after="ReloadAsync" />
+    </div>
+</div>
+
+@if (Items is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Items.Count == 0)
+{
+    <p class="text-muted">Sem socios.</p>
+}
+else
+{
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Nº</th><th>Nome</th><th>Email</th><th>Estado</th><th>Inscrito</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in Items)
+            {
+                <tr>
+                    <td class="small font-monospace">@s.NumeroSocio</td>
+                    <td>@s.NomeCompleto</td>
+                    <td class="small">@s.Email</td>
+                    <td>
+                        @{
+                            var (badge, cls) = s.Estado switch
+                            {
+                                SocioEstado.Ativo => ("Ativo", "bg-success"),
+                                SocioEstado.Suspenso => ("Suspenso", "bg-warning text-dark"),
+                                SocioEstado.Baixa => ("Baixa", "bg-secondary"),
+                                _ => (s.Estado.ToString(), "bg-secondary")
+                            };
+                        }
+                        <span class="badge @cls">@badge</span>
+                    </td>
+                    <td class="small">@s.DataInscricao.ToString("yyyy-MM-dd")</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/socios/@s.Id">Gerir</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (TotalPages > 1)
+    {
+        <nav>
+            <ul class="pagination">
+                @for (int p = 1; p <= TotalPages; p++)
+                {
+                    var pp = p;
+                    <li class="page-item @(pp == Page ? "active" : "")">
+                        <button class="page-link" @onclick="() => GoTo(pp)">@pp</button>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    private List<Site> AllSites = new();
+    private List<Socio>? Items;
+    private int SelectedSiteId = 1;
+    private string? Search;
+    private int Page = 1;
+    private const int PageSize = 25;
+    private int Total;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Total / (double)PageSize));
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0) SelectedSiteId = AllSites[0].Id;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Page = 1;
+        Total = await Socios.CountAsync(SelectedSiteId, Search);
+        Items = await Socios.ListAsync(SelectedSiteId, Search, Page, PageSize);
+    }
+
+    private async Task GoTo(int page)
+    {
+        Page = page;
+        Items = await Socios.ListAsync(SelectedSiteId, Search, Page, PageSize);
+    }
+}

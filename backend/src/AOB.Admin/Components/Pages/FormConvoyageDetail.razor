@@ -1,0 +1,279 @@
+@page "/formularios/{Id:int}"
+@attribute [Authorize]
+@inject FormAdminService Forms
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+@if (_form is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (_data is null)
+{
+    <p class="text-danger">Inscrição não encontrada.</p>
+}
+else
+{
+    <PageTitle>Inscrição Convoyage #@Id · AOB</PageTitle>
+
+    <div class="d-flex align-items-center gap-2 mb-1">
+        <a href="/formularios" class="btn btn-sm btn-outline-secondary">← Lista</a>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-start mb-4 mt-3">
+        <div>
+            <h1 class="h3 mb-1">
+                Inscrição Convoyage #@Id
+                <span class="badge @_statusCls ms-2" style="font-size:0.6em;vertical-align:middle;">@_statusLabel</span>
+            </h1>
+            <div class="text-muted small">
+                Recebido em @_form.SubmittedAt.ToLocalTime().ToString("dd/MM/yyyy 'às' HH:mm")
+                · Convoyage @_data.ConvoyageYear
+            </div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_data.PdfPath))
+        {
+            <a class="btn btn-outline-primary" href="/formularios/@Id/pdf" target="_blank">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+                    <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5z"/>
+                    <path d="M4.603 14.087a.8.8 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.7 7.7 0 0 1 1.482-.645 20 20 0 0 0 1.062-2.227 7.3 7.3 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.188-.012.396-.047.614-.084.51-.27 1.134-.52 1.794a11 11 0 0 0 .98 1.686 5.8 5.8 0 0 1 1.334.05c.364.065.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.86.86 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.7 5.7 0 0 1-.911-.95 11.7 11.7 0 0 0-1.997.406 11.3 11.3 0 0 1-1.02 1.51c-.292.35-.609.656-.927.787a.8.8 0 0 1-.58.029m1.379-1.901q-.25.115-.459.238c-.328.194-.541.383-.647.547-.094.145-.096.25-.04.361q.016.032.026.044l.035-.012c.137-.056.355-.235.635-.572a8 8 0 0 0 .45-.606m1.64-1.33a13 13 0 0 1 1.01-.193 12 12 0 0 1-.51-.858 21 21 0 0 1-.5 1.05zm2.446.45q.226.244.435.41c.24.19.407.253.498.256a.1.1 0 0 0 .07-.015.3.3 0 0 0 .094-.106.9.9 0 0 0 .059-.248.17.17 0 0 0-.037-.09c-.06-.074-.17-.14-.33-.17a5 5 0 0 0-.88-.02zm-3.444-2.814c.197.037.386.097.57.188a5.1 5.1 0 0 0-.198-1.143.7.7 0 0 0-.031-.1.4.4 0 0 0-.142.054c-.168.086-.3.23-.347.463-.038.18-.025.437.044.817a5 5 0 0 0 .104-.279"/>
+                </svg>
+                Ver PDF
+            </a>
+        }
+    </div>
+
+    @* ── 1. Dados do criador ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white">
+            1. Dados do criador
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label text-muted small mb-0">Nome completo</label>
+                    <div class="fw-semibold">@_data.NomeCompleto</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small mb-0">País</label>
+                    <div>@(_data.Pais ?? "—")</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small mb-0">Email</label>
+                    <div><a href="mailto:@_data.Email">@_data.Email</a></div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small mb-0">Telefone</label>
+                    <div>@(_data.Telefone ?? "—")</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small mb-0">Nº sócio BVA</label>
+                    <div>@(_data.NumeroSocioBva ?? "—")</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small mb-0">Nº STAM</label>
+                    <div>@(_data.NumeroStam ?? "—")</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label text-muted small mb-0">Local de recolha</label>
+                    <div>@(_data.LocalRecolha ?? "—")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── 2. Aves inscritas ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>2. Aves inscritas</span>
+            <span class="badge bg-light text-primary fs-6">@_data.Aves.Count ave@(_data.Aves.Count == 1 ? "" : "s")</span>
+        </div>
+        <div class="card-body p-0">
+            @if (_data.Aves.Count == 0)
+            {
+                <p class="text-muted p-3 mb-0">Sem aves registadas.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">#</th>
+                                <th>Nº Série/Classe</th>
+                                <th>Espécie</th>
+                                <th>Tipo</th>
+                                <th>Mutação</th>
+                                <th>Anilha</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{int idx = 0;}
+                            @foreach (var ave in _data.Aves)
+                            {
+                                idx++;
+                                <tr>
+                                    <td class="ps-3 text-muted small">@idx</td>
+                                    <td class="fw-semibold font-monospace small">@ave.Serie</td>
+                                    <td class="small">@FormatEspecie(ave.Especie)</td>
+                                    <td class="small">@FormatTipo(ave.TipoClasse)</td>
+                                    <td class="small">@ave.EspecieMutacao</td>
+                                    <td class="font-monospace small">@ave.Anilha</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ── 3. Gestão ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold">3. Gestão</div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-auto">
+                    <label class="form-label text-muted small mb-1">Estado atual</label>
+                    <div><span class="badge @_statusCls fs-6">@_statusLabel</span></div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-muted small mb-1">Alterar estado</label>
+                    <select class="form-select" @bind="_newStatus">
+                        <option value="">— selecionar —</option>
+                        <option value="@((int)FormStatus.Handled)">Marcar tratada</option>
+                        <option value="@((int)FormStatus.InProgress)">Em curso</option>
+                        <option value="@((int)FormStatus.Rejected)">Rejeitar</option>
+                        <option value="@((int)FormStatus.Spam)">Spam</option>
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <button class="btn btn-primary" @onclick="ApplyStatusAsync" disabled="@string.IsNullOrEmpty(_newStatus)">
+                        Aplicar
+                    </button>
+                </div>
+            </div>
+            @if (_form.Notes is not null)
+            {
+                <div class="mt-3">
+                    <label class="form-label text-muted small mb-1">Notas</label>
+                    <p class="mb-0">@_form.Notes</p>
+                </div>
+            }
+            @if (_form.HandledAt.HasValue)
+            {
+                <div class="mt-3 text-muted small">
+                    Processado em @_form.HandledAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [CascadingParameter] public Task<AuthenticationState>? AuthState { get; set; }
+
+    private FormSubmission? _form;
+    private ConvoyageData? _data;
+    private string _newStatus = "";
+    private string _statusLabel = "";
+    private string _statusCls = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _form = await Forms.GetAsync(Id);
+        if (_form is null || _form.FormType != FormType.InscricaoConvoyage)
+        {
+            _data = null;
+            return;
+        }
+
+        _data = ParseData(_form.DataJson);
+        UpdateStatusBadge();
+    }
+
+    private void UpdateStatusBadge()
+    {
+        if (_form is null) return;
+        (_statusLabel, _statusCls) = _form.Status switch
+        {
+            FormStatus.Pending    => ("Pendente",  "bg-warning text-dark"),
+            FormStatus.InProgress => ("Em curso",  "bg-primary"),
+            FormStatus.Handled    => ("Tratada",   "bg-success"),
+            FormStatus.Rejected   => ("Rejeitada", "bg-secondary"),
+            FormStatus.Spam       => ("Spam",      "bg-danger"),
+            _                     => (_form.Status.ToString(), "bg-secondary")
+        };
+    }
+
+    private async Task ApplyStatusAsync()
+    {
+        if (string.IsNullOrEmpty(_newStatus) || _form is null) return;
+        if (!int.TryParse(_newStatus, out var st)) return;
+
+        var user = (await (AuthState ?? Task.FromResult<AuthenticationState>(null!)))?.User;
+        var userId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await Forms.SetStatusAsync(_form.Id, (FormStatus)st, userId, null);
+        _form = await Forms.GetAsync(Id);
+        _newStatus = "";
+        UpdateStatusBadge();
+    }
+
+    private static string FormatEspecie(string? raw) => raw switch
+    {
+        "agapornis_roseicollis" => "Agapornis Roseicollis",
+        "agapornis_fischeri"    => "Agapornis Fischeri",
+        "agapornis_personatus"  => "Agapornis Personatus",
+        "agapornis_nigrigenis"  => "Agapornis Nigrigenis",
+        "agapornis_lilianae"    => "Agapornis Lilianae",
+        "agapornis_taranta"     => "Agapornis Taranta",
+        "agapornis_canus"       => "Agapornis Canus",
+        "agapornis_pullarius"   => "Agapornis Pullarius",
+        "agapornis_swindernianus" => "Agapornis Swindernianus",
+        _ => raw?.Replace('_', ' ') ?? "—"
+    };
+
+    private static string FormatTipo(string? raw) => raw switch
+    {
+        "show"       => "Show",
+        "individual" => "Individual",
+        _ => raw ?? "—"
+    };
+
+    private static ConvoyageData? ParseData(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var r = doc.RootElement;
+
+            string? S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+            int I(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetInt32() : 0;
+
+            var aves = new List<AveData>();
+            if (r.TryGetProperty("Aves", out var avesEl) && avesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var a in avesEl.EnumerateArray())
+                {
+                    string? AS(string k) => a.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+                    aves.Add(new AveData(AS("Serie"), AS("Especie"), AS("TipoClasse"), AS("EspecieMutacao"), AS("Anilha")));
+                }
+            }
+
+            return new ConvoyageData(
+                S("NomeCompleto"), S("Email"), S("Telefone"), S("Pais"),
+                S("NumeroSocioBva"), S("NumeroStam"), S("LocalRecolha"),
+                I("ConvoyageYear"), S("PdfPath"), aves);
+        }
+        catch { return null; }
+    }
+
+    private record AveData(string? Serie, string? Especie, string? TipoClasse, string? EspecieMutacao, string? Anilha);
+
+    private record ConvoyageData(
+        string? NomeCompleto, string? Email, string? Telefone, string? Pais,
+        string? NumeroSocioBva, string? NumeroStam, string? LocalRecolha,
+        int ConvoyageYear, string? PdfPath, List<AveData> Aves);
+}

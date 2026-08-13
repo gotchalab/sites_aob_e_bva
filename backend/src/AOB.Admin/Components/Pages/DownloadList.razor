@@ -1,0 +1,124 @@
+@page "/downloads"
+@attribute [Authorize]
+@inject ContentService Content
+@rendermode InteractiveServer
+
+<PageTitle>Downloads · AOB</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Downloads</h1>
+    <a class="btn btn-primary" href="/downloads/novo?site=@SelectedSiteId">+ Novo download</a>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadSiteAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedCategoryId" @bind:after="ReloadAsync">
+            <option value="0">-- todas as categorias --</option>
+            @foreach (var n in Categories)
+            {
+                <option value="@n.Category.Id">@n.IndentedName</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-6">
+        <input class="form-control" placeholder="Procurar..." @bind="Search" @bind:event="oninput" @bind:after="ReloadAsync" />
+    </div>
+</div>
+
+@if (Downloads is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Downloads.Count == 0)
+{
+    <p class="text-muted">Sem downloads.</p>
+}
+else
+{
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr><th></th><th>Titulo</th><th>Ficheiro</th><th>Categoria</th><th class="text-end">Downloads</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var d in Downloads)
+            {
+                <tr>
+                    <td class="text-muted small">#@d.Id</td>
+                    <td>
+                        @d.Title
+                        @if (!d.IsPublished) { <span class="badge bg-warning text-dark ms-2">rascunho</span> }
+                    </td>
+                    <td class="small font-monospace">@d.FileName</td>
+                    <td class="small">@d.Category?.Name</td>
+                    <td class="text-end small">@d.DownloadCount</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/downloads/@d.Id">Editar</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (TotalPages > 1)
+    {
+        <nav>
+            <ul class="pagination">
+                @for (int p = 1; p <= TotalPages; p++)
+                {
+                    var pp = p;
+                    <li class="page-item @(pp == Page ? "active" : "")">
+                        <button class="page-link" @onclick="() => GoTo(pp)">@pp</button>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    private List<Site> AllSites = new();
+    private List<ContentService.CategoryNode> Categories = new();
+    private List<Download>? Downloads;
+    private int SelectedSiteId = 1;
+    private int SelectedCategoryId;
+    private string? Search;
+    private int Page = 1;
+    private const int PageSize = 25;
+    private int Total;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Total / (double)PageSize));
+
+    private int? CategoryFilter => SelectedCategoryId > 0 ? SelectedCategoryId : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0) SelectedSiteId = AllSites[0].Id;
+        await ReloadSiteAsync();
+    }
+
+    private async Task ReloadSiteAsync()
+    {
+        SelectedCategoryId = 0;
+        Categories = await Content.ListCategoryTree(SelectedSiteId, includeDownloads: true);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Page = 1;
+        Total = await Content.CountDownloads(SelectedSiteId, Search, CategoryFilter);
+        Downloads = await Content.ListDownloads(SelectedSiteId, Search, Page, PageSize, CategoryFilter);
+    }
+
+    private async Task GoTo(int page)
+    {
+        Page = page;
+        Downloads = await Content.ListDownloads(SelectedSiteId, Search, Page, PageSize, CategoryFilter);
+    }
+}

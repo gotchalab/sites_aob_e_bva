@@ -1,0 +1,29 @@
+[Unit]
+Description=AOB Frontend aobarcelos.pt (Next.js)
+After=network.target aob-api.service
+Wants=aob-api.service
+
+[Service]
+User=aob-web
+Group=aob-web
+Type=simple
+WorkingDirectory=/opt/aob/aobarcelos
+ExecStart=/usr/bin/next start -p 3000 -H 127.0.0.1
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=aob-aobarcelos
+
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile=-/etc/aob/aobarcelos.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

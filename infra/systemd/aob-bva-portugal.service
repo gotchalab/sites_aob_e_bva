@@ -1,0 +1,29 @@
+[Unit]
+Description=AOB Frontend bva-p.aobarcelos.pt (Next.js)
+After=network.target aob-api.service
+Wants=aob-api.service
+
+[Service]
+User=aob-web
+Group=aob-web
+Type=simple
+WorkingDirectory=/opt/aob/bva-portugal
+ExecStart=/usr/bin/next start -p 3001 -H 127.0.0.1
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=aob-bva-portugal
+
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile=-/etc/aob/bva-portugal.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

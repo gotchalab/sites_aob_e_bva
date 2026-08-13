@@ -1,0 +1,89 @@
+@page "/login"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>Login · AOB Admin</PageTitle>
+
+<div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
+    <div class="card shadow-sm" style="width: 380px;">
+        <div class="card-body p-4">
+            <h1 class="h4 text-center mb-4">AOB · Backoffice</h1>
+
+            @if (!string.IsNullOrEmpty(Error))
+            {
+                <div class="alert alert-danger py-2 small">@Error</div>
+            }
+
+            <form method="post" action="/auth/login">
+                <div class="mb-3">
+                    <label class="form-label small">Email</label>
+                    <input class="form-control" name="email" type="email" required autofocus />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small" for="login-password">Password</label>
+                    <div class="input-group">
+                        <input id="login-password" class="form-control" name="password" type="password" required autocomplete="current-password" />
+                        <button type="button" class="btn btn-outline-secondary" id="login-password-toggle"
+                                aria-label="Mostrar password" aria-pressed="false" title="Mostrar password">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                 data-eye-open>
+                                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                 data-eye-off style="display:none">
+                                <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-6.5 0-10-7-10-7a19.5 19.5 0 0 1 4.22-5.19"/>
+                                <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c6.5 0 10 7 10 7a19.5 19.5 0 0 1-3.17 4.19"/>
+                                <path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/>
+                                <line x1="2" y1="2" x2="22" y2="22"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(ReturnUrl))
+                {
+                    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                }
+                <button type="submit" class="btn btn-primary w-100">Entrar</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        var btn = document.getElementById('login-password-toggle');
+        var input = document.getElementById('login-password');
+        if (!btn || !input) return;
+        btn.addEventListener('click', function () {
+            var showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            btn.setAttribute('aria-pressed', showing ? 'false' : 'true');
+            btn.setAttribute('aria-label', showing ? 'Mostrar password' : 'Ocultar password');
+            btn.setAttribute('title', showing ? 'Mostrar password' : 'Ocultar password');
+            var open = btn.querySelector('[data-eye-open]');
+            var off = btn.querySelector('[data-eye-off]');
+            if (open && off) {
+                open.style.display = showing ? '' : 'none';
+                off.style.display = showing ? 'none' : '';
+            }
+        });
+    })();
+</script>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Error = Error switch
+        {
+            "invalid" => "Credenciais invalidas.",
+            "locked" => "Conta bloqueada temporariamente. Tenta daqui a alguns minutos.",
+            _ => null,
+        };
+    }
+}

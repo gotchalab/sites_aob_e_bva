@@ -1,0 +1,47 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<textarea id="@ElementId" class="form-control" style="min-height: 320px;">@Content</textarea>
+
+@code {
+    [Parameter, EditorRequired] public string Content { get; set; } = "";
+    [Parameter] public EventCallback<string> ContentChanged { get; set; }
+    [Parameter] public string UploadUrl { get; set; } = "/admin/upload-inline";
+
+    private readonly string ElementId = "ck-" + Guid.NewGuid().ToString("N");
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<HtmlEditor>? _ref;
+    private bool _mounted;
+
+    protected override bool ShouldRender() => !_mounted;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "/ckeditor-init.js");
+        _ref = DotNetObjectReference.Create(this);
+        await _module.InvokeVoidAsync("attach", ElementId, Content, _ref, UploadUrl);
+        _mounted = true;
+    }
+
+    [JSInvokable]
+    public Task OnEditorContentChanged(string html)
+    {
+        Content = html;
+        return ContentChanged.InvokeAsync(html);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("detach", ElementId);
+                await _module.DisposeAsync();
+            }
+        }
+        catch { }
+        _ref?.Dispose();
+    }
+}

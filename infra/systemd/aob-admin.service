@@ -1,0 +1,32 @@
+[Unit]
+Description=AOB Backoffice (Blazor Server)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+User=aob-admin
+Group=aob-admin
+Type=notify
+WorkingDirectory=/opt/aob/admin
+ExecStart=/opt/dotnet/dotnet /opt/aob/admin/AOB.Admin.dll
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=aob-admin
+
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5001
+EnvironmentFile=-/etc/aob/admin.env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aob /var/www/uploads
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

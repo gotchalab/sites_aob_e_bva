@@ -1,0 +1,59 @@
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<div class="position-relative d-inline-block">
+    <button type="button"
+            class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
+            style="min-width:140px"
+            @onclick="Toggle">
+        <i data-lucide="@Kebab(Value)" style="width:16px;height:16px;flex-shrink:0;display:block"></i>
+        <span class="flex-grow-1 text-start">@Value</span>
+        <span style="font-size:9px;opacity:.6">▾</span>
+    </button>
+
+    @if (_open)
+    {
+        <div class="position-absolute bg-white border rounded shadow p-2"
+             style="top:calc(100% + 4px);left:0;z-index:1050;min-width:320px">
+            <div class="d-flex flex-wrap gap-1">
+                @foreach (var ic in HomeConfigModel.AllowedIcons)
+                {
+                    var active = ic == Value;
+                    <button type="button"
+                            title="@ic"
+                            class="btn btn-sm d-flex flex-column align-items-center justify-content-center p-2 @(active ? "btn-primary" : "btn-outline-secondary")"
+                            style="width:62px;font-size:9px;gap:3px;line-height:1.1"
+                            @onclick="() => Pick(ic)">
+                        <i data-lucide="@Kebab(ic)" style="width:18px;height:18px;display:block"></i>
+                        <span class="text-truncate w-100 text-center">@ic</span>
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "Award";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    bool _open;
+
+    void Toggle() => _open = !_open;
+
+    async Task Pick(string icon)
+    {
+        Value = icon;
+        _open = false;
+        await ValueChanged.InvokeAsync(icon);
+    }
+
+    static string Kebab(string pascal) =>
+        System.Text.RegularExpressions.Regex.Replace(pascal, "(?<=[a-z])([A-Z])", "-$1")
+              .ToLowerInvariant();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try { await JS.InvokeVoidAsync("lucide.createIcons"); } catch { }
+    }
+}
