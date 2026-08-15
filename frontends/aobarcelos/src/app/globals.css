@@ -30,6 +30,13 @@ body {
 
 h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.01em; }
 
+/* iOS Safari faz zoom automatico ao focar inputs com font-size < 16px.
+   Em mobile forcamos 16px em todos os controlos para evitar o zoom;
+   em desktop (>= 768px) volta ao tamanho definido pelas utilities Tailwind. */
+@media (max-width: 767px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
 .prose-article a { color: var(--color-brand-600); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .prose-article a:hover { color: var(--color-brand-700); }
 .prose-article img { max-width: 100%; height: auto; border-radius: 0.75rem; margin: 1.25rem auto; display: block; }
