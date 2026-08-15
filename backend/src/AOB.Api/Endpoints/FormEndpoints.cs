@@ -64,6 +64,7 @@ public static class FormEndpoints
         string siteSlug,
         int id,
         [FromQuery] string? token,
+        HttpContext http,
         AppDbContext db,
         IConfiguration config,
         IHostEnvironment env,
@@ -98,7 +99,11 @@ public static class FormEndpoints
         if (!File.Exists(absPath)) return Results.NotFound();
 
         var bytes = await File.ReadAllBytesAsync(absPath, ct);
-        return Results.File(bytes, "application/pdf", $"convoyage-{id}.pdf");
+        // Servir inline (nao forcar attachment) — no mobile abre no browser em
+        // novo separador em vez de descarregar, e o utilizador pode partilhar/guardar.
+        // Passar fileDownloadName ao Results.File faria Content-Disposition: attachment.
+        http.Response.Headers["Content-Disposition"] = $"inline; filename=\"convoyage-{id}.pdf\"";
+        return Results.File(bytes, "application/pdf");
     }
 
     private static async Task<Results<Ok<FormSubmissionResponse>, BadRequest<FormSubmissionResponse>, NotFound>>
