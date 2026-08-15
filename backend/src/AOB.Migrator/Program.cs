@@ -20,8 +20,9 @@ builder.Services.Configure<MigratorOptions>(builder.Configuration);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<
     Microsoft.Extensions.Options.IOptions<MigratorOptions>>().Value);
 
-var pgConn = builder.Configuration.GetConnectionString("Postgres")
-    ?? throw new InvalidOperationException("Missing ConnectionStrings:Postgres in appsettings");
+var pgConn = builder.Configuration.GetConnectionString("Default")
+    ?? builder.Configuration.GetConnectionString("Postgres")
+    ?? throw new InvalidOperationException("Missing ConnectionStrings:Default (or Postgres) in appsettings");
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(pgConn));
 
 builder.Services.AddIdentityCore<ApplicationUser>(AOB.Infrastructure.DependencyInjection.ConfigureIdentity)
