@@ -1,0 +1,721 @@
+﻿@page "/convoyage/{YearId:int}/transportes"
+@attribute [Authorize]
+@inject TransportPlanAdminService Plans
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Transportes convoyage · AOB</PageTitle>
+
+<div class="d-flex align-items-center gap-2 mb-2">
+    <a class="btn btn-sm btn-outline-secondary" href="/convoyage">← Anos e recolhas</a>
+    <a class="btn btn-sm btn-outline-secondary" href="@($"/convoyage/inscricoes/{YearId}")">Ver inscrições</a>
+</div>
+
+<h1 class="h3 mb-1">Plano de transportes</h1>
+<p class="text-muted small mb-4">
+    Zonas processadas sul→norte (ordem dos pontos de recolha).
+    O sistema sugere quantas cargas são precisas em cada zona; tu preenches
+    depois o nome de quem faz cada carga.
+</p>
+
+@if (_overview is null)
+{
+    <p class="text-muted">A carregar…</p>
+}
+else
+{
+    var totalCargasNecessarias = _overview.Sugestoes.Sum(s => s.CargasNecessarias);
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase">Cargas planeadas</div>
+                    <div class="h3 mb-0">@_overview.Cargas.Count / @_overview.Config.NumCargasAlvo</div>
+                    <div class="small text-muted">Sugerido: @totalCargasNecessarias</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase">Capacidade / carga</div>
+                    <div class="h3 mb-0">@_overview.Config.CapacidadePorCarga</div>
+                    <div class="small text-muted">mín. @_overview.Config.MinPorCarga p/ merge</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase">Aves inscritas a concurso</div>
+                    <div class="h3 mb-0">@_overview.TotalAves</div>
+                    <div class="small text-muted">@_overview.TotalInscricoes inscrições</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase">Sem ponto de recolha</div>
+                    <div class="h3 mb-0 @(_overview.SubmissoesSemPontoRecolha.Count > 0 ? "text-danger" : "")">
+                        @_overview.SubmissoesSemPontoRecolha.Count
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+        <button class="btn btn-primary" @onclick="GenerateAsync" disabled="@_busy">
+            <i class="bi bi-magic"></i> Gerar plano automático
+        </button>
+        <a class="btn btn-success"
+           href="@($"/convoyage/{YearId}/transportes/export")"
+           target="_blank">
+            <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+        </a>
+        <button class="btn btn-outline-secondary" @onclick="AddCargaAsync" disabled="@_busy">
+            + Carga vazia
+        </button>
+        @if (_overview.SubmissoesSemPontoRecolha.Count > 0)
+        {
+            <button class="btn btn-outline-warning" @onclick="BackfillAsync" disabled="@_busy">
+                Tentar associar automaticamente (@_overview.SubmissoesSemPontoRecolha.Count sem ponto)
+            </button>
+        }
+        <button class="btn btn-outline-danger ms-auto" @onclick="ClearAsync" disabled="@_busy">
+            Limpar plano
+        </button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger py-2 small">@_error</div>
+    }
+    @if (_info is not null)
+    {
+        <div class="alert alert-success py-2 small">@_info</div>
+    }
+
+    @* ── Painel de sugestão por ponto ─────────────────────────────────── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header py-2 fw-semibold d-flex justify-content-between">
+            <span>Sugestão de cargas por ponto de recolha</span>
+            <span class="text-muted small">
+                Ordem sul→norte · @_overview.Config.CapacidadePorCarga aves/carga
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "ord"))"># @SortIcon("sug", "ord")</th>
+                        <th style="cursor:pointer;" @onclick="@(() => ToggleSort("sug", "nome"))">Ponto de recolha @SortIcon("sug", "nome")</th>
+                        <th style="cursor:pointer;" @onclick="@(() => ToggleSort("sug", "local"))">Local @SortIcon("sug", "local")</th>
+                        <th class="text-end" style="width:100px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "insc"))">Inscrições @SortIcon("sug", "insc")</th>
+                        <th class="text-end" style="width:80px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "aves"))">Aves @SortIcon("sug", "aves")</th>
+                        <th class="text-end" style="width:150px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "cargas"))">Cargas necessárias @SortIcon("sug", "cargas")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in SortedSugestoes())
+                    {
+                        <tr>
+                            <td class="text-muted small">@s.SortOrder</td>
+                            <td class="fw-semibold">@s.Nome</td>
+                            <td class="small text-muted">@(s.Location ?? "—")</td>
+                            <td class="text-end">@s.NumInscricoes</td>
+                            <td class="text-end">@s.TotalAves</td>
+                            <td class="text-end">
+                                @if (s.CargasNecessarias == 0)
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-primary">@s.CargasNecessarias</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="table-light">
+                    <tr class="fw-semibold">
+                        <td colspan="3" class="text-end">TOTAL</td>
+                        <td class="text-end">@_overview.Sugestoes.Sum(s => s.NumInscricoes)</td>
+                        <td class="text-end">@_overview.Sugestoes.Sum(s => s.TotalAves)</td>
+                        <td class="text-end">
+                            <span class="badge bg-primary">@totalCargasNecessarias</span>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    @* ── Inscrições sem ponto de recolha ──────────────────────────────── *@
+    @if (_overview.SubmissoesSemPontoRecolha.Count > 0)
+    {
+        <div class="card mb-4 border-warning">
+            <div class="card-header bg-warning-subtle fw-semibold">
+                Inscrições sem ponto de recolha atribuído (@_overview.SubmissoesSemPontoRecolha.Count)
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semp", "id"))"># @SortIcon("semp", "id")</th>
+                            <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semp", "criador"))">Criador @SortIcon("semp", "criador")</th>
+                            <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semp", "zona"))">Local (JSON antigo) @SortIcon("semp", "zona")</th>
+                            <th class="text-end" style="cursor:pointer;" @onclick="@(() => ToggleSort("semp", "aves"))">Aves @SortIcon("semp", "aves")</th>
+                            <th style="width:280px;">Atribuir a ponto de recolha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in SortedSemPonto())
+                        {
+                            var sid = s.SubmissionId;
+                            <tr @key="@($"semponto-{sid}")">
+                                <td class="small text-muted">#@sid</td>
+                                <td>@s.NomeCriador</td>
+                                <td class="small text-muted">@(string.IsNullOrWhiteSpace(s.ZonaNome) ? "—" : s.ZonaNome)</td>
+                                <td class="text-end">@(s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte)</td>
+                                <td>
+                                    <select class="form-select form-select-sm"
+                                            value=""
+                                            @onchange="e => AssignPointAsync(sid, e.Value?.ToString())">
+                                        <option value="" selected>— escolher ponto —</option>
+                                        @foreach (var z in _overview.Zones)
+                                        {
+                                            <option value="@z.Id">@z.Name @(string.IsNullOrWhiteSpace(z.Location) ? "" : $"({z.Location})")</option>
+                                        }
+                                    </select>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* ── Inscrições com ponto mas ainda sem carga ─────────────────────── *@
+    @if (_overview.SubmissoesSemCarga.Count > 0)
+    {
+        <div class="card mb-4 border-info">
+            <div class="card-header bg-info-subtle fw-semibold">
+                Com ponto mas sem carga atribuída (@_overview.SubmissoesSemCarga.Count)
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semc", "id"))"># @SortIcon("semc", "id")</th>
+                            <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semc", "criador"))">Criador @SortIcon("semc", "criador")</th>
+                            <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semc", "zona"))">Ponto @SortIcon("semc", "zona")</th>
+                            <th class="text-end" style="cursor:pointer;" @onclick="@(() => ToggleSort("semc", "aves"))">Aves @SortIcon("semc", "aves")</th>
+                            <th style="width:220px;">Mover para carga</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in SortedSemCarga())
+                        {
+                            var sid = s.SubmissionId;
+                            <tr @key="@($"semcarga-{sid}")">
+                                <td class="small text-muted">#@sid</td>
+                                <td>@s.NomeCriador</td>
+                                <td class="small">@s.ZonaNome</td>
+                                <td class="text-end">@(s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte)</td>
+                                <td>
+                                    <select class="form-select form-select-sm"
+                                            value=""
+                                            @onchange="e => AssignSubmissionToCargaAsync(sid, e.Value?.ToString())">
+                                        <option value="" selected>— escolher —</option>
+                                        @foreach (var c in _overview.Cargas)
+                                        {
+                                            <option value="@c.Id">
+                                                @c.Codigo · @c.ZonasLabel · @c.TotalAves/@_overview.Config.CapacidadePorCarga
+                                            </option>
+                                        }
+                                    </select>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* ── Tabela de cargas planeadas ───────────────────────────────────── *@
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th style="width:60px;">Carga</th>
+                    <th style="width:60px;" class="text-end">Aves</th>
+                    <th style="width:60px;" class="text-end">Sobras</th>
+                    <th style="width:240px;">Zonas</th>
+                    <th>Criadores</th>
+                    <th style="width:90px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_overview.Cargas.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            Sem cargas planeadas. Carrega "Gerar plano automático".
+                        </td>
+                    </tr>
+                }
+                @foreach (var c in _overview.Cargas)
+                {
+                    var cid = c.Id;
+                    var over = c.TotalAves > _overview.Config.CapacidadePorCarga;
+                    var sobras = Math.Max(0, _overview.Config.CapacidadePorCarga - c.TotalAves);
+                    <tr @key="@($"carga-{cid}")" class="@(over ? "table-danger" : "")">
+                        <td class="fw-bold">@c.Codigo</td>
+                        <td class="text-end @(over ? "text-danger fw-bold" : "")">@c.TotalAves</td>
+                        <td class="text-end @(sobras > 4 ? "text-warning fw-bold" : "text-muted")">@sobras</td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <input class="form-control form-control-sm"
+                                       value="@GetEditZonas(cid, c.ZonasLabel)"
+                                       @oninput="e => SetEditZonas(cid, e.Value?.ToString() ?? string.Empty)"
+                                       @onchange="e => SaveZonasInlineAsync(cid, e.Value?.ToString() ?? string.Empty)" />
+                                @{
+                                    var st = GetSaveState(cid);
+                                }
+                                @if (st == SaveState.Saving)
+                                {
+                                    <span class="text-muted small" title="A guardar…">
+                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    </span>
+                                }
+                                else if (st == SaveState.Saved)
+                                {
+                                    <span class="text-success small" title="Guardado">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    </span>
+                                }
+                                else if (st == SaveState.Error)
+                                {
+                                    <span class="text-danger small" title="@GetSaveError(cid)">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                    </span>
+                                }
+                            </div>
+                        </td>
+                        <td class="small">
+                            @{
+                                var zonasDistintas = c.Submissoes
+                                    .Select(x => x.ZonaNome ?? "")
+                                    .Where(z => !string.IsNullOrWhiteSpace(z))
+                                    .Distinct()
+                                    .Count();
+                                var cargaMista = zonasDistintas > 1;
+                            }
+                            @for (var i = 0; i < c.Submissoes.Count; i++)
+                            {
+                                var s = c.Submissoes[i];
+                                var sid = s.SubmissionId;
+                                var partAves = s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte;
+                                var totalDaInscricao = _overview.TotalAvesPorSubmissao.TryGetValue(sid, out var t) ? t : partAves;
+                                var isSplit = IsPartOfSplit(sid);
+                                var tipoLabel = FormatTipoLabel(s.NumAvesConcurso, s.NumAvesVenda, s.NumAvesTransporte);
+                                var isLast = i == c.Submissoes.Count - 1;
+                                var zonaTxt = string.IsNullOrWhiteSpace(s.ZonaLocation)
+                                    ? s.ZonaNome
+                                    : $"{s.ZonaNome} ({s.ZonaLocation})";
+
+                                <div @key="@($"carga-{cid}-sub-{s.Id}")"
+                                     class="d-flex align-items-start gap-2 py-2 @(!isLast ? "border-bottom" : "")">
+                                    <div class="flex-grow-1 min-w-0">
+                                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                                            <span class="badge bg-light text-secondary border fw-normal">#@sid</span>
+                                            <span class="fw-semibold text-body">@s.NomeCriador.ToUpperInvariant()</span>
+                                            @if (isSplit)
+                                            {
+                                                var outrasPartes = OutrasPartes(sid, cid);
+                                                <span class="aob-tooltip">
+                                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                                                        <i class="bi bi-diagram-2 me-1"></i>dividida
+                                                    </span>
+                                                    <span class="aob-tooltip-content">
+                                                        <span class="aob-tooltip-title">Restantes aves deste criador</span>
+                                                        @if (outrasPartes.Count == 0)
+                                                        {
+                                                            <span class="aob-tooltip-empty">— nenhuma outra parte atribuída —</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <ul class="aob-tooltip-list">
+                                                                @foreach (var o in outrasPartes)
+                                                                {
+                                                                    <li>
+                                                                        <strong>@o.Codigo</strong>
+                                                                        <span class="text-secondary"> · @o.Zona</span>
+                                                                        <br />
+                                                                        <span>@o.Parcela</span>
+                                                                    </li>
+                                                                }
+                                                            </ul>
+                                                        }
+                                                    </span>
+                                                </span>
+                                            }
+                                        </div>
+                                        <div class="text-muted small mt-1">
+                                            @if (isSplit)
+                                            {
+                                                <span><strong class="text-body">@partAves</strong>/@totalDaInscricao aves · @tipoLabel</span>
+                                            }
+                                            else
+                                            {
+                                                <span><strong class="text-body">@partAves</strong> aves</span>
+                                            }
+                                            @if (cargaMista && !string.IsNullOrWhiteSpace(s.ZonaNome))
+                                            {
+                                                <span class="mx-1">·</span>
+                                                <i class="bi bi-geo-alt"></i>
+                                                <span>@zonaTxt</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="input-group input-group-sm flex-shrink-0" style="width:230px;">
+                                        <input type="number" class="form-control"
+                                               style="max-width:60px;"
+                                               title="Quantas aves mover (máx: @partAves)"
+                                               min="1" max="@partAves"
+                                               value="@GetMoveQty(s.Id, partAves)"
+                                               @oninput="e => SetMoveQty(s.Id, e.Value?.ToString())" />
+                                        <span class="input-group-text">aves →</span>
+                                        <select class="form-select"
+                                                value=""
+                                                @onchange="e => MoveAssignmentAsync(s.Id, partAves, e.Value?.ToString())">
+                                            <option value="" selected>carga…</option>
+                                            @foreach (var target in _overview.Cargas.Where(x => x.Id != cid))
+                                            {
+                                                <option value="@target.Id">@target.Codigo</option>
+                                            }
+                                            <option value="null">(remover)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            }
+                            @if (c.Submissoes.Count == 0)
+                            {
+                                <span class="text-muted fst-italic">— vazia —</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="() => DeleteCargaAsync(cid)"
+                                    disabled="@_busy"
+                                    title="Eliminar carga">
+                                <i class="bi bi-trash"></i> Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter] public int YearId { get; set; }
+
+    private TransportPlanAdminService.PlanOverview? _overview;
+    private bool _busy;
+    private string? _error;
+    private string? _info;
+
+    private Dictionary<int, string> _editZonas = new();
+    private HashSet<int> _splitSubmissionIds = new();
+    private Dictionary<int, int> _moveQty = new();
+
+    private int GetMoveQty(int assignmentId, int defaultTotal)
+        => _moveQty.TryGetValue(assignmentId, out var v) ? v : defaultTotal;
+
+    private void SetMoveQty(int assignmentId, string? raw)
+    {
+        if (int.TryParse(raw, out var v) && v > 0) _moveQty[assignmentId] = v;
+    }
+
+    private enum SaveState { Idle, Saving, Saved, Error }
+    private Dictionary<int, SaveState> _saveStates = new();
+    private Dictionary<int, string> _saveErrors = new();
+    private Dictionary<int, int> _saveTokens = new();
+
+    private SaveState GetSaveState(int cid)
+        => _saveStates.TryGetValue(cid, out var s) ? s : SaveState.Idle;
+    private string GetSaveError(int cid)
+        => _saveErrors.TryGetValue(cid, out var e) ? e : "";
+
+    private readonly Dictionary<string, (string Col, bool Asc)> _sort = new()
+    {
+        ["sug"]  = ("ord", true),
+        ["semp"] = ("id", true),
+        ["semc"] = ("id", true),
+    };
+
+    private void ToggleSort(string table, string col)
+    {
+        var cur = _sort[table];
+        _sort[table] = cur.Col == col ? (col, !cur.Asc) : (col, true);
+    }
+
+    private MarkupString SortIcon(string table, string col)
+    {
+        var cur = _sort[table];
+        if (cur.Col != col) return new MarkupString("<i class=\"bi bi-arrow-down-up text-muted small\"></i>");
+        return new MarkupString(cur.Asc
+            ? "<i class=\"bi bi-caret-up-fill small\"></i>"
+            : "<i class=\"bi bi-caret-down-fill small\"></i>");
+    }
+
+    private IEnumerable<TransportPlanAdminService.ZoneSuggestion> SortedSugestoes()
+    {
+        if (_overview is null) return Enumerable.Empty<TransportPlanAdminService.ZoneSuggestion>();
+        var (col, asc) = _sort["sug"];
+        IOrderedEnumerable<TransportPlanAdminService.ZoneSuggestion> q = col switch
+        {
+            "nome"   => asc ? _overview.Sugestoes.OrderBy(s => s.Nome)          : _overview.Sugestoes.OrderByDescending(s => s.Nome),
+            "local"  => asc ? _overview.Sugestoes.OrderBy(s => s.Location ?? "") : _overview.Sugestoes.OrderByDescending(s => s.Location ?? ""),
+            "insc"   => asc ? _overview.Sugestoes.OrderBy(s => s.NumInscricoes) : _overview.Sugestoes.OrderByDescending(s => s.NumInscricoes),
+            "aves"   => asc ? _overview.Sugestoes.OrderBy(s => s.TotalAves)     : _overview.Sugestoes.OrderByDescending(s => s.TotalAves),
+            "cargas" => asc ? _overview.Sugestoes.OrderBy(s => s.CargasNecessarias) : _overview.Sugestoes.OrderByDescending(s => s.CargasNecessarias),
+            _        => asc ? _overview.Sugestoes.OrderBy(s => s.SortOrder)     : _overview.Sugestoes.OrderByDescending(s => s.SortOrder),
+        };
+        return q;
+    }
+
+    private IEnumerable<TransportPlanAdminService.SubmissionRow> SortedSemPonto()
+        => SortSubmissions(_overview?.SubmissoesSemPontoRecolha, "semp");
+
+    private IEnumerable<TransportPlanAdminService.SubmissionRow> SortedSemCarga()
+        => SortSubmissions(_overview?.SubmissoesSemCarga, "semc");
+
+    private IEnumerable<TransportPlanAdminService.SubmissionRow> SortSubmissions(
+        List<TransportPlanAdminService.SubmissionRow>? src, string table)
+    {
+        if (src is null) return Enumerable.Empty<TransportPlanAdminService.SubmissionRow>();
+        var (col, asc) = _sort[table];
+        return col switch
+        {
+            "criador" => asc ? src.OrderBy(s => s.NomeCriador)                 : src.OrderByDescending(s => s.NomeCriador),
+            "zona"    => asc ? src.OrderBy(s => s.ZonaNome ?? "")              : src.OrderByDescending(s => s.ZonaNome ?? ""),
+            "aves"    => asc ? src.OrderBy(s => s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte)
+                             : src.OrderByDescending(s => s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte),
+            _         => asc ? src.OrderBy(s => s.SubmissionId)                : src.OrderByDescending(s => s.SubmissionId),
+        };
+    }
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _overview = await Plans.GetOverviewAsync(YearId);
+        _editZonas.Clear();
+        _saveStates.Clear();
+        _saveErrors.Clear();
+        _saveTokens.Clear();
+
+        // Uma submissão está "dividida" se aparecer em mais do que uma carga.
+        _splitSubmissionIds = _overview is null
+            ? new()
+            : _overview.Cargas
+                .SelectMany(c => c.Submissoes.Select(s => s.SubmissionId))
+                .GroupBy(id => id)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet();
+    }
+
+    private bool IsPartOfSplit(int submissionId)
+        => _splitSubmissionIds.Contains(submissionId);
+
+    private record OutraParte(string Codigo, string Zona, string Parcela);
+
+    private List<OutraParte> OutrasPartes(int submissionId, int currentCargaId)
+    {
+        if (_overview is null) return new();
+        return _overview.Cargas
+            .Where(c => c.Id != currentCargaId)
+            .SelectMany(c => c.Submissoes
+                .Where(s => s.SubmissionId == submissionId)
+                .Select(s => new OutraParte(
+                    c.Codigo,
+                    string.IsNullOrWhiteSpace(s.ZonaLocation)
+                        ? s.ZonaNome
+                        : $"{s.ZonaNome} ({s.ZonaLocation})",
+                    FormatParcela(s.NumAvesConcurso, s.NumAvesVenda, s.NumAvesTransporte))))
+            .ToList();
+    }
+
+    private static string FormatParcela(int concurso, int venda, int transporte)
+    {
+        var partes = new List<string>();
+        if (concurso > 0) partes.Add($"{concurso} concurso");
+        if (venda > 0) partes.Add($"{venda} venda");
+        if (transporte > 0) partes.Add($"{transporte} transporte");
+        return partes.Count == 0 ? "0 aves" : string.Join(" + ", partes);
+    }
+
+    private static string FormatTipoLabel(int concurso, int venda, int transporte)
+    {
+        var tipos = new List<string>();
+        if (concurso > 0) tipos.Add("concurso");
+        if (venda > 0) tipos.Add("venda");
+        if (transporte > 0) tipos.Add("transporte");
+        return tipos.Count switch
+        {
+            0 => "—",
+            1 => tipos[0],
+            _ => "mistas",
+        };
+    }
+
+    private string GetEditZonas(int cid, string current)
+        => _editZonas.TryGetValue(cid, out var v) ? v : current;
+    private void SetEditZonas(int cid, string v) => _editZonas[cid] = v;
+
+    private async Task GenerateAsync()
+    {
+        var confirm = _overview is { Cargas.Count: > 0 }
+            ? await JS.InvokeAsync<bool>("confirm", "Vai substituir o plano existente. Continuar?")
+            : true;
+        if (!confirm) return;
+
+        _busy = true; _error = null; _info = null;
+        _error = await Plans.GeneratePlanAsync(YearId);
+        _busy = false;
+        if (_error is null) _info = "Plano gerado.";
+        await ReloadAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            "Eliminar todas as cargas planeadas? As inscrições voltam a ficar sem carga.");
+        if (!ok) return;
+        _busy = true; _error = null;
+        await Plans.ClearPlanAsync(YearId);
+        _busy = false;
+        _info = "Plano limpo.";
+        await ReloadAsync();
+    }
+
+    private async Task AddCargaAsync()
+    {
+        _busy = true; _error = null;
+        var c = await Plans.AddCargaAsync(YearId, "—", "");
+        _busy = false;
+        if (c is null) _error = "Não foi possível criar a carga.";
+        await ReloadAsync();
+    }
+
+    private async Task SaveZonasInlineAsync(int cid, string novoValor)
+    {
+        if (_overview is null) return;
+        var idx = _overview.Cargas.FindIndex(x => x.Id == cid);
+        if (idx < 0) return;
+        var c = _overview.Cargas[idx];
+
+        var trimmed = (novoValor ?? string.Empty).Trim();
+        _editZonas[cid] = trimmed;
+
+        if (string.Equals(trimmed, c.ZonasLabel, StringComparison.Ordinal))
+            return;
+
+        var token = _saveTokens.TryGetValue(cid, out var t) ? t + 1 : 1;
+        _saveTokens[cid] = token;
+        _saveStates[cid] = SaveState.Saving;
+        _saveErrors.Remove(cid);
+        StateHasChanged();
+
+        var err = await Plans.UpdateCargaAsync(YearId, cid,
+            c.TransportadoraNome, trimmed, c.Notas);
+
+        // Ignora respostas antigas se o utilizador continuou a editar.
+        if (_saveTokens.TryGetValue(cid, out var current) && current != token) return;
+
+        if (err is null)
+        {
+            _overview.Cargas[idx] = c with { ZonasLabel = trimmed };
+            _saveStates[cid] = SaveState.Saved;
+        }
+        else
+        {
+            _saveStates[cid] = SaveState.Error;
+            _saveErrors[cid] = err;
+        }
+        StateHasChanged();
+    }
+
+    private async Task DeleteCargaAsync(int cid)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Eliminar esta carga?");
+        if (!ok) return;
+        _busy = true; _error = null;
+        _error = await Plans.DeleteCargaAsync(YearId, cid);
+        _busy = false;
+        await ReloadAsync();
+    }
+
+    // Move (parte ou toda) uma linha de uma carga para outra. Usa a quantidade
+    // do input adjacente; se for igual ao total da linha, é um move completo.
+    private async Task MoveAssignmentAsync(int assignmentId, int totalNaLinha, string? target)
+    {
+        if (string.IsNullOrEmpty(target)) return;
+        int? targetId = target == "null" ? null : int.Parse(target);
+        var qty = GetMoveQty(assignmentId, totalNaLinha);
+        if (qty < 1 || qty > totalNaLinha)
+        {
+            _error = $"Quantidade tem de estar entre 1 e {totalNaLinha}.";
+            return;
+        }
+
+        _busy = true; _error = null;
+        _error = await Plans.SplitAndMoveAsync(YearId, assignmentId, qty, targetId);
+        _busy = false;
+        _moveQty.Remove(assignmentId);
+        await ReloadAsync();
+    }
+
+    // Atribui uma submissão sem carga a uma carga (cria linha nova com os
+    // totais da inscrição).
+    private async Task AssignSubmissionToCargaAsync(int submissionId, string? target)
+    {
+        if (string.IsNullOrEmpty(target)) return;
+        int? targetId = target == "null" ? null : int.Parse(target);
+
+        _busy = true; _error = null;
+        _error = await Plans.AssignSubmissionToCargaAsync(YearId, submissionId, targetId);
+        _busy = false;
+        await ReloadAsync();
+    }
+
+    private async Task AssignPointAsync(int submissionId, string? pointId)
+    {
+        if (string.IsNullOrEmpty(pointId) || !int.TryParse(pointId, out var pid)) return;
+        _busy = true; _error = null;
+        _error = await Plans.AssignPointAsync(YearId, submissionId, pid);
+        _busy = false;
+        if (_error is null) _info = $"Inscrição #{submissionId} atribuída ao ponto.";
+        await ReloadAsync();
+    }
+
+    private async Task BackfillAsync()
+    {
+        _busy = true; _error = null;
+        var (matched, unmatched) = await Plans.BackfillLocalRecolhaAsync(YearId);
+        _busy = false;
+        _info = $"Backfill: {matched} associadas automaticamente, {unmatched} ficam para atribuir manualmente.";
+        await ReloadAsync();
+    }
+}

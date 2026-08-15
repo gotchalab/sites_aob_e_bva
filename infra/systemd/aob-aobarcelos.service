@@ -16,6 +16,7 @@ SyslogIdentifier=aob-aobarcelos
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=HOSTNAME=127.0.0.1
+Environment=NODE_PATH=/usr/lib/node_modules
 EnvironmentFile=-/etc/aob/aobarcelos.env
 
 NoNewPrivileges=true

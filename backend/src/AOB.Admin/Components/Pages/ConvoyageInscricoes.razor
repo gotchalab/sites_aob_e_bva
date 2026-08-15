@@ -1,0 +1,365 @@
+@page "/convoyage/inscricoes"
+@page "/convoyage/inscricoes/{YearId:int}"
+@attribute [Authorize]
+@inject FormAdminService Forms
+@inject ConvoyageAdminService Convoyage
+@inject ContentService Content
+@inject AppDbContext Db
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Inscrições Convoyage · AOB</PageTitle>
+
+<h1 class="h3 mb-3">Inscrições de convoyage</h1>
+<p class="text-muted small">
+    Listagem exclusiva das inscrições submetidas ao formulário público de convoyage.
+    Para outros tipos de submissão, ver <a href="/formularios">Formulários</a>.
+</p>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <label class="form-label small text-muted mb-1">Site</label>
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="LoadYearsAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label small text-muted mb-1">Ano</label>
+        <select class="form-select" @bind="SelectedYearId" @bind:after="ReloadAsync">
+            @if (Years.Count == 0)
+            {
+                <option value="0">— sem anos —</option>
+            }
+            @foreach (var y in Years)
+            {
+                <option value="@y.Id">@y.Year @(y.IsActive ? "(activo)" : "")</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label small text-muted mb-1">Estado</label>
+        <select class="form-select" @bind="StatusFilter" @bind:after="ReloadAsync">
+            <option value="">Todos</option>
+            @foreach (var st in Enum.GetValues<FormStatus>())
+            {
+                <option value="@((int)st)">@st</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end gap-2">
+        @if (SelectedYearId > 0)
+        {
+            <a class="btn btn-outline-success flex-fill"
+               href="@($"/convoyage/{SelectedYearId}/transportes/export")"
+               target="_blank">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </a>
+            <a class="btn btn-primary flex-fill" href="@($"/convoyage/{SelectedYearId}/transportes")">
+                <i class="bi bi-truck"></i> Organizar transportes
+            </a>
+        }
+    </div>
+</div>
+
+@if (Items is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Items.Count == 0)
+{
+    <p class="text-muted">Sem inscrições para os critérios seleccionados.</p>
+}
+else
+{
+    @if (LocationCounts is { Count: > 0 })
+    {
+        <div class="card mb-3">
+            <div class="card-header py-2 small text-muted d-flex justify-content-between">
+                <span>Contadores por local de recolha</span>
+                <span>
+                    Total: <b>@LocationCounts.Sum(x => x.Submissoes)</b> inscrições ·
+                    <b>@LocationCounts.Sum(x => x.Aves)</b> aves
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Local de recolha</th>
+                            <th class="text-end" style="width:120px;">Inscrições</th>
+                            <th class="text-end" style="width:120px;">Aves</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var lc in LocationCounts)
+                        {
+                            <tr>
+                                <td>@(string.IsNullOrWhiteSpace(lc.Local) ? "— (sem local)" : lc.Local)</td>
+                                <td class="text-end">@lc.Submissoes</td>
+                                <td class="text-end">@lc.Aves</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <table class="table table-hover align-middle">
+        <thead>
+            <tr>
+                <th role="button" class="user-select-none" @onclick='() => SortBy("id")'>#@(SortIcon("id"))</th>
+                <th role="button" class="user-select-none" @onclick='() => SortBy("date")'>Data de inscrição @(SortIcon("date"))</th>
+                <th role="button" class="user-select-none" @onclick='() => SortBy("nome")'>Criador @(SortIcon("nome"))</th>
+                <th role="button" class="user-select-none" @onclick='() => SortBy("local")'>Local recolha @(SortIcon("local"))</th>
+                <th role="button" class="user-select-none text-end" @onclick='() => SortBy("aves")'>Aves @(SortIcon("aves"))</th>
+                <th role="button" class="user-select-none" @onclick='() => SortBy("estado")'>Estado @(SortIcon("estado"))</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var f in Items)
+            {
+                <tr>
+                    <td class="small text-muted">#@f.Id</td>
+                    <td class="small">@f.SubmittedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>
+                        <div class="fw-semibold">@f.Nome</div>
+                        <div class="text-muted small">@f.Email</div>
+                    </td>
+                    <td class="small">@f.LocalRecolha</td>
+                    <td class="text-end">@f.TotalAves</td>
+                    <td>
+                        @{
+                            var (badge, cls) = f.Status switch
+                            {
+                                FormStatus.Pending    => ("Pendente",  "bg-warning text-dark"),
+                                FormStatus.InProgress => ("Em curso",  "bg-primary"),
+                                FormStatus.Handled    => ("Tratada",   "bg-success"),
+                                FormStatus.Rejected   => ("Rejeitada", "bg-secondary"),
+                                FormStatus.Spam       => ("Spam",      "bg-danger"),
+                                _                     => (f.Status.ToString(), "bg-secondary"),
+                            };
+                        }
+                        <span class="badge @cls">@badge</span>
+                    </td>
+                    <td class="text-end">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <a class="btn btn-outline-secondary" href="@($"/formularios/{f.Id}")">Detalhes</a>
+                            <a class="btn btn-outline-secondary" href="@($"/formularios/{f.Id}/edit")">Editar</a>
+                            @if (f.HasPdf)
+                            {
+                                <a class="btn btn-outline-primary" href="@($"/formularios/{f.Id}/pdf")" target="_blank">PDF</a>
+                            }
+                            <button class="btn btn-outline-danger" @onclick="() => DeleteAsync(f.Id)">Eliminar</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (TotalPages > 1)
+    {
+        <nav>
+            <ul class="pagination">
+                @for (int p = 1; p <= TotalPages; p++)
+                {
+                    var pp = p;
+                    <li class="page-item @(pp == Page ? "active" : "")">
+                        <button class="page-link" @onclick="() => GoTo(pp)">@pp</button>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    [Parameter] public int? YearId { get; set; }
+
+    private List<Site> AllSites = [];
+    private List<ConvoyageAdminService.YearWithPoints> Years = [];
+
+    private int SelectedSiteId;
+    private int SelectedYearId;
+    private string StatusFilter = "";
+
+    private List<Row>? Items;
+    private List<Row> AllRows = [];
+    private List<LocationCount> LocationCounts = [];
+    private int Page = 1;
+    private const int PageSize = 25;
+    private int Total;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Total / (double)PageSize));
+
+    private string SortColumn = "date";
+    private bool SortDesc = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        SelectedSiteId = AllSites.FirstOrDefault(s => s.Slug == "bva")?.Id
+            ?? (AllSites.Count > 0 ? AllSites[0].Id : 0);
+        await LoadYearsAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (YearId is > 0 && YearId != SelectedYearId)
+        {
+            SelectedYearId = YearId.Value;
+            await ReloadAsync();
+        }
+    }
+
+    private async Task LoadYearsAsync()
+    {
+        Years = SelectedSiteId > 0 ? await Convoyage.ListYearsAsync(SelectedSiteId) : [];
+
+        if (YearId is > 0 && Years.Any(y => y.Id == YearId.Value))
+        {
+            SelectedYearId = YearId.Value;
+        }
+        else if (!Years.Any(y => y.Id == SelectedYearId))
+        {
+            SelectedYearId = Years.FirstOrDefault(y => y.IsActive)?.Id
+                ?? Years.FirstOrDefault()?.Id
+                ?? 0;
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Page = 1;
+        await LoadPageAsync();
+    }
+
+    private Task GoTo(int page)
+    {
+        Page = page;
+        ApplySortAndPage();
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadPageAsync()
+    {
+        FormStatus? statusEnum = int.TryParse(StatusFilter, out var s) ? (FormStatus)s : null;
+
+        var q = Db.FormSubmissions.AsNoTracking()
+            .Where(f => f.SiteId == SelectedSiteId && f.FormType == FormType.InscricaoConvoyage);
+        if (SelectedYearId > 0) q = q.Where(f => f.ConvoyageYearId == SelectedYearId);
+        if (statusEnum.HasValue) q = q.Where(f => f.Status == statusEnum.Value);
+
+        var raw = await q
+            .Select(f => new { f.Id, f.SubmittedAt, f.Status, f.DataJson })
+            .ToListAsync();
+
+        AllRows = raw.Select(f =>
+        {
+            var meta = ParseConvoyage(f.DataJson);
+            return new Row(f.Id, f.SubmittedAt, f.Status, meta.Nome, meta.Email, meta.LocalRecolha, meta.TotalAves, HasPdf(f.DataJson));
+        }).ToList();
+
+        Total = AllRows.Count;
+
+        LocationCounts = AllRows
+            .GroupBy(m => (m.LocalRecolha ?? "").Trim())
+            .Select(g => new LocationCount(g.Key, g.Count(), g.Sum(m => m.TotalAves)))
+            .OrderByDescending(x => x.Submissoes)
+            .ThenBy(x => x.Local)
+            .ToList();
+
+        ApplySortAndPage();
+    }
+
+    private void ApplySortAndPage()
+    {
+        IEnumerable<Row> ordered = SortColumn switch
+        {
+            "id"     => SortDesc ? AllRows.OrderByDescending(r => r.Id)          : AllRows.OrderBy(r => r.Id),
+            "nome"   => SortDesc ? AllRows.OrderByDescending(r => r.Nome)        : AllRows.OrderBy(r => r.Nome),
+            "local"  => SortDesc ? AllRows.OrderByDescending(r => r.LocalRecolha): AllRows.OrderBy(r => r.LocalRecolha),
+            "aves"   => SortDesc ? AllRows.OrderByDescending(r => r.TotalAves)   : AllRows.OrderBy(r => r.TotalAves),
+            "estado" => SortDesc ? AllRows.OrderByDescending(r => r.Status)      : AllRows.OrderBy(r => r.Status),
+            _        => SortDesc ? AllRows.OrderByDescending(r => r.SubmittedAt) : AllRows.OrderBy(r => r.SubmittedAt),
+        };
+
+        var list = ordered.ToList();
+        var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (double)PageSize));
+        if (Page > totalPages) Page = totalPages;
+
+        Items = list.Skip((Page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private void SortBy(string column)
+    {
+        if (SortColumn == column)
+        {
+            SortDesc = !SortDesc;
+        }
+        else
+        {
+            SortColumn = column;
+            SortDesc = column is "date" or "id" or "aves";
+        }
+        Page = 1;
+        ApplySortAndPage();
+    }
+
+    private MarkupString SortIcon(string column)
+    {
+        if (SortColumn != column) return new MarkupString(" <span class=\"text-muted small\">↕</span>");
+        return new MarkupString(SortDesc ? " <span class=\"small\">▼</span>" : " <span class=\"small\">▲</span>");
+    }
+
+    private record Row(int Id, DateTime SubmittedAt, FormStatus Status, string Nome, string Email, string LocalRecolha, int TotalAves, bool HasPdf);
+
+    private record LocationCount(string Local, int Submissoes, int Aves);
+
+    private record ConvoyageMeta(string Nome, string Email, string Pais, string LocalRecolha, int TotalAves);
+
+    private static ConvoyageMeta ParseConvoyage(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var r = doc.RootElement;
+            string S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? (v.GetString() ?? "") : "";
+            int I(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetInt32() : 0;
+            return new ConvoyageMeta(S("NomeCompleto"), S("Email"), S("Pais"), S("LocalRecolha"), I("TotalAves"));
+        }
+        catch
+        {
+            return new ConvoyageMeta("", "", "", "", 0);
+        }
+    }
+
+    private static bool HasPdf(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("PdfPath", out var v)
+                && v.ValueKind == System.Text.Json.JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(v.GetString());
+        }
+        catch { return false; }
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar inscrição #{id}? Esta ação é irreversível e apaga também o PDF associado.");
+        if (!ok) return;
+
+        await Forms.DeleteAsync(id);
+        await LoadPageAsync();
+    }
+}

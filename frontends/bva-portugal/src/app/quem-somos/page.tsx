@@ -98,10 +98,11 @@ export default async function QuemSomosPage() {
                       técnica e partilha de conhecimento.
                     </p>
                     <p>
-                      Emitimos anilhas oficiais para os nossos sócios, organizamos
-                      as edições BVA Masters, participamos em concursos
-                      internacionais e mantemos uma rede activa de comunicação
-                      entre criadores portugueses e europeus.
+                      As anilhas oficiais para os nossos sócios são emitidas pela
+                      FONP, a federação a que pertencemos. Organizamos a convoyage
+                      portuguesa até à BVA Masters na Bélgica, participamos em
+                      concursos internacionais e mantemos uma rede activa de
+                      comunicação entre criadores portugueses e europeus.
                     </p>
                   </>
                 )}

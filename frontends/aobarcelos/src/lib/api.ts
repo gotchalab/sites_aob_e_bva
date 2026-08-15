@@ -82,7 +82,8 @@ export function parseAnnouncement(site: Site | null | undefined): Announcement |
   if (!site?.announcement) return null;
   try {
     const a = JSON.parse(site.announcement) as Announcement;
-    if (!a.enabled || !a.message) return null;
+    if (!a.enabled) return null;
+    if (typeof a.message !== "string" || a.message.trim().length === 0) return null;
     return a;
   } catch {
     return null;

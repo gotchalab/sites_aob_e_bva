@@ -31,7 +31,7 @@
     <div class="col-md-3">
         <select class="form-select" @bind="TypeFilter" @bind:after="ReloadAsync">
             <option value="">Todos os tipos</option>
-            @foreach (var t in Enum.GetValues<FormType>())
+            @foreach (var t in Enum.GetValues<FormType>().Where(t => !ExcludedTypes.Contains(t)))
             {
                 <option value="@((int)t)">@t</option>
             }
@@ -173,13 +173,16 @@ else
         await ReloadAsync();
     }
 
+    // Convoyage tem página própria em /convoyage → escondida deste menu.
+    private static readonly FormType[] ExcludedTypes = [FormType.InscricaoConvoyage];
+
     private async Task ReloadAsync()
     {
         Page = 1;
         FormStatus? statusEnum = int.TryParse(StatusFilter, out var s) ? (FormStatus)s : null;
         FormType? typeEnum = int.TryParse(TypeFilter, out var t) ? (FormType)t : null;
-        Total = await Forms.CountAsync(SelectedSiteId, statusEnum, typeEnum);
-        Items = await Forms.ListAsync(SelectedSiteId, statusEnum, typeEnum, Page, PageSize);
+        Total = await Forms.CountAsync(SelectedSiteId, statusEnum, typeEnum, ExcludedTypes);
+        Items = await Forms.ListAsync(SelectedSiteId, statusEnum, typeEnum, Page, PageSize, ExcludedTypes);
     }
 
     private async Task GoTo(int page)
@@ -187,7 +190,7 @@ else
         Page = page;
         FormStatus? statusEnum = int.TryParse(StatusFilter, out var s) ? (FormStatus)s : null;
         FormType? typeEnum = int.TryParse(TypeFilter, out var t) ? (FormType)t : null;
-        Items = await Forms.ListAsync(SelectedSiteId, statusEnum, typeEnum, Page, PageSize);
+        Items = await Forms.ListAsync(SelectedSiteId, statusEnum, typeEnum, Page, PageSize, ExcludedTypes);
     }
 
     private record InscricaoMeta(string? Nome, string? Email, string? CC, string? NIF, string? Telefone,

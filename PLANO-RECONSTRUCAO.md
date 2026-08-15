@@ -865,47 +865,70 @@ Frontend específico da área reservada em `/socio/*` (rotas Next.js protegidas)
     - `/socios` — lista com filtro por site + search
     - `/socios/{id}` — CRUD + criar user Identity ligado (role Socio) + ver histórico quotas/pedidos
     - `SocioAdminService.CreateUserForSocioAsync` — provisiona `ApplicationUser` + link `SocioId` + role
-
-### A fazer já — próxima sessão
-22. **Área de sócio no Next.js** (`/socio/*` no `aobarcelos`):
+22. **Área de sócio no Next.js** (`/socio/*` em ambos os frontends):
     - Middleware protege `/socio/*` — redireciona para `/socio/login` se não autenticado
-    - `POST /socio/api/login` faz login contra a API e grava cookies `httpOnly` (`aob_socio_at`, `aob_socio_rt`, `aob_socio_uid`)
-    - `POST /socio/api/logout` limpa cookies + chama `/api/auth/logout`
-    - Páginas: `/socio` (dashboard com stats), `/socio/dados` (editar perfil), `/socio/quotas`, `/socio/anilhas`, `/socio/pedir-anilhas`
-    - Layout com sidebar + botão logout
+    - Refresh token automático: se `at` expirou mas `rt`+`uid` existem, chama `/api/auth/refresh` e propaga cookies; cookie `at` expira 30s antes do JWT
+    - `POST /socio/api/login` grava cookies `httpOnly`; `POST /socio/api/logout` limpa + chama `/api/auth/logout`
+    - Páginas: `/socio` (dashboard), `/socio/dados`, `/socio/quotas`, `/socio/anilhas`, `/socio/pedir-anilhas`, `/socio/login`
+    - aobarcelos usa prefix `aob_socio_*`; bva-portugal usa `bva_socio_*`
 23. **Backoffice — pedidos de anilhas** (`/pedidos-anilhas`):
     - Filtro "só pendentes" default, listagem com sócio + espécie + estado
     - Ação por linha: aprovar / encomendado / entregue (auto-marca `DataEntrega`) / cancelar
 24. **Backoffice — quotas** dentro de `/socios/{id}`:
     - Tabela + linha inline "Ano/Valor/Pago em" para adicionar
     - Botão × para eliminar
-
 25. **Categorias com hierarquia no backoffice**:
-    - `ContentService.ListCategoryTree` devolve árvore ordenada (pai → filhos por SortOrder) com `Depth` calculado; `GetDescendantIds` para evitar ciclos
-    - `CategoryEdit` — dropdown "Categoria pai" (troca de site recarrega + reset se órfão); protege contra ciclos ao editar
+    - `ContentService.ListCategoryTree` devolve árvore com `Depth` calculado; `GetDescendantIds` evita ciclos
+    - `CategoryEdit` — dropdown "Categoria pai" com proteção contra ciclos; `CategoryList` — indentação `└─`
     - `ArticleEdit` / `DownloadEdit` — dropdown de categoria com prefixo `— ` por nível
-    - `CategoryList` — coluna nome indentada por `Depth` (padding + `└─`)
-    - Dados existentes já tinham os `ParentId` correctamente migrados; só as UIs é que os ignoravam
+26. **Modernização das homepages** (secção 12 do plano):
+    - Componentes em `src/components/home/`: `AnnouncementBar`, `HeroSection`, `StatsBar`, `MissionBlock`, `AreasGrid`, `FeaturedArticles`, `NewsGrid`, `JoinCta`, `SponsorsGrid`
+    - `Sponsor`, `HomeConfig`, `Announcement` no backend; CRUD de patrocinadores no backoffice
+    - `parseHomeConfig` / `parseAnnouncement` no `lib/api.ts` de cada frontend
+27. **Página Quem Somos — BVA Portugal** (`/quem-somos`):
+    - Hero, missão dinâmica (da BD), valores, StatsBar, AreasGrid, JoinCta
+28. **Formulário inscrição convoyage — campo "Nº aves a concurso"**:
+    - Input numérico (1–50) em "Dados do criador" sincroniza array de aves imediatamente
+    - `addBird` / `removeBird` mantêm o contador atualizado
+29. **Backoffice — gestão de convoyage** (`/convoyage`):
+    - `ConvoyageAdminService` com CRUD: listar anos, criar ano, ativar ano, add/delete pontos de recolha
+    - `ConvoyageList.razor` — cards por ano com pontos de recolha inline (add/delete), badge "Ativo", botão "Ativar"
+    - Link no NavMenu
+30. **Planeamento de transportes + export Excel** (F2 do plano):
+    - Entidades `TransportCarga` + `TransportCargaSubmission`; migração `AddTransportPlanning`
+    - Config editável no card do ano (NumCargasAlvo, CapacidadePorCarga, MinPorCarga, mapa transportadoras)
+    - Setas ↑↓ para reordenar pontos de recolha (sul→norte)
+    - `TransportPlanner` (serviço puro em `AOB.Application/Convoyage/`) — FFD por zona, mantém criador junto, merge de zona quando última carga < mínimo, round-robin de transportadores por zona
+    - `TransportPlanAdminService` — orquestra plan/reset/mover/actualizar/export
+    - Página `/convoyage/{yearId}/transportes` com botões "Gerar plano automático", "Exportar Excel", "+ Carga vazia", "Limpar plano"; drop-downs por linha para mover inscrições entre cargas
+    - Endpoint `/convoyage/{id}/transportes/export` devolve .xlsx (ClosedXML) com 3 folhas: **Transportes** (layout do ano anterior), **Inscrições** e **Aves**
+    - `Microsoft.EntityFrameworkCore.Design` adicionado ao Admin para permitir migrações a partir daí
 
-26. **Refresh token automático via middleware** (aobarcelos e bva-portugal):
-    - `middleware.ts` corre para `/socio/*` (incluindo `/socio/api/*` excepto login/logout)
-    - Se `at` (access) expirou mas `rt` (refresh) + `uid` ainda existem, chama `POST /api/auth/refresh`, grava novos cookies e propaga para downstream (`req.cookies.set` + `NextResponse.next({ request })`)
-    - Cookie `at` expira 30s antes do JWT para evitar race condition
-    - Rotas `/socio/api/*` sem sessão devolvem `401 JSON`; páginas fazem redirect para `/socio/login?redirect=...`
-27. **Área de sócio no bva-portugal** — replicada de aob (mesmos endpoints backend, cookies com prefix `bva_socio_*` para evitar colisão em dev):
-    - `middleware.ts` + `lib/socio-auth.ts` + `app/socio/{layout,page,logout-button}.tsx`
-    - Sub-rotas: `dados`, `quotas`, `anilhas`, `pedir-anilhas`, `login`
-    - API routes: `login`, `logout`, `perfil`, `pedidos-anilhas`
-    - Estilo adaptado ao tema BVA (`bg-brand-500` + `hover:bg-brand-hover`)
+### A fazer — funcionalidades
 
-### A fazer já — próxima sessão
-0. **VPS — hardening final** (rápido):
-   - `PasswordAuthentication no` no `/etc/ssh/sshd_config` + adicionar chave pública SSH
-   - `apt install fail2ban ufw` + `ufw allow 22 80 443` + `ufw enable`
-   - Gerar nova JWT Key forte para o bvaproject + rodar SMTP no Sendinblue
-1. **Provisionar VPS novo** — correr `setup-vps.sh` + `deploy.sh all` + `certbot` + `AOB.Migrator seed` + testes E2E
-2. **DNS switchover** — mudar `aobarcelos.pt` para o IP novo
-3. **Formação** — guiar responsáveis a criar sócios, aprovar pedidos, registar quotas
+**F1. Formulário inscrição convoyage — suporte a equipas (T)** *(decidido 2026-08-14)*
+Uma equipa = 4 aves da mesma espécie/classe/mutação, com anilhas próprias, ordenadas por posição na exposição (A no topo → D no fundo).
+
+- **Secção 1 (Dados do criador)**: substituir o campo único `Nº aves a concurso` por dois campos: `Nº aves individuais a concurso` e `Nº equipas a concurso`. Ambos podem ser 0 mas não em simultâneo (validação: mínimo 1 unidade).
+- **Secção 2 (Aves inscritas)**:
+  - Cabeçalho com contador vivo: `X individuais + Y equipas · Z aves`.
+  - Dois botões distintos: `+ Adicionar ave individual` e `+ Adicionar equipa` (para incrementar depois do pré-preenchimento por número).
+  - Card de ave individual: mantém-se como está hoje.
+  - Novo `TeamCard`: espécie + tipo (fixo em `Equipa (T)`) + classe/mutação únicos + **4 slots A/B/C/D empilhados** com anilha própria em cada. Setas ↑↓ à direita de cada slot para reordenar (relabela A/B/C/D automaticamente pela posição visual).
+- **Estado interno** (frontend): separar `individualBirds: BirdState[]` e `teamBirds: TeamState[]` onde `TeamState = { id, species, code, mutation, selectionLabel, anilhas: [string, string, string, string] }`.
+- **DTO (`AveConvoyageDto`)**: adicionar `EquipaId: Guid?` (partilhado pelas 4 aves) e `PosicaoEquipa: string?` ("A"|"B"|"C"|"D"). Equipa serializa como 4 registos com mesmo `EquipaId` e posições distintas.
+- **Entidade `ConvoyageBirdEntry`**: adicionar `EquipaId: Guid?` e `PosicaoEquipa: string?` (nullable, char(1)). Migração EF Core `AddConvoyageTeamSupport`.
+- **PDF (`InscricaoConvoyagePdfGenerator`)**: agrupar aves por `EquipaId`; equipas aparecem como bloco único titulado "Equipa (T) — série X" com 4 linhas ordenadas A→D.
+- **Custos**: 1 equipa conta como 4 aves para todos os cálculos (`4 × 3€` inscrição, `4 × 3€` gaiola, `4 × tarifa` transporte). Fórmula em `ConvoyagePricing.Compute` mantém-se — apenas o `numAvesConcurso` passado somará 4 por equipa.
+- **Validação backend**: se `EquipaId` presente, exigir exactamente 4 aves com o mesmo `EquipaId` e posições `A,B,C,D` únicas.
+
+### A fazer — operacional (VPS / externo)
+0. **JWT Key bvaproject** — substituir `0123456789ABCDEF` por chave forte em `/home/bva/bvaproject/appsettings.json` e reiniciar `bvaproject.service`
+1. **Turnstile keys reais** — quando tiver as chaves Cloudflare Turnstile:
+   - Atualizar `/etc/aob/api.env` (`TURNSTILE_SECRET_KEY=`)
+   - Atualizar `.env.production` dos dois frontends (`NEXT_PUBLIC_TURNSTILE_SITEKEY=`)
+   - Fazer rebuild + redeploy com `deploy.sh bva` e `deploy.sh aobarcelos`
+2. **Formação** — guiar responsáveis a criar sócios, aprovar pedidos, registar quotas
 
 **Notas de desenvolvimento Windows:** `next build` com `output: "standalone"` falha na fase de trace files por não conseguir criar symlinks sem admin (EPERM). O compile e a geração de páginas passam — o problema é apenas o empacotamento standalone e não afeta `dev` nem builds em Linux (VPS). Se preciso testar standalone localmente, correr o terminal como Administrador.
 
@@ -923,6 +946,28 @@ Frontend específico da área reservada em `/socio/*` (rotas Next.js protegidas)
 - **Pendente:** JWT Key do bvaproject é fraca (`0123456789ABCDEF`) — trocar antes de qualquer go-live
 - **Pendente:** SMTP password `MCPb8cNJUn2YK5kI` — verificar/rodar no painel Sendinblue
 - **Pendente:** SSH hardening — `PasswordAuthentication no` + chave pública + fail2ban + ufw
+
+### Estado do VPS após deploy completo (2026-08-13) ✅
+
+- **`https://aobarcelos.pt/`** — **no ar**, HTTP 200, SSL válido até 2026-10-15
+- **`https://bva-p.aobarcelos.pt/`** — **no ar**, HTTP 200, SSL válido até 2026-11-11
+- **`https://bva-p.aobarcelos.pt/artigos`**, `/contacto`, `/categoria/*` — todos 200
+- PostgreSQL: grants `aobapp` corrigidos — API sem erros 42501
+- Frontends reconstruídos com `NEXT_PUBLIC_API_URL` HTTPS baked (`https://aobarcelos.pt` e `https://bva-p.aobarcelos.pt`)
+- `app-paths-manifest.json` do bva com 28/28 rotas — corrigido na rebuild
+- `webpack-runtime.js` chunk prefix `./chunks/` — corrigido na rebuild
+- ISR cache: `ReadWritePaths=/opt/aob/{app}/.next` nos serviços — Next.js escreve sem erro EROFS
+- **UFW**: activo — apenas portos 22, 80, 443 abertos
+- **fail2ban**: activo — jails: sshd, nginx-http-auth, nginx-limit-req
+- **SSH**: `PasswordAuthentication no` + `PermitRootLogin no` + só chave ED25519
+- **unattended-upgrades**: activo (patches automáticos)
+- **certbot timer**: activo (renovação automática)
+- Nginx vhosts configurados: `aobarcelos.pt`, `bva-p.aobarcelos.pt`, `api.aobarcelos.pt`, `admin.aobarcelos.pt`, `bva-p-socios.aobarcelos.pt`
+- **`https://admin.aobarcelos.pt/`** → redireciona para `/login` (302) — Blazor backoffice acessível ✅
+- **`https://api.aobarcelos.pt/api/sites/aob`** e `/bva` — HTTP 200 ✅
+- SSL Let's Encrypt para `admin.aobarcelos.pt` e `api.aobarcelos.pt` válido até 2026-11-11 ✅
+- **Pendente:** JWT Key do bvaproject é fraca (`0123456789ABCDEF`) — trocar antes de go-live dos sócios
+- **Pendente:** Turnstile keys reais — substituir `1x00000000000000000000AA` em `/etc/aob/api.env` + `.env.production` dos frontends (requer rebuild + redeploy)
 
 ---
 

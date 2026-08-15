@@ -18,7 +18,7 @@ namespace AOB.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -249,6 +249,47 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.ToTable("categories", (string)null);
                 });
 
+            modelBuilder.Entity("AOB.Core.Entities.ConvoyageBirdEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BirdOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("EquipaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FormSubmissionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NomenclatureClassId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PosicaoEquipa")
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<string>("RingNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EquipaId");
+
+                    b.HasIndex("NomenclatureClassId");
+
+                    b.HasIndex("FormSubmissionId", "BirdOrder")
+                        .IsUnique();
+
+                    b.ToTable("convoyage_bird_entries", (string)null);
+                });
+
             modelBuilder.Entity("AOB.Core.Entities.ConvoyageCollectionPoint", b =>
                 {
                     b.Property<int>("Id")
@@ -287,6 +328,11 @@ namespace AOB.Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("CapacidadePorCarga")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(20);
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -297,8 +343,27 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("MinPorCarga")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(16);
+
+                    b.Property<int>("NumCargasAlvo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(23);
+
+                    b.Property<DateTime?>("RegistrationClosesAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("SiteId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TransportadorasJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}");
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
@@ -416,6 +481,9 @@ namespace AOB.Infrastructure.Persistence.Migrations
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
 
+                    b.Property<int?>("LocalRecolhaId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -435,9 +503,11 @@ namespace AOB.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ConvoyageYearId");
-
                     b.HasIndex("HandledById");
+
+                    b.HasIndex("LocalRecolhaId");
+
+                    b.HasIndex("ConvoyageYearId", "LocalRecolhaId");
 
                     b.HasIndex("SiteId", "FormType", "Status", "SubmittedAt");
 
@@ -497,6 +567,87 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.HasIndex("SiteId", "MenuType", "SortOrder");
 
                     b.ToTable("menu_items", (string)null);
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.NomenclatureClass", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Mutation")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("NomenclatureGroupId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NomenclatureGroupId", "SortOrder");
+
+                    b.HasIndex("NomenclatureGroupId", "Code", "Mutation")
+                        .IsUnique();
+
+                    b.ToTable("nomenclature_classes", (string)null);
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.NomenclatureGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CodePrefix")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<int>("ConvoyageYearId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("EntryType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Species")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConvoyageYearId", "CodePrefix")
+                        .IsUnique();
+
+                    b.HasIndex("ConvoyageYearId", "Species", "EntryType");
+
+                    b.ToTable("nomenclature_groups", (string)null);
                 });
 
             modelBuilder.Entity("AOB.Core.Entities.PedidoAnilha", b =>
@@ -817,6 +968,85 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.ToTable("sponsors", (string)null);
                 });
 
+            modelBuilder.Entity("AOB.Core.Entities.TransportCarga", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("ConvoyageYearId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Notas")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TransportadoraNome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ZonasLabel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConvoyageYearId", "Codigo")
+                        .IsUnique();
+
+                    b.HasIndex("ConvoyageYearId", "SortOrder");
+
+                    b.ToTable("transport_cargas", (string)null);
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.TransportCargaSubmission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("FormSubmissionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumAvesConcurso")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumAvesTransporte")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumAvesVenda")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TransportCargaId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FormSubmissionId");
+
+                    b.HasIndex("TransportCargaId", "FormSubmissionId")
+                        .IsUnique();
+
+                    b.ToTable("transport_carga_submissions", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -1002,6 +1232,25 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.Navigation("Site");
                 });
 
+            modelBuilder.Entity("AOB.Core.Entities.ConvoyageBirdEntry", b =>
+                {
+                    b.HasOne("AOB.Core.Entities.FormSubmission", "FormSubmission")
+                        .WithMany("BirdEntries")
+                        .HasForeignKey("FormSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AOB.Core.Entities.NomenclatureClass", "NomenclatureClass")
+                        .WithMany("BirdEntries")
+                        .HasForeignKey("NomenclatureClassId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FormSubmission");
+
+                    b.Navigation("NomenclatureClass");
+                });
+
             modelBuilder.Entity("AOB.Core.Entities.ConvoyageCollectionPoint", b =>
                 {
                     b.HasOne("AOB.Core.Entities.ConvoyageYear", "ConvoyageYear")
@@ -1054,6 +1303,11 @@ namespace AOB.Infrastructure.Persistence.Migrations
                         .HasForeignKey("HandledById")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("AOB.Core.Entities.ConvoyageCollectionPoint", "LocalRecolha")
+                        .WithMany()
+                        .HasForeignKey("LocalRecolhaId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("AOB.Core.Entities.Site", "Site")
                         .WithMany()
                         .HasForeignKey("SiteId")
@@ -1063,6 +1317,8 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.Navigation("ConvoyageYear");
 
                     b.Navigation("HandledBy");
+
+                    b.Navigation("LocalRecolha");
 
                     b.Navigation("Site");
                 });
@@ -1083,6 +1339,28 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.Navigation("Parent");
 
                     b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.NomenclatureClass", b =>
+                {
+                    b.HasOne("AOB.Core.Entities.NomenclatureGroup", "NomenclatureGroup")
+                        .WithMany("Classes")
+                        .HasForeignKey("NomenclatureGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("NomenclatureGroup");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.NomenclatureGroup", b =>
+                {
+                    b.HasOne("AOB.Core.Entities.ConvoyageYear", "ConvoyageYear")
+                        .WithMany("NomenclatureGroups")
+                        .HasForeignKey("ConvoyageYearId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConvoyageYear");
                 });
 
             modelBuilder.Entity("AOB.Core.Entities.PedidoAnilha", b =>
@@ -1134,6 +1412,36 @@ namespace AOB.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.TransportCarga", b =>
+                {
+                    b.HasOne("AOB.Core.Entities.ConvoyageYear", "ConvoyageYear")
+                        .WithMany("TransportCargas")
+                        .HasForeignKey("ConvoyageYearId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConvoyageYear");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.TransportCargaSubmission", b =>
+                {
+                    b.HasOne("AOB.Core.Entities.FormSubmission", "FormSubmission")
+                        .WithMany()
+                        .HasForeignKey("FormSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AOB.Core.Entities.TransportCarga", "TransportCarga")
+                        .WithMany("Submissoes")
+                        .HasForeignKey("TransportCargaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FormSubmission");
+
+                    b.Navigation("TransportCarga");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -1200,12 +1508,31 @@ namespace AOB.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("CollectionPoints");
 
+                    b.Navigation("NomenclatureGroups");
+
                     b.Navigation("Submissions");
+
+                    b.Navigation("TransportCargas");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.FormSubmission", b =>
+                {
+                    b.Navigation("BirdEntries");
                 });
 
             modelBuilder.Entity("AOB.Core.Entities.MenuItem", b =>
                 {
                     b.Navigation("Children");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.NomenclatureClass", b =>
+                {
+                    b.Navigation("BirdEntries");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.NomenclatureGroup", b =>
+                {
+                    b.Navigation("Classes");
                 });
 
             modelBuilder.Entity("AOB.Core.Entities.Site", b =>
@@ -1226,6 +1553,11 @@ namespace AOB.Infrastructure.Persistence.Migrations
                     b.Navigation("Pedidos");
 
                     b.Navigation("Quotas");
+                });
+
+            modelBuilder.Entity("AOB.Core.Entities.TransportCarga", b =>
+                {
+                    b.Navigation("Submissoes");
                 });
 #pragma warning restore 612, 618
         }

@@ -19,6 +19,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Sponsor> Sponsors => Set<Sponsor>();
     public DbSet<ConvoyageYear> ConvoyageYears => Set<ConvoyageYear>();
     public DbSet<ConvoyageCollectionPoint> ConvoyageCollectionPoints => Set<ConvoyageCollectionPoint>();
+    public DbSet<NomenclatureGroup> NomenclatureGroups => Set<NomenclatureGroup>();
+    public DbSet<NomenclatureClass> NomenclatureClasses => Set<NomenclatureClass>();
+    public DbSet<ConvoyageBirdEntry> ConvoyageBirdEntries => Set<ConvoyageBirdEntry>();
+    public DbSet<TransportCarga> TransportCargas => Set<TransportCarga>();
+    public DbSet<TransportCargaSubmission> TransportCargaSubmissions => Set<TransportCargaSubmission>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

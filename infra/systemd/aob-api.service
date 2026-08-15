@@ -6,7 +6,7 @@ Requires=postgresql.service
 [Service]
 User=aob-api
 Group=aob-api
-Type=notify
+Type=simple
 WorkingDirectory=/opt/aob/api
 ExecStart=/opt/dotnet/dotnet /opt/aob/api/AOB.Api.dll
 Restart=on-failure

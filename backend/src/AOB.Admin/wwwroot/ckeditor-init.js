@@ -9,10 +9,25 @@ const instances = new Map();
 function loadCkeditor() {
     if (window.CKEDITOR && window.CKEDITOR.ClassicEditor) return Promise.resolve();
     if (window.__ckeditorLoading) return window.__ckeditorLoading;
+
+    // Snapshot existing head <style> elements so we can identify what CKEditor adds.
+    const stylesBefore = new Set(document.head.querySelectorAll("style"));
+
     window.__ckeditorLoading = new Promise((resolve, reject) => {
         const s = document.createElement("script");
         s.src = CKE_URL;
-        s.onload = resolve;
+        s.onload = () => {
+            // CKEditor 5 super-build (style-loader) injects <style> tags into <head>.
+            // Blazor enhanced navigation strips dynamic head elements on every navigation,
+            // removing the styles without re-injecting them (window.CKEDITOR already exists).
+            // Fix: move those <style> tags to <body>, which Blazor never patches.
+            document.head.querySelectorAll("style").forEach(st => {
+                if (!stylesBefore.has(st)) {
+                    document.body.insertBefore(st, document.body.firstChild);
+                }
+            });
+            resolve();
+        };
         s.onerror = () => reject(new Error("Failed to load CKEditor super-build from " + CKE_URL));
         document.head.appendChild(s);
     });
@@ -252,8 +267,7 @@ export async function attach(elementId, initialHtml, dotNetRef, uploadUrl) {
                 "link", "blockQuote", "insertTable", "horizontalLine", "specialCharacters", "|",
                 "imageUpload", "mediaEmbed", "|",
                 "sourceEditing"
-            ],
-            shouldNotGroupWhenFull: true
+            ]
         },
         heading: {
             options: [

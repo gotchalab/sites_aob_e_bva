@@ -167,7 +167,8 @@ public static class AuthEndpoints
             int id,
             AppDbContext db,
             IConfiguration config,
-            IHostEnvironment env) =>
+            IHostEnvironment env,
+            HttpContext http) =>
         {
             var form = await db.FormSubmissions.AsNoTracking().FirstOrDefaultAsync(f => f.Id == id);
             if (form is null || form.FormType is not (FormType.InscricaoSocio or FormType.InscricaoConvoyage))
@@ -195,7 +196,10 @@ public static class AuthEndpoints
 
             var bytes = await File.ReadAllBytesAsync(abs);
             var name = Path.GetFileName(abs);
-            return Results.File(bytes, "application/pdf", name);
+            http.Response.Headers.ContentDisposition = $"inline; filename=\"{name}\"";
+            http.Response.ContentType = "application/pdf";
+            await http.Response.Body.WriteAsync(bytes);
+            return Results.Empty;
         }).RequireAuthorization();
 
         return app;

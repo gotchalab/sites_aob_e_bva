@@ -20,11 +20,31 @@ function ChevronDown({ className = "" }: { className?: string }) {
 
 function HamburgerIcon({ open }: { open: boolean }) {
   return (
-    <div className="relative flex h-5 w-6 flex-col justify-center">
-      <span className={`absolute h-0.5 w-full bg-current transition ${open ? "top-1/2 -translate-y-1/2 rotate-45" : "top-0"}`} />
-      <span className={`absolute top-1/2 h-0.5 w-full -translate-y-1/2 bg-current transition ${open ? "opacity-0" : ""}`} />
-      <span className={`absolute h-0.5 w-full bg-current transition ${open ? "top-1/2 -translate-y-1/2 -rotate-45" : "bottom-0"}`} />
+    <div className="relative flex h-4 w-6 flex-col justify-between">
+      <span
+        className={`block h-[1.5px] w-full origin-center rounded-full bg-current transition-transform duration-300 ease-out ${
+          open ? "translate-y-[7px] rotate-45" : ""
+        }`}
+      />
+      <span
+        className={`block h-[1.5px] w-full rounded-full bg-current transition-opacity duration-200 ${
+          open ? "opacity-0" : "opacity-100"
+        }`}
+      />
+      <span
+        className={`block h-[1.5px] w-full origin-center rounded-full bg-current transition-transform duration-300 ease-out ${
+          open ? "-translate-y-[7px] -rotate-45" : ""
+        }`}
+      />
     </div>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
+      <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -57,6 +77,15 @@ export function Nav({ items }: { items: MenuItem[] }) {
       document.removeEventListener("keydown", onEsc);
     };
   }, [openDropdown]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileOpen(false);
+    }
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [mobileOpen]);
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -141,46 +170,69 @@ export function Nav({ items }: { items: MenuItem[] }) {
 
       <button
         type="button"
-        aria-label="Abrir menu"
+        aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
         aria-expanded={mobileOpen}
         onClick={() => setMobileOpen((v) => !v)}
-        className="flex h-10 w-10 items-center justify-center rounded-md text-earth-800 hover:bg-cream-300/60 lg:hidden"
+        className="relative z-[70] flex h-10 w-10 items-center justify-center rounded-full text-earth-800 transition hover:bg-cream-300/60 lg:hidden"
       >
         <HamburgerIcon open={mobileOpen} />
       </button>
 
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 top-16 z-40 bg-earth-900/40 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileOpen(false)}
-          aria-hidden
-        />
-      )}
-
       <div
-        className={`fixed inset-x-0 top-16 z-50 max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-gold-500/40 bg-cream-100 shadow-2xl transition-transform lg:hidden ${
-          mobileOpen ? "translate-y-0" : "-translate-y-[110%]"
+        onClick={() => setMobileOpen(false)}
+        aria-hidden
+        className={`fixed inset-0 z-[55] bg-earth-900/30 backdrop-blur-[3px] transition-opacity duration-300 lg:hidden ${
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
+
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu de navegação"
+        aria-hidden={!mobileOpen}
+        className={`fixed right-0 top-0 z-[60] flex h-[100dvh] w-[86vw] max-w-sm flex-col border-l border-gold-500/30 bg-cream-100/85 shadow-2xl backdrop-blur-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] lg:hidden ${
+          mobileOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <nav className="mx-auto max-w-7xl px-4 py-4" aria-label="Menu mobile">
-          <ul className="flex flex-col gap-1">
-            {items.map((it) => {
+        <div className="flex items-center justify-between px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-earth-500">
+            Menu
+          </span>
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            onClick={() => setMobileOpen(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-earth-700 transition hover:bg-cream-300/60 active:scale-95"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto overscroll-contain px-5 pb-6" aria-label="Menu mobile">
+          <ul className="flex flex-col divide-y divide-gold-500/20">
+            {items.map((it, idx) => {
               const href = itemHref(it);
               const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
               const hasChildren = it.children.length > 0;
               const isExpanded = expandedMobile.has(it.id);
+              const enterStyle = mobileOpen
+                ? { opacity: 1, transform: "translateY(0)", transitionDelay: `${120 + idx * 40}ms` }
+                : { opacity: 0, transform: "translateY(8px)", transitionDelay: "0ms" };
 
               return (
-                <li key={it.id}>
-                  <div className="flex items-stretch">
+                <li
+                  key={it.id}
+                  className="transition-all duration-500 ease-out"
+                  style={enterStyle}
+                >
+                  <div className="flex items-center">
                     <Link
                       href={href}
                       target={it.openInNewTab ? "_blank" : undefined}
-                      className={`flex-1 rounded-l-md px-4 py-3 text-base font-medium transition ${
-                        isActive
-                          ? "bg-brand-500 text-white"
-                          : "bg-white text-earth-800 hover:bg-cream-200 hover:text-brand-700"
-                      } ${hasChildren ? "" : "rounded-r-md"}`}
+                      className={`flex-1 py-4 text-[1.35rem] font-medium tracking-tight transition-colors ${
+                        isActive ? "text-brand-700" : "text-earth-900 hover:text-brand-700"
+                      }`}
                     >
                       {it.title}
                     </Link>
@@ -190,43 +242,62 @@ export function Nav({ items }: { items: MenuItem[] }) {
                         aria-label={isExpanded ? "Colapsar" : "Expandir"}
                         aria-expanded={isExpanded}
                         onClick={() => toggleMobileExpand(it.id)}
-                        className={`flex w-12 items-center justify-center rounded-r-md border-l border-cream-200 transition ${
-                          isActive ? "bg-brand-500 text-white" : "bg-white text-earth-700 hover:bg-cream-200"
-                        }`}
+                        className="ml-2 flex h-9 w-9 items-center justify-center rounded-full text-earth-500 transition hover:bg-cream-300/60 hover:text-earth-800 active:scale-95"
                       >
-                        <ChevronDown className={`transition ${isExpanded ? "rotate-180" : ""}`} />
+                        <ChevronDown
+                          className={`transition-transform duration-300 ${isExpanded ? "rotate-180 text-brand-700" : ""}`}
+                        />
                       </button>
                     )}
                   </div>
-                  {hasChildren && isExpanded && (
-                    <ul className="ml-3 mt-1 flex flex-col gap-0.5 border-l-2 border-gold-500/40 pl-3">
-                      {it.children.map((c) => (
-                        <li key={c.id}>
-                          <Link
-                            href={itemHref(c)}
-                            target={c.openInNewTab ? "_blank" : undefined}
-                            className="block rounded-md px-3 py-2 text-sm text-earth-800 transition hover:bg-cream-200 hover:text-brand-700"
-                          >
-                            {c.title}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
+                  {hasChildren && (
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                        isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <ul className="mb-3 ml-1 flex flex-col gap-0.5 border-l border-gold-500/40 pl-4">
+                          {it.children.map((c) => {
+                            const cHref = itemHref(c);
+                            const cActive = pathname === cHref || (cHref !== "/" && pathname.startsWith(cHref));
+                            return (
+                              <li key={c.id}>
+                                <Link
+                                  href={cHref}
+                                  target={c.openInNewTab ? "_blank" : undefined}
+                                  className={`block py-2 text-[1rem] transition-colors ${
+                                    cActive ? "text-brand-700" : "text-earth-700 hover:text-brand-700"
+                                  }`}
+                                >
+                                  {c.title}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    </div>
                   )}
                 </li>
               );
             })}
-            <li className="mt-3 border-t border-gold-500/40 pt-3">
-              <Link
-                href="/socio"
-                className="block rounded-md bg-brand-500 px-4 py-3 text-center text-base font-medium text-white transition hover:bg-brand-600"
-              >
-                Área de sócio
-              </Link>
-            </li>
           </ul>
         </nav>
-      </div>
+
+        <div className="border-t border-gold-500/20 bg-cream-100/40 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-xl">
+          <Link
+            href="/socio"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 active:scale-[0.98]"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Área de sócio
+          </Link>
+        </div>
+      </aside>
     </div>
   );
 }

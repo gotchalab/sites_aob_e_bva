@@ -1,0 +1,1119 @@
+@page "/formularios/{Id:int}/edit"
+@attribute [Authorize]
+@inject FormAdminService Forms
+@inject AppDbContext Db
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Editar inscrição #@Id · AOB</PageTitle>
+
+@if (_loading)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (_model is null)
+{
+    <div class="alert alert-danger">Inscrição não encontrada ou não é do tipo convoyage.</div>
+    <a class="btn btn-outline-secondary" href="/convoyage/inscricoes">← Lista</a>
+}
+else
+{
+    <div class="d-flex align-items-center gap-2 mb-1">
+        <a href="@($"/formularios/{Id}")" class="btn btn-sm btn-outline-secondary">← Detalhes</a>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-start mb-4 mt-3">
+        <h1 class="h3 mb-0">Editar inscrição convoyage #@Id</h1>
+    </div>
+
+    @if (_fieldErrors.Count > 0)
+    {
+        <div class="alert alert-danger">
+            <b>Existem @_fieldErrors.Count campo@(_fieldErrors.Count == 1 ? "" : "s") por corrigir.</b>
+            Verifique os campos assinalados a vermelho abaixo.
+        </div>
+    }
+    else if (_error is not null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    @if (_saved)
+    {
+        <div class="alert alert-success">Alterações guardadas.</div>
+    }
+
+    @* ── Dados do criador ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white">1. Dados do criador</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label small text-muted mb-1">Nome completo *</label>
+                    <input id="fld-nomeCompleto" class="form-control @Inv("nomeCompleto")" value="@_model.NomeCompleto"
+                           @oninput="e => Update(m => m with { NomeCompleto = StrOf(e) })" />
+                    @FldMsg("nomeCompleto")
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted mb-1">País *</label>
+                    <input id="fld-pais" class="form-control @Inv("pais")" value="@_model.Pais"
+                           @oninput="e => Update(m => m with { Pais = StrOf(e) })" />
+                    @FldMsg("pais")
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted mb-1">Email *</label>
+                    <input id="fld-email" class="form-control @Inv("email")" type="email" value="@_model.Email"
+                           @oninput="e => Update(m => m with { Email = StrOf(e) })" />
+                    @FldMsg("email")
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted mb-1">Telefone</label>
+                    <input class="form-control" value="@_model.Telefone"
+                           @oninput="e => Update(m => m with { Telefone = StrOrNull(e) })" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted mb-1">Situação BVA</label>
+                    <select class="form-select" value="@_model.SocioBvaStatus"
+                            @onchange="OnSocioStatusChanged">
+                        <option value="JaSocio">Sócio BVA (quotas pagas)</option>
+                        <option value="PagaComInscricao">Vai pagar quota BVA com a inscrição</option>
+                        <option value="NaoSocio">Não sócio BVA</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted mb-1">Nº STAM *</label>
+                    <input id="fld-numeroStam" class="form-control @Inv("numeroStam")" value="@_model.NumeroStam"
+                           @oninput="e => Update(m => m with { NumeroStam = StrOrNull(e) })" />
+                    @FldMsg("numeroStam")
+                </div>
+                <div class="col-12">
+                    <label class="form-label small text-muted mb-1">Local de recolha</label>
+                    @if (_collectionPoints.Count > 0)
+                    {
+                        <select class="form-select" value="@_model.LocalRecolha"
+                                @onchange="e => Update(m => m with { LocalRecolha = StrOf(e) })">
+                            @if (!_collectionPoints.Any(p => FormatPoint(p) == _model.LocalRecolha)
+                                 && !string.IsNullOrWhiteSpace(_model.LocalRecolha))
+                            {
+                                <option value="@_model.LocalRecolha">@_model.LocalRecolha (actual)</option>
+                            }
+                            @foreach (var p in _collectionPoints)
+                            {
+                                <option value="@FormatPoint(p)">@FormatPoint(p)</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="form-control" value="@_model.LocalRecolha"
+                               @oninput="e => Update(m => m with { LocalRecolha = StrOf(e) })" />
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Aves individuais ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>2. Aves individuais</span>
+            <button class="btn btn-sm btn-light" @onclick="AddIndividual">+ Adicionar ave</button>
+        </div>
+        <div class="card-body p-0">
+            @if (_individuals.Count == 0)
+            {
+                <p class="text-muted p-3 mb-0">Sem aves individuais.</p>
+            }
+            else
+            {
+                <div class="table-responsive" style="overflow:visible;">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:40px">#</th>
+                                <th style="width:180px">Espécie *</th>
+                                <th>Nº Série/Classe — Espécie e Mutação *</th>
+                                <th style="width:260px">Anilha *</th>
+                                <th style="width:50px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < _individuals.Count; i++)
+                            {
+                                var idx = i;
+                                var b = _individuals[idx];
+                                var kSp = $"ind_{idx}_species";
+                                var kSel = $"ind_{idx}_selection";
+                                var kAn = $"ind_{idx}_anilha";
+                                <tr>
+                                    <td class="text-muted">@(idx + 1)</td>
+                                    <td>
+                                        <select id="fld-@kSp" class="form-select form-select-sm @Inv(kSp)" value="@b.Species"
+                                                @onchange="e => OnIndividualSpeciesChange(idx, StrOf(e))">
+                                            <option value="">—</option>
+                                            @foreach (var sp in SpeciesOptions)
+                                            {
+                                                <option value="@sp.Key">@sp.Label</option>
+                                            }
+                                        </select>
+                                        @FldMsg(kSp)
+                                    </td>
+                                    <td>
+                                        <div id="fld-@kSel">
+                                            <NomenclatureCombobox
+                                                Groups="ComboGroups(MutationsForConcurso(b.Species))"
+                                                Value="@DisplayFor(b.Serie, b.Mutation)"
+                                                Placeholder="ex: 400/03 — A. fischeri  ou  grupo de estudo"
+                                                Disabled="@string.IsNullOrEmpty(b.Species)"
+                                                Invalid="@HasErr(kSel)"
+                                                OnItemSelected="sel => OnIndividualItemSelected(idx, sel)" />
+                                        </div>
+                                        @FldMsg(kSel)
+                                    </td>
+                                    <td>
+                                        <input id="fld-@kAn" class="form-control form-control-sm font-monospace @Inv(kAn)" value="@b.Anilha"
+                                               placeholder="AOB PT STAM 001 FNP26 5.0"
+                                               @oninput="e => UpdateIndividual(idx, x => x with { Anilha = StrOf(e) })" />
+                                        @FldMsg(kAn)
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                @onclick="() => RemoveIndividual(idx)" title="Remover">×</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ── Equipas ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>3. Equipas (4 aves · A → D)</span>
+            <button class="btn btn-sm btn-light" @onclick="AddTeam">+ Adicionar equipa</button>
+        </div>
+        <div class="card-body">
+            @if (_teams.Count == 0)
+            {
+                <p class="text-muted mb-0">Sem equipas.</p>
+            }
+            else
+            {
+                @for (int i = 0; i < _teams.Count; i++)
+                {
+                    var tIdx = i;
+                    var t = _teams[tIdx];
+                    var kSp = $"team_{tIdx}_species";
+                    var kSel = $"team_{tIdx}_selection";
+                    <div class="border rounded p-3 mb-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="fw-semibold">Equipa @(tIdx + 1)</span>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="() => RemoveTeam(tIdx)">Remover equipa</button>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Espécie *</label>
+                                <select id="fld-@kSp" class="form-select form-select-sm @Inv(kSp)" value="@t.Species"
+                                        @onchange="e => OnTeamSpeciesChange(tIdx, StrOf(e))">
+                                    <option value="">—</option>
+                                    @foreach (var sp in SpeciesOptions)
+                                    {
+                                        <option value="@sp.Key">@sp.Label</option>
+                                    }
+                                </select>
+                                @FldMsg(kSp)
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small text-muted mb-1">Nº Série/Classe — Espécie e Mutação *</label>
+                                <div id="fld-@kSel">
+                                    <NomenclatureCombobox
+                                        Groups="ComboGroups(MutationsForTeam(t.Species))"
+                                        Value="@DisplayFor(t.Serie, t.Mutation)"
+                                        Placeholder="ex: 451/01 — A. roseicollis greenseries"
+                                        Disabled="@string.IsNullOrEmpty(t.Species)"
+                                        Invalid="@HasErr(kSel)"
+                                        OnItemSelected="sel => OnTeamItemSelected(tIdx, sel)" />
+                                </div>
+                                @FldMsg(kSel)
+                            </div>
+                        </div>
+                        <label class="form-label small text-muted mb-1">Anilhas · A (topo) → D (fundo) *</label>
+                        @for (int j = 0; j < 4; j++)
+                        {
+                            var pos = TeamPositions[j];
+                            var jIdx = j;
+                            var canUp = jIdx > 0;
+                            var canDown = jIdx < 3;
+                            var kAn = $"team_{tIdx}_anilha{jIdx}";
+                            <div class="mb-1">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-secondary" style="width:28px">@pos</span>
+                                    <input id="fld-@kAn" class="form-control form-control-sm font-monospace @Inv(kAn)"
+                                           value="@t.Anilhas[jIdx]"
+                                           placeholder="AOB PT STAM 001 FNP26 5.0"
+                                           @oninput="e => UpdateTeamAnilha(tIdx, jIdx, StrOf(e))" />
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => MoveTeamMember(tIdx, jIdx, -1)"
+                                            disabled="@(!canUp)" title="Subir">↑</button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => MoveTeamMember(tIdx, jIdx, +1)"
+                                            disabled="@(!canDown)" title="Descer">↓</button>
+                                </div>
+                                @FldMsg(kAn)
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    @* ── Aves para venda ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>4. Aves para venda</span>
+            <button class="btn btn-sm btn-light" @onclick="AddSale">+ Adicionar ave venda</button>
+        </div>
+        <div class="card-body">
+            @if (_sales.Count == 0)
+            {
+                <p class="text-muted mb-0">Sem aves para venda.</p>
+            }
+            else
+            {
+                @for (int i = 0; i < _sales.Count; i++)
+                {
+                    var idx = i;
+                    var s = _sales[idx];
+                    var kSp = $"sale_{idx}_species";
+                    var kSel = $"sale_{idx}_selection";
+                    var kPr = $"sale_{idx}_preco";
+                    var kAn = $"sale_{idx}_anilha";
+                    <div class="border rounded p-3 mb-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="fw-semibold">Ave venda @(idx + 1)</span>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveSale(idx)">Remover</button>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Espécie *</label>
+                                <select id="fld-@kSp" class="form-select form-select-sm @Inv(kSp)" value="@s.Species"
+                                        @onchange="e => OnSaleSpeciesChange(idx, StrOf(e))">
+                                    <option value="">—</option>
+                                    @foreach (var sp in SpeciesOptions)
+                                    {
+                                        <option value="@sp.Key">@sp.Label</option>
+                                    }
+                                </select>
+                                @FldMsg(kSp)
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small text-muted mb-1">Nº Série/Classe — Espécie e Mutação *</label>
+                                <div class="form-check form-check-inline small mb-1">
+                                    <input class="form-check-input" type="checkbox" id="fs_@idx"
+                                           checked="@s.FreeSpecies"
+                                           @onchange="e => OnSaleFreeSpeciesToggle(idx, (bool)(e.Value ?? false))" />
+                                    <label class="form-check-label small" for="fs_@idx">
+                                        Mutação fora do catálogo BVA (texto livre)
+                                    </label>
+                                </div>
+                                <div id="fld-@kSel">
+                                    @if (s.FreeSpecies)
+                                    {
+                                        <input class="form-control form-control-sm @Inv(kSel)"
+                                               value="@s.Mutation"
+                                               placeholder="ex: orange face green"
+                                               @oninput="e => UpdateSale(idx, x => x with { Mutation = StrOf(e), Serie = string.Empty })" />
+                                    }
+                                    else
+                                    {
+                                        <NomenclatureCombobox
+                                            Groups="ComboGroups(MutationsForSale(s.Species))"
+                                            Value="@DisplayFor(s.Serie, s.Mutation)"
+                                            Placeholder="ex: 002/02 — orange face green"
+                                            Disabled="@string.IsNullOrEmpty(s.Species)"
+                                            Invalid="@HasErr(kSel)"
+                                            OnItemSelected="sel => OnSaleItemSelected(idx, sel)" />
+                                    }
+                                </div>
+                                @FldMsg(kSel)
+                            </div>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Data nasc.</label>
+                                <input class="form-control form-control-sm" value="@s.DataNascimento"
+                                       placeholder="yyyy-mm-dd"
+                                       @oninput="e => UpdateSale(idx, x => x with { DataNascimento = StrOf(e) })" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Sexo</label>
+                                <select class="form-select form-select-sm" value="@s.Sexo"
+                                        @onchange="e => UpdateSale(idx, x => x with { Sexo = StrOf(e) })">
+                                    <option value="Macho">Macho</option>
+                                    <option value="Femea">Fêmea</option>
+                                    <option value="Indefinido">Indefinido</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Preço €</label>
+                                <input id="fld-@kPr" class="form-control form-control-sm font-monospace @Inv(kPr)" type="number" step="0.01" min="0"
+                                       value="@s.Preco.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                       @onchange="e => UpdateSale(idx, x => x with { Preco = ParseDecimal(StrOf(e)) })" />
+                                @FldMsg(kPr)
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Anilha *</label>
+                                <input id="fld-@kAn" class="form-control form-control-sm font-monospace @Inv(kAn)" value="@s.Anilha"
+                                       @oninput="e => UpdateSale(idx, x => x with { Anilha = StrOf(e) })" />
+                                @FldMsg(kAn)
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    @* ── Aves para transporte (compra/venda) ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>5. Aves para transporte (compra/venda)</span>
+            <button class="btn btn-sm btn-light" @onclick="AddTransportGroup">+ Adicionar destinatário</button>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-2">
+                Aves que o criador compra ou vende — não entram no concurso BVA Masters nem na sala de vendas da BVA.
+            </p>
+            <div class="alert alert-warning py-2 px-3 small mb-3">
+                <ul class="mb-0 ps-3">
+                    <li>
+                        <b>Chegada prevista: 12h (hora belga).</b> O destinatário tem obrigatoriamente
+                        de estar presente no local a essa hora para receber as aves —
+                        <b>não há condições para as guardar por mais tempo</b>.
+                    </li>
+                    <li>
+                        <b>Sujeito a validação de espaço:</b> limite total de <b>400 aves para transporte</b>;
+                        prioridade para aves de exposição (concurso e sala de vendas BVA).
+                        Aves de compra/venda só entram se restar espaço. Confirmação por email
+                        <b>após o fecho das inscrições</b>.
+                    </li>
+                </ul>
+            </div>
+            @if (_transportGroups.Count == 0)
+            {
+                <p class="text-muted mb-0">Sem aves para transporte.</p>
+            }
+            else
+            {
+                @for (int gi = 0; gi < _transportGroups.Count; gi++)
+                {
+                    var gIdx = gi;
+                    var g = _transportGroups[gIdx];
+                    var (tripLabel, tripCls) = g.Origem switch
+                    {
+                        "Compra" => ("Bélgica → Portugal", "bg-info-subtle text-info-emphasis border-info-subtle"),
+                        "Vende"  => ("Portugal → Bélgica", "bg-warning-subtle text-warning-emphasis border-warning-subtle"),
+                        _        => ("", "")
+                    };
+                    <div class="border rounded p-3 mb-3 bg-body-tertiary">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                            <span class="badge bg-primary">Destinatário @(gIdx + 1)</span>
+                            <span class="text-muted small">@g.Birds.Count ave@(g.Birds.Count == 1 ? "" : "s")</span>
+                            @if (!string.IsNullOrEmpty(tripLabel))
+                            {
+                                <span class="badge border @tripCls">Viagem: @tripLabel</span>
+                            }
+                            <button class="btn btn-sm btn-outline-danger ms-auto"
+                                    @onclick="() => RemoveTransportGroup(gIdx)">
+                                Remover destinatário e todas as aves
+                            </button>
+                        </div>
+
+                        @{
+                            var kOrigem = $"tg_{gIdx}_origem";
+                            var kDestNome = $"tg_{gIdx}_destNome";
+                            var kDestWa = $"tg_{gIdx}_destWa";
+                        }
+                        <div class="mb-3" style="max-width:520px">
+                            <label class="form-label small text-muted mb-1">Tipo de operação *</label>
+                            <select id="fld-@kOrigem" class="form-select form-select-sm @Inv(kOrigem)" value="@g.Origem"
+                                    @onchange="e => UpdateTransportGroup(gIdx, x => x with { Origem = StrOf(e) })">
+                                <option value="">— selecionar —</option>
+                                <option value="Compra">Compra — aves adquiridas pelo criador (Bélgica → Portugal)</option>
+                                <option value="Vende">Venda — aves vendidas a terceiros (Portugal → Bélgica)</option>
+                            </select>
+                            @FldMsg(kOrigem)
+                        </div>
+
+                        @if (g.Origem == "Compra")
+                        {
+                            <div class="alert alert-info py-2 px-3 small mb-3">
+                                <b>Compra:</b> as aves viajam da Bélgica para Portugal e são entregues ao próprio
+                                criador (<b>@_model.NomeCompleto</b>@(string.IsNullOrWhiteSpace(_model.Telefone) ? "" : $" · {_model.Telefone}")),
+                                junto com as aves de concurso.
+                            </div>
+                        }
+                        else if (g.Origem == "Vende")
+                        {
+                            <div class="alert alert-warning py-2 px-3 small mb-3">
+                                <b>Venda:</b> as aves viajam de Portugal para a Bélgica e são entregues à pessoa
+                                indicada abaixo, que <b>tem de estar presente na chegada (12h hora belga)</b>.
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted mb-1">Nome do destinatário na Bélgica *</label>
+                                    <input id="fld-@kDestNome" class="form-control form-control-sm @Inv(kDestNome)" value="@g.DestinatarioNome"
+                                           placeholder="Ex: Jan Peeters"
+                                           @oninput="e => UpdateTransportGroup(gIdx, x => x with { DestinatarioNome = StrOf(e) })" />
+                                    @FldMsg(kDestNome)
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted mb-1">WhatsApp do destinatário *</label>
+                                    <input id="fld-@kDestWa" class="form-control form-control-sm font-monospace @Inv(kDestWa)" value="@g.DestinatarioWhatsapp"
+                                           placeholder="+32 470 123 456"
+                                           @oninput="e => UpdateTransportGroup(gIdx, x => x with { DestinatarioWhatsapp = StrOf(e) })" />
+                                    @FldMsg(kDestWa)
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small text-muted mb-1">Notas do destinatário (opcional)</label>
+                                    <textarea class="form-control form-control-sm" rows="2"
+                                              placeholder="Notas adicionais (ex.: instruções de entrega)"
+                                              @oninput="e => UpdateTransportGroup(gIdx, x => x with { DestinatarioNotas = StrOf(e) })">@g.DestinatarioNotas</textarea>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="d-flex flex-column gap-2">
+                            @for (int bi = 0; bi < g.Birds.Count; bi++)
+                            {
+                                var bIdx = bi;
+                                var b = g.Birds[bIdx];
+                                var canRemoveBird = g.Birds.Count > 1;
+                                var kBSp = $"tg_{gIdx}_bird{bIdx}_species";
+                                var kBAn = $"tg_{gIdx}_bird{bIdx}_anilha";
+                                <div class="border rounded p-2 bg-white">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="small fw-semibold text-primary">Ave @(bIdx + 1)</span>
+                                        @if (canRemoveBird)
+                                        {
+                                            <button class="btn btn-sm btn-link text-danger p-0"
+                                                    @onclick="() => RemoveBirdFromGroup(gIdx, bIdx)">Remover ave</button>
+                                        }
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <label class="form-label small text-muted mb-1">Espécie *</label>
+                                            <select id="fld-@kBSp" class="form-select form-select-sm @Inv(kBSp)" value="@b.Species"
+                                                    @onchange="e => UpdateBirdInGroup(gIdx, bIdx, x => x with { Species = StrOf(e) })">
+                                                <option value="">—</option>
+                                                @foreach (var sp in SpeciesOptions)
+                                                {
+                                                    <option value="@sp.Key">@sp.Label</option>
+                                                }
+                                            </select>
+                                            @FldMsg(kBSp)
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small text-muted mb-1">Anilha *</label>
+                                            <input id="fld-@kBAn" class="form-control form-control-sm font-monospace @Inv(kBAn)" value="@b.Anilha"
+                                                   placeholder="AOB PT STAM 001 FNP26 5.0"
+                                                   @oninput="e => UpdateBirdInGroup(gIdx, bIdx, x => x with { Anilha = StrOf(e) })" />
+                                            @FldMsg(kBAn)
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <button class="btn btn-sm btn-outline-primary mt-3"
+                                @onclick="() => AddBirdToGroup(gIdx)">
+                            + Adicionar outra ave para este destinatário
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-5">
+        <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+            @(_saving ? "A guardar..." : "Guardar alterações")
+        </button>
+        <a class="btn btn-outline-secondary" href="@($"/formularios/{Id}")">Cancelar</a>
+    </div>
+
+    <p class="text-muted small">
+        Nota: espécie, série e mutação usam a nomenclatura activa do ano da inscrição.
+        O tipo (Individual/Grupo Estudo/Team) é inferido do item selecionado, tal como no formulário público.
+        O PDF original não é regenerado — mantém-se como snapshot da submissão.
+    </p>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _loading = true;
+    private bool _saving;
+    private bool _saved;
+    private string? _error;
+    private Dictionary<string, string> _fieldErrors = new();
+
+    private bool HasErr(string key) => _fieldErrors.ContainsKey(key);
+    private string Inv(string key) => _fieldErrors.ContainsKey(key) ? "is-invalid" : "";
+    private MarkupString FldMsg(string key)
+    {
+        if (!_fieldErrors.TryGetValue(key, out var msg)) return default;
+        return new MarkupString(
+            "<div class=\"invalid-feedback d-block small\">"
+            + System.Net.WebUtility.HtmlEncode(msg)
+            + "</div>");
+    }
+
+    private FormAdminService.ConvoyageEditModel? _model;
+    private List<ConvoyageCollectionPoint> _collectionPoints = new();
+    private List<FormAdminService.NomGroup> _nomenclature = new();
+
+    private List<IndividualBird> _individuals = new();
+    private List<TeamBird> _teams = new();
+    private List<SaleBird> _sales = new();
+    private List<TransportGroup> _transportGroups = new();
+
+    private static readonly string[] TeamPositions = new[] { "A", "B", "C", "D" };
+
+    private static readonly (string Key, string Label)[] SpeciesOptions = new[]
+    {
+        ("Roseicollis", "A. roseicollis"),
+        ("Personatus",  "A. personatus"),
+        ("Fischeri",    "A. fischeri"),
+        ("Nigrigenis",  "A. nigrigenis"),
+        ("Lilianae",    "A. lilianae"),
+        ("Canus",       "A. canus"),
+        ("Taranta",     "A. taranta"),
+        ("Pullarius",   "A. pullarius"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model = await Forms.GetConvoyageEditAsync(Id);
+        if (_model is not null)
+        {
+            var f = await Db.FormSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == Id);
+            if (f?.ConvoyageYearId is int yid)
+            {
+                _collectionPoints = await Db.ConvoyageCollectionPoints
+                    .AsNoTracking()
+                    .Where(p => p.ConvoyageYearId == yid)
+                    .OrderBy(p => p.SortOrder)
+                    .ToListAsync();
+                _nomenclature = await Forms.GetNomenclatureForYearAsync(yid);
+            }
+            HydrateFromModel();
+        }
+        _loading = false;
+    }
+
+    private void HydrateFromModel()
+    {
+        if (_model is null) return;
+
+        _individuals.Clear();
+        _teams.Clear();
+        _sales.Clear();
+        _transportGroups.Clear();
+
+        var byTeam = _model.Aves
+            .Where(a => a.EquipaId.HasValue)
+            .GroupBy(a => a.EquipaId!.Value)
+            .ToList();
+
+        foreach (var grp in byTeam)
+        {
+            var first = grp.First();
+            var anilhas = new string[4];
+            foreach (var m in grp)
+            {
+                var pos = (m.PosicaoEquipa ?? "").ToUpperInvariant();
+                var slot = pos switch { "A" => 0, "B" => 1, "C" => 2, "D" => 3, _ => -1 };
+                if (slot >= 0) anilhas[slot] = m.Anilha ?? "";
+            }
+            for (int i = 0; i < 4; i++) anilhas[i] ??= "";
+            _teams.Add(new TeamBird(
+                grp.Key,
+                NormalizeSpecies(first.Especie),
+                first.Serie ?? "",
+                first.EspecieMutacao ?? "",
+                anilhas));
+        }
+
+        foreach (var a in _model.Aves.Where(a => !a.EquipaId.HasValue))
+        {
+            _individuals.Add(new IndividualBird(
+                NormalizeSpecies(a.Especie),
+                NormalizeType(a.TipoClasse, defaultToIndividual: true),
+                a.Serie ?? "",
+                a.EspecieMutacao ?? "",
+                a.Anilha ?? ""));
+        }
+
+        foreach (var s in _model.AvesVenda)
+        {
+            _sales.Add(new SaleBird(
+                s.EspecieLivre,
+                NormalizeSpecies(s.Especie),
+                NormalizeType(s.TipoClasse, defaultToIndividual: true),
+                "",
+                s.EspecieMutacao ?? "",
+                s.DataNascimento ?? "",
+                string.IsNullOrEmpty(s.Sexo) ? "Indefinido" : s.Sexo,
+                s.Preco,
+                s.Anilha ?? ""));
+        }
+
+        // Agrupa aves por (origem, destinatário) — mantém ordem de chegada.
+        var groupsByKey = new Dictionary<(string, string, string, string), TransportGroup>();
+        var groupOrder = new List<(string, string, string, string)>();
+        foreach (var t in _model.AvesTransporte)
+        {
+            var origem = t.Origem switch
+            {
+                "Compra"    => "Compra",
+                "Vende"     => "Vende",
+                "Adquirida" => "Compra", // legado
+                "Cedida"    => "Vende",  // legado
+                _           => "Compra",
+            };
+            var destNome  = t.DestinatarioNome ?? "";
+            var destWa    = t.DestinatarioWhatsapp ?? "";
+            var destNotas = t.DestinatarioNotas ?? "";
+            var key = (origem, destNome, destWa, destNotas);
+            if (!groupsByKey.TryGetValue(key, out var grp))
+            {
+                grp = new TransportGroup(origem, destNome, destWa, destNotas, new List<TransportGroupBird>());
+                groupsByKey[key] = grp;
+                groupOrder.Add(key);
+            }
+            grp.Birds.Add(new TransportGroupBird(NormalizeSpecies(t.Especie), t.Anilha ?? ""));
+        }
+        foreach (var k in groupOrder) _transportGroups.Add(groupsByKey[k]);
+    }
+
+    // ── Species / Nomenclature helpers ────────────────────────────────────────
+
+    private record MutationGroupView(string DisplayName, List<FormAdminService.NomClass> Classes, string EntryType);
+
+    private List<MutationGroupView> MutationsForConcurso(string species)
+    {
+        if (string.IsNullOrEmpty(species)) return new();
+        return _nomenclature
+            .Where(g => g.Species == species && (g.EntryType == "Individual" || g.EntryType == "Study"))
+            .Select(g => new MutationGroupView(g.DisplayName, g.Classes, g.EntryType))
+            .ToList();
+    }
+
+    private List<MutationGroupView> MutationsForTeam(string species)
+    {
+        if (string.IsNullOrEmpty(species)) return new();
+        return _nomenclature
+            .Where(g => g.Species == species && g.EntryType == "Team")
+            .Select(g => new MutationGroupView(g.DisplayName, g.Classes, g.EntryType))
+            .ToList();
+    }
+
+    private List<MutationGroupView> MutationsForSale(string species)
+    {
+        if (string.IsNullOrEmpty(species)) return new();
+        return _nomenclature
+            .Where(g => g.Species == species)
+            .Select(g => new MutationGroupView(g.DisplayName, g.Classes, g.EntryType))
+            .ToList();
+    }
+
+    private static List<NomenclatureCombobox.GroupView> ComboGroups(List<MutationGroupView> groups) =>
+        groups.Select(g => new NomenclatureCombobox.GroupView(
+            g.DisplayName,
+            g.Classes.Select(c => new NomenclatureCombobox.ItemView(c.Code, c.Mutation, g.EntryType)).ToList()
+        )).ToList();
+
+    private static string DisplayFor(string serie, string mutation) =>
+        string.IsNullOrEmpty(serie) && string.IsNullOrEmpty(mutation)
+            ? ""
+            : $"{serie} — {mutation}";
+
+    private static string NormalizeSpecies(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return "";
+        var t = s.Trim();
+        if (t.StartsWith("agapornis_", StringComparison.OrdinalIgnoreCase))
+            t = t["agapornis_".Length..];
+        if (t.Length == 0) return "";
+        t = char.ToUpperInvariant(t[0]) + t[1..].ToLowerInvariant();
+        return t;
+    }
+
+    private static string NormalizeType(string? t, bool defaultToIndividual)
+    {
+        if (string.IsNullOrWhiteSpace(t)) return defaultToIndividual ? "Individual" : "";
+        var s = t.Trim();
+        if (s.Equals("Individual", StringComparison.OrdinalIgnoreCase)) return "Individual";
+        if (s.Equals("Team", StringComparison.OrdinalIgnoreCase)) return "Team";
+        if (s.Equals("Study", StringComparison.OrdinalIgnoreCase)) return "Study";
+        if (s.Equals("show", StringComparison.OrdinalIgnoreCase)) return "Individual";
+        return defaultToIndividual ? "Individual" : "";
+    }
+
+    // ── Handlers básicos ──────────────────────────────────────────────────────
+
+    private static string StrOf(ChangeEventArgs e) => e.Value?.ToString() ?? "";
+    private static string? StrOrNull(ChangeEventArgs e)
+    {
+        var s = e.Value?.ToString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
+    private void Update(Func<FormAdminService.ConvoyageEditModel, FormAdminService.ConvoyageEditModel> mut)
+    {
+        if (_model is null) return;
+        _model = mut(_model);
+    }
+
+    private void OnSocioStatusChanged(ChangeEventArgs e)
+    {
+        if (_model is null) return;
+        var s = StrOf(e);
+        var isSocio = s != "NaoSocio";
+        _model = _model with { SocioBvaStatus = s, SocioBva = isSocio };
+    }
+
+    // ── Individuals ──────────────────────────────────────────────────────────
+
+    private void AddIndividual()
+    {
+        _individuals.Add(new IndividualBird("", "", "", "", ""));
+    }
+
+    private void RemoveIndividual(int idx)
+    {
+        if (idx >= 0 && idx < _individuals.Count) _individuals.RemoveAt(idx);
+    }
+
+    private void UpdateIndividual(int idx, Func<IndividualBird, IndividualBird> mut)
+    {
+        if (idx >= 0 && idx < _individuals.Count) _individuals[idx] = mut(_individuals[idx]);
+    }
+
+    private void OnIndividualSpeciesChange(int idx, string species)
+    {
+        UpdateIndividual(idx, x => x with { Species = species, TipoClasse = "", Serie = "", Mutation = "" });
+    }
+
+    private void OnIndividualItemSelected(int idx, NomenclatureCombobox.ItemSelection sel)
+    {
+        UpdateIndividual(idx, x => x with
+        {
+            Serie = sel.Code,
+            Mutation = sel.Mutation,
+            TipoClasse = sel.EntryType,
+        });
+    }
+
+    // ── Teams ────────────────────────────────────────────────────────────────
+
+    private void AddTeam()
+    {
+        _teams.Add(new TeamBird(Guid.NewGuid(), "", "", "", new[] { "", "", "", "" }));
+    }
+
+    private void RemoveTeam(int idx)
+    {
+        if (idx >= 0 && idx < _teams.Count) _teams.RemoveAt(idx);
+    }
+
+    private void OnTeamSpeciesChange(int idx, string species)
+    {
+        if (idx < 0 || idx >= _teams.Count) return;
+        _teams[idx] = _teams[idx] with { Species = species, Serie = "", Mutation = "" };
+    }
+
+    private void OnTeamItemSelected(int idx, NomenclatureCombobox.ItemSelection sel)
+    {
+        if (idx < 0 || idx >= _teams.Count) return;
+        _teams[idx] = _teams[idx] with { Serie = sel.Code, Mutation = sel.Mutation };
+    }
+
+    private void UpdateTeamAnilha(int tIdx, int slot, string value)
+    {
+        if (tIdx < 0 || tIdx >= _teams.Count) return;
+        var t = _teams[tIdx];
+        var newAn = (string[])t.Anilhas.Clone();
+        newAn[slot] = value;
+        _teams[tIdx] = t with { Anilhas = newAn };
+    }
+
+    private void MoveTeamMember(int tIdx, int slot, int delta)
+    {
+        if (tIdx < 0 || tIdx >= _teams.Count) return;
+        var t = _teams[tIdx];
+        var newSlot = slot + delta;
+        if (newSlot < 0 || newSlot > 3) return;
+        var newAn = (string[])t.Anilhas.Clone();
+        (newAn[slot], newAn[newSlot]) = (newAn[newSlot], newAn[slot]);
+        _teams[tIdx] = t with { Anilhas = newAn };
+    }
+
+    // ── Sales ────────────────────────────────────────────────────────────────
+
+    private void AddSale()
+    {
+        _sales.Add(new SaleBird(false, "", "Individual", "", "", "", "Indefinido", 0m, ""));
+    }
+
+    private void RemoveSale(int idx)
+    {
+        if (idx >= 0 && idx < _sales.Count) _sales.RemoveAt(idx);
+    }
+
+    private void UpdateSale(int idx, Func<SaleBird, SaleBird> mut)
+    {
+        if (idx >= 0 && idx < _sales.Count) _sales[idx] = mut(_sales[idx]);
+    }
+
+    private void OnSaleSpeciesChange(int idx, string species)
+    {
+        UpdateSale(idx, x => x with { Species = species, TipoClasse = "", Serie = "", Mutation = x.FreeSpecies ? x.Mutation : "" });
+    }
+
+    private void OnSaleItemSelected(int idx, NomenclatureCombobox.ItemSelection sel)
+    {
+        UpdateSale(idx, x => x with { Serie = sel.Code, Mutation = sel.Mutation, TipoClasse = sel.EntryType });
+    }
+
+    private void OnSaleFreeSpeciesToggle(int idx, bool free)
+    {
+        UpdateSale(idx, x => x with { FreeSpecies = free, Serie = "", Mutation = "" });
+    }
+
+    // ── Transports (agrupados por destinatário) ──────────────────────────────
+
+    private void AddTransportGroup()
+    {
+        _transportGroups.Add(new TransportGroup(
+            Origem: "",
+            DestinatarioNome: "",
+            DestinatarioWhatsapp: "",
+            DestinatarioNotas: "",
+            Birds: new List<TransportGroupBird> { new("", "") }));
+    }
+
+    private void RemoveTransportGroup(int gIdx)
+    {
+        if (gIdx >= 0 && gIdx < _transportGroups.Count) _transportGroups.RemoveAt(gIdx);
+    }
+
+    private void UpdateTransportGroup(int gIdx, Func<TransportGroup, TransportGroup> mut)
+    {
+        if (gIdx < 0 || gIdx >= _transportGroups.Count) return;
+        _transportGroups[gIdx] = mut(_transportGroups[gIdx]);
+    }
+
+    private void AddBirdToGroup(int gIdx)
+    {
+        if (gIdx < 0 || gIdx >= _transportGroups.Count) return;
+        _transportGroups[gIdx].Birds.Add(new TransportGroupBird("", ""));
+    }
+
+    private void RemoveBirdFromGroup(int gIdx, int bIdx)
+    {
+        if (gIdx < 0 || gIdx >= _transportGroups.Count) return;
+        var birds = _transportGroups[gIdx].Birds;
+        if (bIdx >= 0 && bIdx < birds.Count && birds.Count > 1) birds.RemoveAt(bIdx);
+    }
+
+    private void UpdateBirdInGroup(int gIdx, int bIdx, Func<TransportGroupBird, TransportGroupBird> mut)
+    {
+        if (gIdx < 0 || gIdx >= _transportGroups.Count) return;
+        var birds = _transportGroups[gIdx].Birds;
+        if (bIdx >= 0 && bIdx < birds.Count) birds[bIdx] = mut(birds[bIdx]);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static decimal ParseDecimal(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return 0m;
+        s = s.Replace(',', '.');
+        return decimal.TryParse(s, System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0m;
+    }
+
+    private static string FormatPoint(ConvoyageCollectionPoint p) =>
+        string.IsNullOrWhiteSpace(p.Location) ? p.Name : $"{p.Name} ({p.Location})";
+
+    // ── Save ─────────────────────────────────────────────────────────────────
+
+    private void ValidateFields()
+    {
+        _fieldErrors.Clear();
+        if (_model is null) return;
+
+        if (string.IsNullOrWhiteSpace(_model.NomeCompleto)) _fieldErrors["nomeCompleto"] = "Nome completo obrigatório.";
+        if (string.IsNullOrWhiteSpace(_model.Email))        _fieldErrors["email"]        = "Email obrigatório.";
+        if (string.IsNullOrWhiteSpace(_model.Pais))         _fieldErrors["pais"]         = "País obrigatório.";
+        if (string.IsNullOrWhiteSpace(_model.NumeroStam))   _fieldErrors["numeroStam"]   = "Nº STAM obrigatório.";
+
+        for (int i = 0; i < _individuals.Count; i++)
+        {
+            var b = _individuals[i];
+            if (string.IsNullOrEmpty(b.Species))
+                _fieldErrors[$"ind_{i}_species"] = "Espécie obrigatória.";
+            if (string.IsNullOrEmpty(b.Serie) || string.IsNullOrEmpty(b.Mutation))
+                _fieldErrors[$"ind_{i}_selection"] = "Selecione a série/mutação.";
+            if (string.IsNullOrWhiteSpace(b.Anilha))
+                _fieldErrors[$"ind_{i}_anilha"] = "Anilha obrigatória.";
+        }
+
+        for (int i = 0; i < _teams.Count; i++)
+        {
+            var t = _teams[i];
+            if (string.IsNullOrEmpty(t.Species))
+                _fieldErrors[$"team_{i}_species"] = "Espécie obrigatória.";
+            if (string.IsNullOrEmpty(t.Serie) || string.IsNullOrEmpty(t.Mutation))
+                _fieldErrors[$"team_{i}_selection"] = "Selecione a série/mutação.";
+            for (int j = 0; j < 4; j++)
+            {
+                if (string.IsNullOrWhiteSpace(t.Anilhas[j]))
+                    _fieldErrors[$"team_{i}_anilha{j}"] = $"Anilha {TeamPositions[j]} obrigatória.";
+            }
+        }
+
+        for (int i = 0; i < _sales.Count; i++)
+        {
+            var s = _sales[i];
+            if (string.IsNullOrEmpty(s.Species))
+                _fieldErrors[$"sale_{i}_species"] = "Espécie obrigatória.";
+            if (string.IsNullOrWhiteSpace(s.Mutation))
+                _fieldErrors[$"sale_{i}_selection"] = s.FreeSpecies ? "Descreva a mutação." : "Selecione a mutação.";
+            if (s.Preco < 0)
+                _fieldErrors[$"sale_{i}_preco"] = "Preço inválido.";
+            if (string.IsNullOrWhiteSpace(s.Anilha))
+                _fieldErrors[$"sale_{i}_anilha"] = "Anilha obrigatória.";
+        }
+
+        for (int gi = 0; gi < _transportGroups.Count; gi++)
+        {
+            var g = _transportGroups[gi];
+            if (string.IsNullOrWhiteSpace(g.Origem))
+                _fieldErrors[$"tg_{gi}_origem"] = "Selecione se é Compra ou Venda.";
+            if (g.Origem == "Vende")
+            {
+                if (string.IsNullOrWhiteSpace(g.DestinatarioNome))
+                    _fieldErrors[$"tg_{gi}_destNome"] = "Nome do destinatário obrigatório.";
+                if (string.IsNullOrWhiteSpace(g.DestinatarioWhatsapp))
+                    _fieldErrors[$"tg_{gi}_destWa"] = "WhatsApp do destinatário obrigatório.";
+            }
+            for (int bi = 0; bi < g.Birds.Count; bi++)
+            {
+                var b = g.Birds[bi];
+                if (string.IsNullOrEmpty(b.Species))
+                    _fieldErrors[$"tg_{gi}_bird{bi}_species"] = "Espécie obrigatória.";
+                if (string.IsNullOrWhiteSpace(b.Anilha))
+                    _fieldErrors[$"tg_{gi}_bird{bi}_anilha"] = "Anilha obrigatória.";
+            }
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model is null) return;
+        _error = null;
+        _saved = false;
+
+        ValidateFields();
+        if (_fieldErrors.Count > 0)
+        {
+            StateHasChanged();
+            await Task.Yield();
+            await JS.InvokeVoidAsync("aobFormHelpers.scrollToFirstInvalid");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var aves = new List<FormAdminService.ConvoyageAveEdit>();
+
+            foreach (var b in _individuals)
+            {
+                aves.Add(new FormAdminService.ConvoyageAveEdit(
+                    b.Serie, b.Species,
+                    string.IsNullOrEmpty(b.TipoClasse) ? "Individual" : b.TipoClasse,
+                    b.Mutation, b.Anilha, null, null));
+            }
+
+            foreach (var t in _teams)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    aves.Add(new FormAdminService.ConvoyageAveEdit(
+                        t.Serie, t.Species, "Team",
+                        t.Mutation, t.Anilhas[j], t.EquipaId, TeamPositions[j]));
+                }
+            }
+
+            var avesVenda = _sales.Select(s => new FormAdminService.ConvoyageAveVendaEdit(
+                s.Species,
+                string.IsNullOrEmpty(s.TipoClasse) ? null : s.TipoClasse,
+                s.Mutation,
+                s.FreeSpecies,
+                string.IsNullOrWhiteSpace(s.DataNascimento) ? null : s.DataNascimento,
+                s.Sexo,
+                s.Preco,
+                s.Anilha
+            )).ToList();
+
+            // Compra: destinatário é o próprio criador (mesma regra do formulário público).
+            // Vende: usa os dados preenchidos no grupo.
+            var avesTransporte = _transportGroups.SelectMany(g =>
+            {
+                var origem = string.IsNullOrWhiteSpace(g.Origem) ? "Compra" : g.Origem;
+                var destNome  = origem == "Compra" ? (_model?.NomeCompleto ?? "") : g.DestinatarioNome;
+                var destWa    = origem == "Compra" ? (_model?.Telefone ?? "")     : g.DestinatarioWhatsapp;
+                var destNotas = origem == "Compra"
+                    ? null
+                    : (string.IsNullOrWhiteSpace(g.DestinatarioNotas) ? null : g.DestinatarioNotas);
+                return g.Birds.Select(b => new FormAdminService.ConvoyageAveTransporteEdit(
+                    b.Species, origem, b.Anilha, destNome, destWa, destNotas));
+            }).ToList();
+
+            var payload = _model with { Aves = aves, AvesVenda = avesVenda, AvesTransporte = avesTransporte };
+            _error = await Forms.UpdateConvoyageAsync(Id, payload);
+            if (_error is null)
+            {
+                Nav.NavigateTo("/convoyage/inscricoes");
+                return;
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ── Local records para o estado da UI ─────────────────────────────────────
+
+    private record IndividualBird(string Species, string TipoClasse, string Serie, string Mutation, string Anilha);
+    private record TeamBird(Guid EquipaId, string Species, string Serie, string Mutation, string[] Anilhas);
+    private record SaleBird(bool FreeSpecies, string Species, string TipoClasse, string Serie, string Mutation,
+        string DataNascimento, string Sexo, decimal Preco, string Anilha);
+    private record TransportGroupBird(string Species, string Anilha);
+    private record TransportGroup(
+        string Origem,
+        string DestinatarioNome,
+        string DestinatarioWhatsapp,
+        string DestinatarioNotas,
+        List<TransportGroupBird> Birds);
+}

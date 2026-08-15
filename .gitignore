@@ -4,6 +4,10 @@
 *.user
 *.suo
 .vs/
+**/publish/
+
+# Dados privados (submissoes reais de utilizadores)
+**/PrivateData/
 
 # Node / Next.js
 **/node_modules/
@@ -58,3 +62,11 @@ _deploy/logs-*.txt
 # OS
 Thumbs.db
 .DS_Store
+
+# Claude Code local settings
+.claude/
+
+# Ficheiros de referencia de nomenclatura (source material, nao codigo)
+/nomINT*.pdf
+/nomINT*.txt
+/nomenclatura*.txt

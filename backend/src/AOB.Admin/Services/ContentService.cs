@@ -122,10 +122,18 @@ public class ContentService(AppDbContext db)
     public Task<Article?> GetArticle(int id) =>
         db.Articles.Include(a => a.Category).FirstOrDefaultAsync(a => a.Id == id);
 
+    private static readonly System.Text.RegularExpressions.Regex FirstImgSrcRx =
+        new(@"<img[^>]+src=""([^""]+)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
     public async Task SaveArticle(Article art)
     {
         if (string.IsNullOrWhiteSpace(art.Slug)) art.Slug = SlugHelper.Slugify(art.Title);
         art.Content = Sanitizer.Sanitize(art.Content ?? "");
+        if (string.IsNullOrWhiteSpace(art.CoverImagePath) && !string.IsNullOrWhiteSpace(art.Content))
+        {
+            var m = FirstImgSrcRx.Match(art.Content);
+            if (m.Success) art.CoverImagePath = m.Groups[1].Value;
+        }
         art.UpdatedAt = DateTime.UtcNow;
         if (art.IsPublished && art.PublishedAt is null) art.PublishedAt = DateTime.UtcNow;
         if (art.Id == 0)

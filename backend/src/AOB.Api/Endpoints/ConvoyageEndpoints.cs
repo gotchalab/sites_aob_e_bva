@@ -51,7 +51,8 @@ public static class ConvoyageEndpoints
             year.Description,
             year.CollectionPoints
                 .Select(p => new ConvoyageCollectionPointDto(p.Id, p.Name, p.Location))
-                .ToList()));
+                .ToList(),
+            year.RegistrationClosesAt));
     }
 
     // ── Admin ─────────────────────────────────────────────────────────────────

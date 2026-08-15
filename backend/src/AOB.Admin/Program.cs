@@ -46,6 +46,9 @@ builder.Services.AddScoped<FormAdminService>();
 builder.Services.AddScoped<SocioAdminService>();
 builder.Services.AddScoped<SponsorAdminService>();
 builder.Services.AddScoped<SiteAdminService>();
+builder.Services.AddScoped<ConvoyageAdminService>();
+builder.Services.AddScoped<NomenclatureAdminService>();
+builder.Services.AddScoped<TransportPlanAdminService>();
 builder.Services.AddHttpClient<RevalidateNotifier>();
 
 builder.Services.AddRazorComponents()
@@ -91,5 +94,6 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapAuthEndpoints();
+app.MapTransportEndpoints();
 
 app.Run();

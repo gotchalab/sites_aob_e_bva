@@ -401,6 +401,9 @@ public static class FormEndpoints
         if (activeYear is null)
             return TypedResults.BadRequest(new FormSubmissionResponse(false, "Nao ha inscricoes abertas para convoyage neste momento."));
 
+        if (activeYear.RegistrationClosesAt.HasValue && DateTime.UtcNow >= activeYear.RegistrationClosesAt.Value)
+            return TypedResults.BadRequest(new FormSubmissionResponse(false, "As inscrições para a convoyage foram encerradas."));
+
         var collectionPoint = activeYear.CollectionPoints.FirstOrDefault(p => p.Id == req.LocalRecolhaId);
         if (collectionPoint is null)
             return TypedResults.BadRequest(new FormSubmissionResponse(false, "Local de recolha invalido."));
@@ -420,6 +423,7 @@ public static class FormEndpoints
             SiteId = site.Id,
             FormType = FormType.InscricaoConvoyage,
             ConvoyageYearId = activeYear.Id,
+            LocalRecolhaId = collectionPoint.Id,
             DataJson = "{}",
             IpAddress = ip,
             UserAgent = http.Request.Headers.UserAgent.ToString(),
@@ -427,10 +431,18 @@ public static class FormEndpoints
         db.FormSubmissions.Add(submission);
         await db.SaveChangesAsync(ct);
 
+        byte[]? logoBytes = null;
+        var logoPath = Path.Combine(env.ContentRootPath, "PdfAssets", $"logo-{siteSlug}.png");
+        if (File.Exists(logoPath))
+        {
+            try { logoBytes = await File.ReadAllBytesAsync(logoPath, ct); }
+            catch (Exception ex) { log.LogWarning(ex, "Falha a carregar logo {Path}", logoPath); }
+        }
+
         byte[] pdfBytes;
         try
         {
-            pdfBytes = InscricaoConvoyagePdfGenerator.Render(site, req, submission.Id, localRecolhaLabel, activeYear.Year);
+            pdfBytes = InscricaoConvoyagePdfGenerator.Render(site, req, submission.Id, localRecolhaLabel, activeYear.Year, logoBytes);
         }
         catch (Exception ex)
         {
@@ -449,20 +461,97 @@ public static class FormEndpoints
         await File.WriteAllBytesAsync(absPath, pdfBytes, ct);
         var relPath = Path.Combine(relDir, pdfFileName).Replace('\\', '/');
 
+        var aves = req.Aves ?? new List<AveConvoyageDto>();
+        var avesVenda = req.AvesVenda ?? new List<AveVendaDto>();
+        var avesTransporte = req.AvesTransporte ?? new List<AveTransporteDto>();
+        var custos = ConvoyagePricing.Compute(aves.Count, avesVenda.Count, avesTransporte.Count, req.SocioBvaStatus);
         var stored = new
         {
             req.NomeCompleto, req.Email, req.Telefone, req.Pais,
-            req.NumeroSocioBva, req.NumeroStam, req.AceitouRegulamento,
+            req.NumeroStam, req.AceitouRegulamento,
+            req.SocioBva,
+            SocioBvaStatus = req.SocioBvaStatus.ToString(),
             LocalRecolha = localRecolhaLabel,
             ConvoyageYear = activeYear.Year,
-            TotalAves = req.Aves.Count,
-            Aves = req.Aves.Select(a => new
+            TotalAves = aves.Count,
+            Aves = aves.Select(a => new
             {
-                a.Serie, a.EspecieMutacao, a.Especie, a.TipoClasse, a.Anilha
+                a.Serie, a.EspecieMutacao, a.Especie, a.TipoClasse, a.Anilha,
+                a.EquipaId, a.PosicaoEquipa,
             }),
+            TotalAvesVenda = avesVenda.Count,
+            AvesVenda = avesVenda.Select(a => new
+            {
+                a.Especie, a.TipoClasse, a.EspecieMutacao, a.EspecieLivre,
+                a.DataNascimento,
+                Sexo = a.Sexo.ToString(),
+                a.Preco,
+                a.Anilha
+            }),
+            TotalAvesTransporte = avesTransporte.Count,
+            AvesTransporte = avesTransporte.Select(a => new
+            {
+                a.Especie,
+                Origem = a.Origem.ToString(),
+                a.Anilha,
+                a.DestinatarioNome,
+                a.DestinatarioWhatsapp,
+                a.DestinatarioNotas,
+            }),
+            Custos = new
+            {
+                custos.fixa,
+                custos.inscricoes,
+                custos.gaiolas,
+                custos.transporte,
+                custos.transporteAdquiridas,
+                custos.quota,
+                custos.total,
+                TarifaTransportePorAve = ConvoyagePricing.TransportePorAve(req.SocioBva),
+                TarifaTransporteAdquiridaPorAve = ConvoyagePricing.TransporteAdquiridaPorAve(req.SocioBva),
+            },
             PdfPath = relPath,
         };
         submission.DataJson = JsonSerializer.Serialize(stored);
+
+        // Persist structured bird entries for reporting/lookup. If a bird's
+        // Serie/EspecieMutacao doesn't match any active class in the year's
+        // nomenclature we skip it — DataJson still holds the raw snapshot.
+        if (aves.Count > 0)
+        {
+            var classesByKey = await db.NomenclatureClasses
+                .AsNoTracking()
+                .Where(c => c.NomenclatureGroup.ConvoyageYearId == activeYear.Id && c.IsActive)
+                .Select(c => new { c.Id, c.Code, c.Mutation })
+                .ToListAsync(ct);
+            var lookup = classesByKey.ToDictionary(
+                c => c.Code + "|" + c.Mutation,
+                c => c.Id);
+
+            int order = 0;
+            foreach (var ave in aves)
+            {
+                order++;
+                var key = (ave.Serie ?? "").Trim() + "|" + (ave.EspecieMutacao ?? "").Trim();
+                if (!lookup.TryGetValue(key, out var classId))
+                {
+                    log.LogWarning(
+                        "Convoyage #{Id} ave #{Order}: sem match na nomenclatura para '{Serie}' / '{Mut}'",
+                        submission.Id, order, ave.Serie, ave.EspecieMutacao);
+                    continue;
+                }
+                db.ConvoyageBirdEntries.Add(new ConvoyageBirdEntry
+                {
+                    FormSubmissionId = submission.Id,
+                    BirdOrder = order,
+                    NomenclatureClassId = classId,
+                    RingNumber = (ave.Anilha ?? "").Trim(),
+                    EquipaId = ave.EquipaId,
+                    PosicaoEquipa = ave.PosicaoEquipa,
+                });
+            }
+        }
+
         await db.SaveChangesAsync(ct);
 
         var pdfAttachment = new EmailSender.EmailAttachment(
@@ -495,7 +584,7 @@ public static class FormEndpoints
                 await email.SendAsync(
                     req.Email,
                     $"[{site.Name}] Recebemos a tua inscrição na convoyage",
-                    RenderConvoyageEmailCriador(site, req, localRecolhaLabel, activeYear.Year),
+                    RenderConvoyageEmailCriador(site, req, submission.Id, localRecolhaLabel, activeYear.Year),
                     new[] { pdfAttachment },
                     fromOverride: site.ContactEmail,
                     ct);
@@ -514,58 +603,135 @@ public static class FormEndpoints
         if (string.IsNullOrWhiteSpace(r.NomeCompleto)) return "Nome completo obrigatorio.";
         if (string.IsNullOrWhiteSpace(r.Email)) return "Email obrigatorio.";
         if (string.IsNullOrWhiteSpace(r.Pais)) return "Pais obrigatorio.";
+        if (string.IsNullOrWhiteSpace(r.NumeroStam)) return "Numero STAM obrigatorio.";
         if (!r.AceitouRegulamento) return "E necessario aceitar o regulamento.";
-        if (r.Aves is null || r.Aves.Count == 0) return "E necessario inscrever pelo menos uma ave.";
-        foreach (var (ave, i) in r.Aves.Select((a, i) => (a, i + 1)))
+        var totalAvesEnviadas = (r.Aves?.Count ?? 0) + (r.AvesVenda?.Count ?? 0) + (r.AvesTransporte?.Count ?? 0);
+        if (totalAvesEnviadas == 0) return "E necessario inscrever pelo menos uma ave (concurso, venda ou transporte).";
+        foreach (var (ave, i) in (r.Aves ?? new List<AveConvoyageDto>()).Select((a, i) => (a, i + 1)))
         {
             if (string.IsNullOrWhiteSpace(ave.Serie)) return $"Ave {i}: codigo de serie obrigatorio.";
             if (string.IsNullOrWhiteSpace(ave.EspecieMutacao)) return $"Ave {i}: especie/mutacao obrigatoria.";
             if (string.IsNullOrWhiteSpace(ave.Anilha)) return $"Ave {i}: numero de anilha obrigatorio.";
         }
+
+        // Team validation: birds that share EquipaId must be exactly 4, with
+        // distinct positions A/B/C/D and identical species/type/serie/mutation.
+        var teams = (r.Aves ?? new List<AveConvoyageDto>())
+            .Where(a => a.EquipaId is not null)
+            .GroupBy(a => a.EquipaId!.Value);
+        foreach (var team in teams)
+        {
+            var members = team.ToList();
+            if (members.Count != 4)
+                return $"Equipa {team.Key}: uma equipa tem de ter exactamente 4 aves (tem {members.Count}).";
+            var positions = members
+                .Select(m => (m.PosicaoEquipa ?? "").ToUpperInvariant())
+                .OrderBy(p => p)
+                .ToList();
+            var expected = new[] { "A", "B", "C", "D" };
+            if (!positions.SequenceEqual(expected))
+                return $"Equipa {team.Key}: posicoes devem ser A, B, C, D (recebido: {string.Join(",", positions)}).";
+            var first = members[0];
+            if (members.Any(m =>
+                m.Especie != first.Especie ||
+                m.TipoClasse != first.TipoClasse ||
+                m.Serie != first.Serie ||
+                m.EspecieMutacao != first.EspecieMutacao))
+                return $"Equipa {team.Key}: todas as aves devem partilhar especie, tipo, serie e mutacao.";
+            if (members.Any(m => m.TipoClasse != "Team"))
+                return $"Equipa {team.Key}: todas as aves devem ter tipo 'Team'.";
+        }
+        if (r.AvesVenda is { Count: > 0 })
+        {
+            foreach (var (ave, i) in r.AvesVenda.Select((a, i) => (a, i + 1)))
+            {
+                if (string.IsNullOrWhiteSpace(ave.Especie)) return $"Ave de venda {i}: especie obrigatoria.";
+                if (string.IsNullOrWhiteSpace(ave.EspecieMutacao)) return $"Ave de venda {i}: especie/mutacao obrigatoria.";
+                if (string.IsNullOrWhiteSpace(ave.Anilha)) return $"Ave de venda {i}: numero de anilha obrigatorio.";
+                if (string.IsNullOrWhiteSpace(ave.DataNascimento)) return $"Ave de venda {i}: data de nascimento obrigatoria.";
+                if (ave.Preco < 0) return $"Ave de venda {i}: preco invalido.";
+            }
+        }
+        if (r.AvesTransporte is { Count: > 0 })
+        {
+            foreach (var (ave, i) in r.AvesTransporte.Select((a, i) => (a, i + 1)))
+            {
+                if (string.IsNullOrWhiteSpace(ave.Especie)) return $"Ave de transporte {i}: especie obrigatoria.";
+                if (string.IsNullOrWhiteSpace(ave.Anilha)) return $"Ave de transporte {i}: numero de anilha obrigatorio.";
+                if (string.IsNullOrWhiteSpace(ave.DestinatarioNome)) return $"Ave de transporte {i}: nome do destinatario obrigatorio.";
+                if (string.IsNullOrWhiteSpace(ave.DestinatarioWhatsapp)) return $"Ave de transporte {i}: WhatsApp do destinatario obrigatorio.";
+            }
+        }
         return null;
     }
 
-    private static string RenderConvoyageEmailAssociacao(Site site, InscricaoConvoyageRequest r, int submissionId, string localRecolha, int year) => $"""
+    private static string RenderConvoyageEmailAssociacao(Site site, InscricaoConvoyageRequest r, int submissionId, string localRecolha, int year)
+    {
+        var header = $"""
         <h2 style="color:#1a4380;margin:0 0 8px">Nova inscrição de convoyage {year}</h2>
-        <p style="color:#666;margin:0 0 16px">Submissão #{submissionId} · {site.Name}</p>
+        <p style="color:#666;margin:0 0 16px">Submissão #{submissionId} · {H(site.Name)}</p>
+        """;
+        return header + RenderConvoyageBody(site, r, localRecolha, year, forCriador: false);
+    }
 
-        <h3>Dados do criador</h3>
+    private static string RenderConvoyageEmailCriador(Site site, InscricaoConvoyageRequest r, int submissionId, string localRecolha, int year)
+    {
+        var header = $"""
+        <p>Olá {H(r.NomeCompleto)},</p>
+        <p>Recebemos a tua inscrição na convoyage {year} da <b>{H(site.Name)}</b>. Segue em baixo o resumo dos dados que submeteste; o detalhe completo das aves e dos custos vai em anexo (PDF).</p>
+        <p style="color:#666;margin:0 0 16px;font-size:12px">Referência: submissão #{submissionId}</p>
+        """;
+        var footer = $"""
+        <p style="margin-top:20px">Cumprimentos,<br/>{H(site.Name)}</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
+        <p style="color:#888;font-size:12px">Este é um email automático. Se não foste tu a submeter esta inscrição, por favor contacta-nos.</p>
+        """;
+        return header + RenderConvoyageBody(site, r, localRecolha, year, forCriador: true) + footer;
+    }
+
+    private static string RenderConvoyageBody(Site site, InscricaoConvoyageRequest r, string localRecolha, int year, bool forCriador)
+    {
+        var totalAves = r.Aves?.Count ?? 0;
+        var totalVenda = r.AvesVenda?.Count ?? 0;
+        var totalTransporte = r.AvesTransporte?.Count ?? 0;
+
+        var dadosHeader = forCriador ? "Dados submetidos" : "Dados do criador";
+
+        var pagamento = forCriador
+            ? "<div style=\"margin-top:12px;padding:10px 12px;background:#fff8e1;border-left:4px solid #f5a623;font-size:13px\"><b>Pagamento:</b> deve ser feito no valor certo, em dinheiro, num envelope fechado, e entregue juntamente com as aves.</div>"
+            : "";
+
+        var notasTransporte = totalTransporte > 0
+            ? "<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f5a623;font-size:12px\"><b>Notas sobre as aves de compra/venda:</b><ul style=\"margin:6px 0 0 18px;padding:0\"><li><b>Chegada prevista: 12h (hora belga).</b> O destinatário tem obrigatoriamente de estar presente a essa hora para receber as aves — <b>não há condições para as guardar por mais tempo</b>.</li><li>Sujeito a validação — limite total de <b>400 aves para transporte</b>, prioridade para aves de exposição. Confirmação por email <b>após o fecho das inscrições</b>.</li></ul></div>"
+            : "";
+
+        var anexoNota = forCriador
+            ? "<p style=\"margin-top:16px;color:#666;font-size:12px\">Vai anexo o PDF com o detalhe completo das aves e o resumo de custos. Guarda-o para tua referência.</p>"
+            : "<p style=\"margin-top:16px;color:#666;font-size:12px\">O detalhe das aves e o resumo de custos estão no PDF em anexo.</p>";
+
+        return $"""
+        <h3>{dadosHeader}</h3>
         <table cellpadding="4" style="border-collapse:collapse;font-size:13px">
           <tr><td><b>Nome:</b></td><td>{H(r.NomeCompleto)}</td></tr>
           <tr><td><b>País:</b></td><td>{H(r.Pais)}</td></tr>
           <tr><td><b>Email:</b></td><td>{H(r.Email)}</td></tr>
           <tr><td><b>Telefone:</b></td><td>{H(r.Telefone)}</td></tr>
-          <tr><td><b>Nº sócio BVA:</b></td><td>{H(r.NumeroSocioBva)}</td></tr>
           <tr><td><b>Nº STAM:</b></td><td>{H(r.NumeroStam)}</td></tr>
-          <tr><td><b>Local de recolha:</b></td><td>{H(localRecolha)}</td></tr>
+          <tr><td valign="top"><b>Local de recolha:</b></td><td>{H(localRecolha)}<br/><span style="color:#b45309;font-size:12px">Contacta o responsável do ponto de recolha para combinar a hora de entrega das aves.</span></td></tr>
         </table>
 
-        <h3>Aves inscritas ({r.Aves.Count})</h3>
-        <table cellpadding="4" style="border-collapse:collapse;font-size:12px;border:1px solid #ccc">
-          <tr style="background:#1a4380;color:white">
-            <th>Nº Série/Classe</th><th>Espécies e Mutação</th><th>Anilha</th>
-          </tr>
-          {string.Join("", r.Aves.Select((a, i) => $"""
-          <tr style="background:{(i % 2 == 0 ? "#f9f9f9" : "white")}">
-            <td>{H(a.Serie)}</td>
-            <td>{H(a.EspecieMutacao)}</td>
-            <td>{H(a.Anilha)}</td>
-          </tr>
-          """))}
+        <h3>Resumo</h3>
+        <table cellpadding="4" style="border-collapse:collapse;font-size:13px">
+          <tr><td><b>Aves para concurso:</b></td><td>{totalAves}</td></tr>
+          {(totalVenda > 0 ? $"<tr><td><b>Aves para venda:</b></td><td>{totalVenda}</td></tr>" : "")}
+          {(totalTransporte > 0 ? $"<tr><td><b>Aves para transporte (compra/venda):</b></td><td>{totalTransporte} <span style=\"color:#b45309\">(sujeitas a validação de espaço)</span></td></tr>" : "")}
         </table>
 
-        <p style="margin-top:16px;color:#666;font-size:12px">O PDF com a ficha completa está anexo a este email.</p>
+        {notasTransporte}
+        {pagamento}
+        {anexoNota}
         """;
-
-    private static string RenderConvoyageEmailCriador(Site site, InscricaoConvoyageRequest r, string localRecolha, int year) => $"""
-        <p>Olá {H(r.NomeCompleto)},</p>
-        <p>Recebemos a tua inscrição na convoyage {year} da <b>{H(site.Name)}</b> com <b>{r.Aves.Count} {(r.Aves.Count == 1 ? "ave inscrita" : "aves inscritas")}</b>.</p>
-        <p><b>Local de recolha:</b> {H(localRecolha)}</p>
-        <p>Vai anexo o PDF com todos os dados da inscrição. Guarda-o para tua referência.</p>
-        <p style="margin-top:20px">Cumprimentos,<br/>{H(site.Name)}</p>
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
-        <p style="color:#888;font-size:12px">Este é um email automático. Se não foste tu a submeter esta inscrição, por favor contacta-nos.</p>
-        """;
+    }
 
     private static string H(string? s) => System.Net.WebUtility.HtmlEncode(s ?? "");
 

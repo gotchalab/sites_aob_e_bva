@@ -178,6 +178,7 @@ try
     app.MapPublic().RequireRateLimiting("public");
     app.MapForms().RequireRateLimiting("forms");
     app.MapConvoyage();
+    app.MapNomenclature();
     app.MapAuth();
     app.MapMe();
     app.MapRevalidate();

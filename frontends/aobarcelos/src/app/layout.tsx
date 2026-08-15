@@ -4,7 +4,8 @@ import "./globals.css";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { OrgJsonLd } from "@/components/org-json-ld";
-import { api } from "@/lib/api";
+import { AnnouncementBar } from "@/components/home/announcement-bar";
+import { api, parseAnnouncement } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 
 const inter = Inter({
@@ -47,11 +48,13 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const site = await api.site().catch(() => null);
+  const announcement = parseAnnouncement(site);
   return (
     <html lang="pt-PT" className={`${inter.variable} ${playfair.variable}`}>
       <head>
-        <link rel="preconnect" href={API_URL} crossOrigin="anonymous" />
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL} crossOrigin="anonymous" />
         <OrgJsonLd />
       </head>
       <body className="flex min-h-screen flex-col overflow-x-clip bg-cream-50 text-earth-900 antialiased">
@@ -61,6 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Saltar para o conteúdo
         </a>
+        <AnnouncementBar announcement={announcement} />
         <Header />
         <main id="main" className="flex-1">
           {children}

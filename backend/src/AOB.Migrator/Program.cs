@@ -42,6 +42,7 @@ builder.Services.AddScoped<PatchBvaHomeCommand>();
 builder.Services.AddScoped<GenerateRedirectsCommand>();
 builder.Services.AddSingleton<ExternalImageDownloader>();
 builder.Services.AddScoped<FixExternalImagesCommand>();
+builder.Services.AddScoped<SeedNomenclature2026Command>();
 
 var host = builder.Build();
 
@@ -56,6 +57,24 @@ switch (cmd)
     case "ping":
         await Ping(host, log, opts);
         break;
+    case "db-update":
+    {
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+        if (pending.Count == 0)
+        {
+            log.LogInformation("Nenhuma migração pendente.");
+        }
+        else
+        {
+            log.LogInformation("A aplicar {N} migrações: {List}",
+                pending.Count, string.Join(", ", pending));
+            await db.Database.MigrateAsync();
+            log.LogInformation("Migrações aplicadas.");
+        }
+        break;
+    }
     case "seed":
         await RunScoped<SeedCommand>(host, c => c.RunAsync());
         break;
@@ -80,10 +99,36 @@ switch (cmd)
     case "articles-fix-external-images":
         await RunScoped<FixExternalImagesCommand>(host, c => c.RunAsync());
         break;
+    case "seed-nomenclature-2026":
+        await RunScoped<SeedNomenclature2026Command>(host, c => c.RunAsync());
+        break;
+    case "nom-rename-group":
+    {
+        // uso: nom-rename-group "Grupo de Estudo" "Study Group"
+        if (args.Length < 3)
+        {
+            log.LogError("Uso: nom-rename-group <nome-actual> <novo-nome>");
+            break;
+        }
+        var fromName = args[1];
+        var toName = args[2];
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var groups = await db.NomenclatureGroups
+            .Where(g => g.DisplayName == fromName)
+            .ToListAsync();
+        foreach (var g in groups) g.DisplayName = toName;
+        var affected = await db.SaveChangesAsync();
+        log.LogInformation(
+            "Renomeados {N} grupos de '{From}' para '{To}'.",
+            groups.Count, fromName, toName);
+        break;
+    }
     default:
         Console.WriteLine("""
             Comandos disponiveis:
               ping                    - testa conexao SSH + MariaDB VPS + Postgres local
+              db-update               - aplica migrações EF Core pendentes à BD Postgres local
               seed                    - insere sites e user admin base
               seed-socios             - cria sócios de teste (aob+bva) com user Identity + quotas
               migrate categories      - migra categorias (aob+bva)
@@ -96,6 +141,8 @@ switch (cmd)
               home-content-seed       - pré-popula Site.HomeConfig.mission a partir das categorias 'quem somos'
               patch-bva-home          - força actualização das áreas e CTA do site BVA na BD
               articles-fix-external-images - varre artigos, faz download de imagens externas para local e reescreve refs
+              seed-nomenclature-2026  - popula nomenclatura BVA INT 2026 (grupos + classes) para o site bva
+              nom-rename-group <de> <para> - renomeia display name de grupos de nomenclatura
             """);
         break;
 }

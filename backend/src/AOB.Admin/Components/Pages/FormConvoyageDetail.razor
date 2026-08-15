@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject FormAdminService Forms
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 @if (_form is null)
@@ -17,7 +18,7 @@ else
     <PageTitle>Inscrição Convoyage #@Id · AOB</PageTitle>
 
     <div class="d-flex align-items-center gap-2 mb-1">
-        <a href="/formularios" class="btn btn-sm btn-outline-secondary">← Lista</a>
+        <a href="/convoyage/inscricoes" class="btn btn-sm btn-outline-secondary">← Lista</a>
     </div>
 
     <div class="d-flex justify-content-between align-items-start mb-4 mt-3">
@@ -31,16 +32,14 @@ else
                 · Convoyage @_data.ConvoyageYear
             </div>
         </div>
-        @if (!string.IsNullOrWhiteSpace(_data.PdfPath))
-        {
-            <a class="btn btn-outline-primary" href="/formularios/@Id/pdf" target="_blank">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16">
-                    <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5z"/>
-                    <path d="M4.603 14.087a.8.8 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.7 7.7 0 0 1 1.482-.645 20 20 0 0 0 1.062-2.227 7.3 7.3 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.188-.012.396-.047.614-.084.51-.27 1.134-.52 1.794a11 11 0 0 0 .98 1.686 5.8 5.8 0 0 1 1.334.05c.364.065.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.86.86 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.7 5.7 0 0 1-.911-.95 11.7 11.7 0 0 0-1.997.406 11.3 11.3 0 0 1-1.02 1.51c-.292.35-.609.656-.927.787a.8.8 0 0 1-.58.029m1.379-1.901q-.25.115-.459.238c-.328.194-.541.383-.647.547-.094.145-.096.25-.04.361q.016.032.026.044l.035-.012c.137-.056.355-.235.635-.572a8 8 0 0 0 .45-.606m1.64-1.33a13 13 0 0 1 1.01-.193 12 12 0 0 1-.51-.858 21 21 0 0 1-.5 1.05zm2.446.45q.226.244.435.41c.24.19.407.253.498.256a.1.1 0 0 0 .07-.015.3.3 0 0 0 .094-.106.9.9 0 0 0 .059-.248.17.17 0 0 0-.037-.09c-.06-.074-.17-.14-.33-.17a5 5 0 0 0-.88-.02zm-3.444-2.814c.197.037.386.097.57.188a5.1 5.1 0 0 0-.198-1.143.7.7 0 0 0-.031-.1.4.4 0 0 0-.142.054c-.168.086-.3.23-.347.463-.038.18-.025.437.044.817a5 5 0 0 0 .104-.279"/>
-                </svg>
-                Ver PDF
-            </a>
-        }
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="/formularios/@Id/edit">Editar</a>
+            @if (!string.IsNullOrWhiteSpace(_data.PdfPath))
+            {
+                <a class="btn btn-outline-primary" href="/formularios/@Id/pdf" target="_blank">Ver PDF</a>
+            }
+            <button class="btn btn-outline-danger" @onclick="DeleteAsync">Eliminar</button>
+        </div>
     </div>
 
     @* ── 1. Dados do criador ── *@
@@ -67,8 +66,8 @@ else
                     <div>@(_data.Telefone ?? "—")</div>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label text-muted small mb-0">Nº sócio BVA</label>
-                    <div>@(_data.NumeroSocioBva ?? "—")</div>
+                    <label class="form-label text-muted small mb-0">Situação BVA</label>
+                    <div>@FormatSocioBvaStatus(_data.SocioBvaStatus, _data.SocioBva)</div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label text-muted small mb-0">Nº STAM</label>
@@ -82,10 +81,10 @@ else
         </div>
     </div>
 
-    @* ── 2. Aves inscritas ── *@
+    @* ── 2. Aves inscritas a concurso ── *@
     <div class="card mb-4 shadow-sm">
         <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
-            <span>2. Aves inscritas</span>
+            <span>2. Aves inscritas a concurso</span>
             <span class="badge bg-light text-primary fs-6">@_data.Aves.Count ave@(_data.Aves.Count == 1 ? "" : "s")</span>
         </div>
         <div class="card-body p-0">
@@ -128,9 +127,199 @@ else
         </div>
     </div>
 
-    @* ── 3. Gestão ── *@
+    @* ── 3. Aves para venda ── *@
+    @if (_data.AvesVenda.Count > 0)
+    {
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+                <span>3. Aves para venda</span>
+                <span class="badge bg-light text-primary fs-6">
+                    @_data.AvesVenda.Count ave@(_data.AvesVenda.Count == 1 ? "" : "s")
+                    · @($"{_data.AvesVenda.Sum(a => a.Preco):0.00}") €
+                </span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">#</th>
+                                <th>Data Nasc.</th>
+                                <th>Sexo</th>
+                                <th>Espécie e Mutação</th>
+                                <th>Preço</th>
+                                <th>Anilha</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{int vidx = 0;}
+                            @foreach (var ave in _data.AvesVenda)
+                            {
+                                vidx++;
+                                <tr>
+                                    <td class="ps-3 text-muted small">@vidx</td>
+                                    <td class="small">@(string.IsNullOrWhiteSpace(ave.DataNascimento) ? "—" : ave.DataNascimento)</td>
+                                    <td class="small">@FormatSexo(ave.Sexo)</td>
+                                    <td class="small">
+                                        @ave.EspecieMutacao
+                                        @if (ave.EspecieLivre)
+                                        {
+                                            <span class="badge bg-secondary ms-1" style="font-size:0.7em">livre</span>
+                                        }
+                                    </td>
+                                    <td class="small font-monospace">@($"{ave.Preco:0.00}") €</td>
+                                    <td class="font-monospace small">@ave.Anilha</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ── Aves para transporte (compra/venda) ── *@
+    @if (_data.AvesTransporte.Count > 0)
+    {
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+                <span>@TransporteIdx. Aves para transporte (compra/venda)</span>
+                <span class="badge bg-light text-primary fs-6">
+                    @_data.AvesTransporte.Count ave@(_data.AvesTransporte.Count == 1 ? "" : "s")
+                </span>
+            </div>
+            <div class="card-body p-3">
+                <p class="small text-muted mb-2">
+                    Aves que o criador compra ou vende — não entram no concurso BVA Masters nem na sala de vendas da BVA.
+                </p>
+                <div class="alert alert-warning py-2 px-3 small mb-3">
+                    <ul class="mb-0 ps-3">
+                        <li>
+                            <b>Chegada prevista: 12h (hora belga).</b> O destinatário tem obrigatoriamente
+                            de estar presente no local a essa hora para receber as aves —
+                            <b>não há condições para as guardar por mais tempo</b>.
+                        </li>
+                        <li>
+                            <b>Sujeito a validação de espaço:</b> limite total de <b>400 aves para transporte</b>;
+                            prioridade para aves de exposição (concurso e sala de vendas BVA).
+                            Aves de compra/venda só entram se restar espaço. Confirmação por email
+                            <b>após o fecho das inscrições</b>.
+                        </li>
+                    </ul>
+                </div>
+                @{
+                    var grupos = _data.AvesTransporte
+                        .GroupBy(a => (Nome: (a.DestinatarioNome ?? "").Trim(), Wa: (a.DestinatarioWhatsapp ?? "").Trim(), Notas: (a.DestinatarioNotas ?? "").Trim()))
+                        .OrderBy(g => g.Key.Nome);
+                }
+                @foreach (var g in grupos)
+                {
+                    <div class="border rounded p-2 mb-3">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <span class="fw-semibold">Destinatário:</span>
+                            <span>@(string.IsNullOrWhiteSpace(g.Key.Nome) ? "—" : g.Key.Nome)</span>
+                            <span class="text-muted">·</span>
+                            <span class="text-muted small">WhatsApp:</span>
+                            <span class="font-monospace small">@(string.IsNullOrWhiteSpace(g.Key.Wa) ? "—" : g.Key.Wa)</span>
+                            <span class="badge bg-secondary ms-auto">@g.Count() ave@(g.Count() == 1 ? "" : "s")</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(g.Key.Notas))
+                        {
+                            <div class="mb-2 small text-muted">
+                                <span class="fw-semibold">Notas:</span> @g.Key.Notas
+                            </div>
+                        }
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:40px">#</th>
+                                        <th style="width:120px">Origem</th>
+                                        <th>Espécie</th>
+                                        <th style="width:220px">Anilha</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{int gtidx = 0;}
+                                    @foreach (var ave in g)
+                                    {
+                                        gtidx++;
+                                        <tr>
+                                            <td class="text-muted small">@gtidx</td>
+                                            <td class="small">@FormatOrigem(ave.Origem)</td>
+                                            <td class="small">@FormatEspecie(ave.Especie)</td>
+                                            <td class="font-monospace small">@ave.Anilha</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Resumo de custos ── *@
     <div class="card mb-4 shadow-sm">
-        <div class="card-header fw-semibold">3. Gestão</div>
+        <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>@CustosIdx. Resumo de custos</span>
+            <span class="badge bg-light text-primary fs-6">@($"{CustoTotal:0.00}") €</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table mb-0">
+                <tbody>
+                    @if (CustoInscricao > 0m)
+                    {
+                        <tr>
+                            <td>Inscrição na exposição</td>
+                            <td class="text-end font-monospace">@($"{CustoInscricao:0.00}") €</td>
+                        </tr>
+                    }
+                    @if (_data.Aves.Count > 0)
+                    {
+                        <tr>
+                            <td>Inscrição por ave · @_data.Aves.Count × 3,00 €</td>
+                            <td class="text-end font-monospace">@($"{CustoAves:0.00}") €</td>
+                        </tr>
+                    }
+                    @if (TotalAvesConcursoVenda > 0)
+                    {
+                        <tr>
+                            <td>Aluguer de gaiola · @TotalAvesConcursoVenda × 3,00 €</td>
+                            <td class="text-end font-monospace">@($"{CustoGaiolas:0.00}") €</td>
+                        </tr>
+                        <tr>
+                            <td>Transporte @(_data.SocioBva ? "(sócio BVA)" : "(não-sócio)") · @TotalAvesConcursoVenda × @($"{Tarifa:0.00}") €</td>
+                            <td class="text-end font-monospace">@($"{CustoTransporte:0.00}") €</td>
+                        </tr>
+                    }
+                    @if (_data.AvesTransporte.Count > 0)
+                    {
+                        <tr>
+                            <td>Transporte de aves adquiridas/cedidas @(_data.SocioBva ? "(sócio BVA)" : "(não-sócio)") · @_data.AvesTransporte.Count × @($"{TarifaAdquiridas:0.00}") €</td>
+                            <td class="text-end font-monospace">@($"{CustoTransporteAdquiridas:0.00}") €</td>
+                        </tr>
+                    }
+                    @if (CustoQuota > 0m)
+                    {
+                        <tr>
+                            <td>Quota BVA Portugal</td>
+                            <td class="text-end font-monospace">@($"{CustoQuota:0.00}") €</td>
+                        </tr>
+                    }
+                    <tr class="table-light fw-bold">
+                        <td>TOTAL a pagar</td>
+                        <td class="text-end font-monospace">@($"{CustoTotal:0.00}") €</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* ── Gestão ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold">@GestaoIdx. Gestão</div>
         <div class="card-body">
             <div class="row g-3 align-items-end">
                 <div class="col-md-auto">
@@ -180,6 +369,24 @@ else
     private string _statusLabel = "";
     private string _statusCls = "";
 
+    private int TotalAvesConcursoVenda => (_data?.Aves.Count ?? 0) + (_data?.AvesVenda.Count ?? 0);
+    private int NumAvesTransporte => _data?.AvesTransporte.Count ?? 0;
+    private decimal Tarifa => (_data?.SocioBva ?? false) ? 5.50m : 15.50m;
+    private decimal TarifaAdquiridas => (_data?.SocioBva ?? false) ? 15.50m : 20.50m;
+    private decimal CustoInscricao => TotalAvesConcursoVenda > 0 ? 8.00m : 0m;
+    private decimal CustoAves => 3.00m * (_data?.Aves.Count ?? 0);
+    private decimal CustoGaiolas => 3.00m * TotalAvesConcursoVenda;
+    private decimal CustoTransporte => Tarifa * TotalAvesConcursoVenda;
+    private decimal CustoTransporteAdquiridas => TarifaAdquiridas * NumAvesTransporte;
+    private decimal CustoQuota => _data?.SocioBvaStatus == "PagaComInscricao" ? 40.00m : 0m;
+    private decimal CustoTotal => CustoInscricao + CustoAves + CustoGaiolas + CustoTransporte + CustoTransporteAdquiridas + CustoQuota;
+
+    private int SectionsBeforeCustos =>
+        2 + ((_data?.AvesVenda.Count ?? 0) > 0 ? 1 : 0) + (NumAvesTransporte > 0 ? 1 : 0);
+    private string TransporteIdx => ((_data?.AvesVenda.Count ?? 0) > 0 ? 4 : 3).ToString();
+    private string CustosIdx => (SectionsBeforeCustos + 1).ToString();
+    private string GestaoIdx => (SectionsBeforeCustos + 2).ToString();
+
     protected override async Task OnInitializedAsync()
     {
         _form = await Forms.GetAsync(Id);
@@ -221,17 +428,28 @@ else
         UpdateStatusBadge();
     }
 
+    private async Task DeleteAsync()
+    {
+        if (_form is null) return;
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar inscrição #{Id}? Esta ação é irreversível e apaga também o PDF associado.");
+        if (!ok) return;
+
+        await Forms.DeleteAsync(_form.Id);
+        Nav.NavigateTo("/convoyage/inscricoes");
+    }
+
     private static string FormatEspecie(string? raw) => raw switch
     {
-        "agapornis_roseicollis" => "Agapornis Roseicollis",
-        "agapornis_fischeri"    => "Agapornis Fischeri",
-        "agapornis_personatus"  => "Agapornis Personatus",
-        "agapornis_nigrigenis"  => "Agapornis Nigrigenis",
-        "agapornis_lilianae"    => "Agapornis Lilianae",
-        "agapornis_taranta"     => "Agapornis Taranta",
-        "agapornis_canus"       => "Agapornis Canus",
-        "agapornis_pullarius"   => "Agapornis Pullarius",
-        "agapornis_swindernianus" => "Agapornis Swindernianus",
+        "agapornis_roseicollis" or "Roseicollis" => "A. roseicollis",
+        "agapornis_fischeri"    or "Fischeri"    => "A. fischeri",
+        "agapornis_personatus"  or "Personatus"  => "A. personatus",
+        "agapornis_nigrigenis"  or "Nigrigenis"  => "A. nigrigenis",
+        "agapornis_lilianae"    or "Lilianae"    => "A. lilianae",
+        "agapornis_taranta"     or "Taranta"     => "A. taranta",
+        "agapornis_canus"       or "Canus"       => "A. canus",
+        "agapornis_pullarius"   or "Pullarius"   => "A. pullarius",
+        "agapornis_swindernianus" or "Swindernianus" => "A. swindernianus",
         _ => raw?.Replace('_', ' ') ?? "—"
     };
 
@@ -240,6 +458,16 @@ else
         "show"       => "Show",
         "individual" => "Individual",
         _ => raw ?? "—"
+    };
+
+    private static string FormatSexo(string? raw) => raw switch
+    {
+        "Macho"      => "Macho",
+        "Femea"      => "Fêmea",
+        "Indefinido" => "Indefinido",
+        "M"          => "Macho",
+        "F"          => "Fêmea",
+        _            => raw ?? "—"
     };
 
     private static ConvoyageData? ParseData(string json)
@@ -251,6 +479,7 @@ else
 
             string? S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
             int I(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetInt32() : 0;
+            bool B(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.True;
 
             var aves = new List<AveData>();
             if (r.TryGetProperty("Aves", out var avesEl) && avesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -262,18 +491,76 @@ else
                 }
             }
 
+            var avesVenda = new List<AveVendaData>();
+            if (r.TryGetProperty("AvesVenda", out var avEl) && avEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var a in avEl.EnumerateArray())
+                {
+                    string? AS(string k) => a.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+                    bool AB(string k) => a.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.True;
+                    decimal AD(string k) => a.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetDecimal() : 0m;
+                    avesVenda.Add(new AveVendaData(
+                        AS("Especie"), AS("TipoClasse"), AS("EspecieMutacao"), AB("EspecieLivre"),
+                        AS("DataNascimento"), AS("Sexo"), AD("Preco"), AS("Anilha")));
+                }
+            }
+
+            var avesTransporte = new List<AveTransporteData>();
+            if (r.TryGetProperty("AvesTransporte", out var atEl) && atEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var a in atEl.EnumerateArray())
+                {
+                    string? AS(string k) => a.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+                    bool AB(string k) => a.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.True;
+                    avesTransporte.Add(new AveTransporteData(
+                        AS("Especie"),
+                        AS("Origem"), AS("Anilha"),
+                        AS("DestinatarioNome"), AS("DestinatarioWhatsapp"),
+                        AS("DestinatarioNotas")));
+                }
+            }
+
             return new ConvoyageData(
                 S("NomeCompleto"), S("Email"), S("Telefone"), S("Pais"),
-                S("NumeroSocioBva"), S("NumeroStam"), S("LocalRecolha"),
-                I("ConvoyageYear"), S("PdfPath"), aves);
+                S("NumeroStam"), S("LocalRecolha"),
+                I("ConvoyageYear"), S("PdfPath"), B("SocioBva"), S("SocioBvaStatus"), aves, avesVenda, avesTransporte);
         }
         catch { return null; }
     }
 
+    private static string FormatOrigem(string? raw) => raw switch
+    {
+        "Compra"    => "Compra",
+        "Vende"     => "Vende",
+        // legado (dados antigos)
+        "Adquirida" => "Compra",
+        "Cedida"    => "Vende",
+        _            => raw ?? "—"
+    };
+
+    private static string FormatSocioBvaStatus(string? status, bool socioBva) => status switch
+    {
+        "JaSocio"          => "Sócio BVA (quotas pagas)",
+        "PagaComInscricao" => "Vai pagar quota BVA com esta inscrição",
+        "NaoSocio"         => "Não sócio BVA",
+        _                   => socioBva ? "Sócio BVA (quotas pagas)" : "Não sócio BVA",
+    };
+
     private record AveData(string? Serie, string? Especie, string? TipoClasse, string? EspecieMutacao, string? Anilha);
+
+    private record AveVendaData(
+        string? Especie, string? TipoClasse, string? EspecieMutacao, bool EspecieLivre,
+        string? DataNascimento, string? Sexo, decimal Preco, string? Anilha);
+
+    private record AveTransporteData(
+        string? Especie,
+        string? Origem, string? Anilha,
+        string? DestinatarioNome, string? DestinatarioWhatsapp,
+        string? DestinatarioNotas);
 
     private record ConvoyageData(
         string? NomeCompleto, string? Email, string? Telefone, string? Pais,
-        string? NumeroSocioBva, string? NumeroStam, string? LocalRecolha,
-        int ConvoyageYear, string? PdfPath, List<AveData> Aves);
+        string? NumeroStam, string? LocalRecolha,
+        int ConvoyageYear, string? PdfPath, bool SocioBva, string? SocioBvaStatus,
+        List<AveData> Aves, List<AveVendaData> AvesVenda, List<AveTransporteData> AvesTransporte);
 }

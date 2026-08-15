@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { api, parseAnnouncement, parseHomeConfig } from "@/lib/api";
-import { AnnouncementBar } from "@/components/home/announcement-bar";
+import { api, parseHomeConfig } from "@/lib/api";
 import { HeroSection } from "@/components/home/hero-section";
 import { StatsBar } from "@/components/home/stats-bar";
 import { MissionBlock } from "@/components/home/mission-block";
@@ -32,7 +31,6 @@ export default async function HomePage() {
   ]);
 
   const home = parseHomeConfig(site);
-  const announcement = parseAnnouncement(site);
 
   // Se há featured, o hero mostra o primeiro featured; se não, mostra o mais recente.
   const heroFeatured = featuredList.items[0] ?? recentList.items[0] ?? null;
@@ -41,7 +39,6 @@ export default async function HomePage() {
 
   return (
     <>
-      <AnnouncementBar announcement={announcement} />
       <HeroSection site={site} home={home} featured={heroFeatured} />
       <NewsGrid items={recent} total={recentList.total} />
       <StatsBar home={home} />

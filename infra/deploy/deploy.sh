@@ -77,21 +77,31 @@ deploy_infra() {
     rsync -az --delete "$REPO_ROOT/infra/" "$SSH_TARGET:/opt/aob/infra/"
     ssh "$SSH_TARGET" '
         sudo cp /opt/aob/infra/systemd/*.service /etc/systemd/system/
-        sudo cp /opt/aob/infra/nginx/*.conf /etc/nginx/sites-available/ 2>/dev/null || true
+        # Sites (vhosts)
+        for f in /opt/aob/infra/nginx/*.pt.conf; do
+            sudo cp "$f" /etc/nginx/sites-available/
+        done
+        # Snippet partilhado (contexto server)
         sudo mkdir -p /etc/nginx/snippets
         [[ -f /opt/aob/infra/nginx/_common.conf ]] && \
             sudo cp /opt/aob/infra/nginx/_common.conf /etc/nginx/snippets/aob-common.conf
-        for c in aobarcelos.pt bva-p.aobarcelos.pt api.aobarcelos.pt admin.aobarcelos.pt bva-p-socios.aobarcelos.pt; do
-            [[ -f /etc/nginx/sites-available/$c.conf ]] && \
-                sudo ln -sf /etc/nginx/sites-available/$c.conf /etc/nginx/sites-enabled/$c.conf
-        done
+        # Zonas de rate limit (contexto http)
+        sudo mkdir -p /etc/nginx/conf.d
+        [[ -f /opt/aob/infra/nginx/aob-zones.conf ]] && \
+            sudo cp /opt/aob/infra/nginx/aob-zones.conf /etc/nginx/conf.d/aob-zones.conf
+        # Mapas de redirect legacy
         [[ -f /opt/aob/infra/nginx/redirects.aob.map ]] && \
             sudo cp /opt/aob/infra/nginx/redirects.aob.map /etc/nginx/
         [[ -f /opt/aob/infra/nginx/redirects.bva.map ]] && \
             sudo cp /opt/aob/infra/nginx/redirects.bva.map /etc/nginx/
+        # Symlinks sites-enabled
+        for c in aobarcelos.pt bva-p.aobarcelos.pt api.aobarcelos.pt admin.aobarcelos.pt bva-p-socios.aobarcelos.pt; do
+            [[ -f /etc/nginx/sites-available/$c.conf ]] && \
+                sudo ln -sf /etc/nginx/sites-available/$c.conf /etc/nginx/sites-enabled/$c.conf
+        done
         sudo rm -f /etc/nginx/sites-enabled/default
         sudo systemctl daemon-reload
-        sudo nginx -t && sudo systemctl reload nginx
+        sudo nginx -t  # apenas valida; o 'services' arranca nginx apos parar Apache2
     '
 }
 

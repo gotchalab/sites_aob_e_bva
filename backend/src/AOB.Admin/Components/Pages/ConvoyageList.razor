@@ -1,0 +1,590 @@
+@page "/convoyage"
+@attribute [Authorize]
+@inject ConvoyageAdminService Convoyage
+@inject TransportPlanAdminService Plans
+@inject ContentService Content
+@inject AppDbContext Db
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Convoyage · AOB</PageTitle>
+
+<h1 class="h3 mb-3">Convoyage</h1>
+
+<div class="row g-2 mb-4">
+    <div class="col-md-3">
+        <select class="form-select" @bind="SelectedSiteId" @bind:after="ReloadAsync">
+            @foreach (var s in AllSites)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+</div>
+
+@* ── Criar novo ano ── *@
+<div class="card mb-4 shadow-sm">
+    <div class="card-header fw-semibold">Novo ano de convoyage</div>
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-1">Ano *</label>
+                <input type="number" class="form-control" @bind="_newYear" min="2020" max="2100" />
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small text-muted mb-1">Descrição (opcional)</label>
+                <input class="form-control" @bind="_newDescription" placeholder="ex: BVA Masters Gent 2026" />
+            </div>
+            <div class="col-md-auto">
+                <button class="btn btn-primary" @onclick="CreateYearAsync"
+                        disabled="@(_saving || _newYear < 2020)">
+                    Criar
+                </button>
+            </div>
+        </div>
+        @if (_createError is not null)
+        {
+            <div class="alert alert-danger mt-2 mb-0 py-2 small">@_createError</div>
+        }
+    </div>
+</div>
+
+@if (_deleteError is not null)
+{
+    <div class="alert alert-danger py-2 small">@_deleteError</div>
+}
+
+@* ── Lista de anos ── *@
+@if (Years is null)
+{
+    <p class="text-muted">A carregar...</p>
+}
+else if (Years.Count == 0)
+{
+    <p class="text-muted">Sem anos de convoyage configurados para este site.</p>
+}
+else
+{
+    @foreach (var y in Years)
+    {
+        <div class="card mb-3 shadow-sm @(y.IsActive ? "border-success" : "")">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="fw-bold fs-5">@y.Year</span>
+                    @if (y.IsActive)
+                    {
+                        <span class="badge bg-success">Ativo</span>
+                    }
+                    <span class="text-muted small">
+                        @y.TotalInscricoes inscrição@(y.TotalInscricoes == 1 ? "" : "ões")
+                    </span>
+                    @if (!string.IsNullOrEmpty(y.Description))
+                    {
+                        <span class="text-muted small">· @y.Description</span>
+                    }
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0">
+                    @if (!y.IsActive)
+                    {
+                        <button class="btn btn-sm btn-outline-success"
+                                @onclick="() => ActivateAsync(y.Id)"
+                                disabled="@_saving">
+                            Ativar
+                        </button>
+                    }
+                    <a class="btn btn-sm btn-outline-secondary"
+                       href="@($"/convoyage/inscricoes/{y.Id}")">
+                        Ver inscrições
+                    </a>
+                    <a class="btn btn-sm btn-outline-primary"
+                       href="@($"/convoyage/{y.Id}/transportes")">
+                        Transportes
+                    </a>
+                    @if (!y.IsActive && y.TotalInscricoes == 0)
+                    {
+                        <button class="btn btn-sm btn-outline-danger"
+                                @onclick="() => DeleteYearAsync(y.Id, y.Year)"
+                                disabled="@_saving"
+                                title="Eliminar ano">
+                            Eliminar
+                        </button>
+                    }
+                </div>
+            </div>
+            <div class="card-body">
+                <h6 class="small text-uppercase text-muted fw-semibold mb-2 tracking-wider">
+                    Pontos de recolha
+                </h6>
+
+                @if (y.CollectionPoints.Count == 0)
+                {
+                    <p class="text-muted small mb-3">Sem pontos de recolha configurados.</p>
+                }
+                else
+                {
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Local</th>
+                                    <th class="text-end" style="width:220px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in y.CollectionPoints)
+                                {
+                                    var pid = p.Id;
+                                    if (_editingPointId == pid)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <input class="form-control form-control-sm"
+                                                       value="@_editName"
+                                                       @oninput="e => _editName = e.Value?.ToString() ?? string.Empty" />
+                                            </td>
+                                            <td>
+                                                <input class="form-control form-control-sm"
+                                                       value="@_editLoc"
+                                                       @oninput="e => _editLoc = e.Value?.ToString() ?? string.Empty" />
+                                            </td>
+                                            <td class="text-end">
+                                                <button class="btn btn-sm btn-primary me-1"
+                                                        @onclick="() => SavePointEditAsync(pid)"
+                                                        disabled="@(_saving || string.IsNullOrWhiteSpace(_editName))">
+                                                    Guardar
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-secondary"
+                                                        @onclick="CancelPointEdit">
+                                                    Cancelar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr>
+                                            <td>@p.Name</td>
+                                            <td class="text-muted small">@(p.Location ?? "—")</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-sm btn-outline-secondary"
+                                                        @onclick="() => MovePointAsync(p.Id, -1)"
+                                                        title="Mover para cima (mais a sul)">↑</button>
+                                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                                        @onclick="() => MovePointAsync(p.Id, 1)"
+                                                        title="Mover para baixo (mais a norte)">↓</button>
+                                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                                        @onclick="() => StartPointEdit(p)"
+                                                        title="Editar">
+                                                    Editar
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        @onclick="() => DeletePointAsync(p.Id, y.Id)"
+                                                        title="Eliminar ponto">
+                                                    ×
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5">
+                        <input class="form-control form-control-sm"
+                               placeholder="Nome do ponto *"
+                               value="@GetPointName(y.Id)"
+                               @oninput="e => SetPointName(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-5">
+                        <input class="form-control form-control-sm"
+                               placeholder="Local (opcional)"
+                               value="@GetPointLoc(y.Id)"
+                               @oninput="e => SetPointLoc(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-auto">
+                        <button class="btn btn-sm btn-outline-primary"
+                                @onclick="() => AddPointAsync(y.Id)"
+                                disabled="@(_saving || string.IsNullOrWhiteSpace(GetPointName(y.Id)))">
+                            + Adicionar ponto
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="my-4" />
+
+                <h6 class="small text-uppercase text-muted fw-semibold mb-2 tracking-wider">
+                    Fecho de inscrições
+                </h6>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted mb-1">Data e hora limite (opcional)</label>
+                        <input type="datetime-local" class="form-control form-control-sm"
+                               value="@GetClosesAt(y.Id, y.RegistrationClosesAt)"
+                               @oninput="e => SetClosesAt(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-auto">
+                        <button class="btn btn-sm btn-primary"
+                                @onclick="() => SaveClosesAtAsync(y.Id)"
+                                disabled="@_saving">
+                            Guardar
+                        </button>
+                        @if (y.RegistrationClosesAt.HasValue)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary ms-1"
+                                    @onclick="() => ClearClosesAtAsync(y.Id)"
+                                    disabled="@_saving"
+                                    title="Remover data de fecho">
+                                Limpar
+                            </button>
+                        }
+                    </div>
+                    <div class="col-md">
+                        @if (y.RegistrationClosesAt.HasValue)
+                        {
+                            var now = DateTime.UtcNow;
+                            var local = y.RegistrationClosesAt.Value.ToLocalTime();
+                            if (y.RegistrationClosesAt.Value <= now)
+                            {
+                                <div class="small text-danger">
+                                    <b>Encerradas</b> desde @local.ToString("dd/MM/yyyy HH:mm")
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="small text-success">
+                                    Fecham em @FormatCountdown(y.RegistrationClosesAt.Value - now)
+                                    · @local.ToString("dd/MM/yyyy HH:mm")
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="small text-muted">Sem data limite — inscrições sempre abertas enquanto o ano estiver ativo.</div>
+                        }
+                    </div>
+                </div>
+                @if (_closesFeedback.TryGetValue(y.Id, out var cmsg))
+                {
+                    <div class="small mt-1 @(_closesIsError.Contains(y.Id) ? "text-danger" : "text-success")">@cmsg</div>
+                }
+
+                <hr class="my-4" />
+
+                <h6 class="small text-uppercase text-muted fw-semibold mb-3 tracking-wider">
+                    Configuração de transportes
+                </h6>
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Nº total de cargas alvo</label>
+                        <input type="number" class="form-control form-control-sm" min="1" max="100"
+                               value="@GetCfgCargas(y.Id, y.NumCargasAlvo)"
+                               @oninput="e => SetCfgCargas(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Aves por carga</label>
+                        <input type="number" class="form-control form-control-sm" min="1" max="100"
+                               value="@GetCfgCap(y.Id, y.CapacidadePorCarga)"
+                               @oninput="e => SetCfgCap(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Mínimo por carga (para merge de zonas)</label>
+                        <input type="number" class="form-control form-control-sm" min="0" max="100"
+                               value="@GetCfgMin(y.Id, y.MinPorCarga)"
+                               @oninput="e => SetCfgMin(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                </div>
+                <div class="small text-muted mt-1 mb-3">
+                    Se a última carga de um ponto ficar &lt; mínimo, junta-se ao ponto seguinte na ordem sul→norte.
+                    O sistema sugere quantas cargas são necessárias por ponto — vais preencher o nome de quem faz cada uma na página de <em>Transportes</em>.
+                </div>
+
+                <div class="d-flex align-items-center gap-2 mt-3">
+                    <button class="btn btn-sm btn-primary"
+                            @onclick="() => SaveCfgAsync(y.Id)"
+                            disabled="@_saving">
+                        Guardar configuração
+                    </button>
+                    @if (_cfgFeedback.TryGetValue(y.Id, out var msg))
+                    {
+                        <span class="small @(_cfgIsError.Contains(y.Id) ? "text-danger" : "text-success")">
+                            @msg
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private List<AOB.Core.Entities.Site> AllSites = [];
+    private List<ConvoyageAdminService.YearWithPoints>? Years;
+    private int SelectedSiteId;
+
+    private int _newYear = DateTime.UtcNow.Year + 1;
+    private string? _newDescription;
+    private string? _createError;
+    private string? _deleteError;
+    private bool _saving;
+
+    private Dictionary<int, string> _pointNames = new();
+    private Dictionary<int, string> _pointLocs = new();
+
+    private int? _editingPointId;
+    private string _editName = "";
+    private string _editLoc = "";
+    private string? _editError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllSites = Content.Sites().ToList();
+        if (AllSites.Count > 0)
+        {
+            var siteIds = AllSites.Select(s => s.Id).ToList();
+            var activeSiteId = await Db.ConvoyageYears
+                .AsNoTracking()
+                .Where(y => y.IsActive && siteIds.Contains(y.SiteId))
+                .Select(y => (int?)y.SiteId)
+                .FirstOrDefaultAsync();
+            SelectedSiteId = activeSiteId ?? AllSites[0].Id;
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Years = await Convoyage.ListYearsAsync(SelectedSiteId);
+        _pointNames.Clear();
+        _pointLocs.Clear();
+    }
+
+    private async Task CreateYearAsync()
+    {
+        _createError = null;
+        _saving = true;
+        var (_, err) = await Convoyage.CreateYearAsync(SelectedSiteId, _newYear, _newDescription);
+        _saving = false;
+        if (err is not null) { _createError = err; return; }
+        _newDescription = null;
+        await ReloadAsync();
+    }
+
+    private async Task ActivateAsync(int yearId)
+    {
+        _saving = true;
+        await Convoyage.ActivateYearAsync(SelectedSiteId, yearId);
+        _saving = false;
+        await ReloadAsync();
+    }
+
+    private async Task AddPointAsync(int yearId)
+    {
+        var name = GetPointName(yearId);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        _saving = true;
+        await Convoyage.AddCollectionPointAsync(yearId, name, GetPointLoc(yearId));
+        _saving = false;
+        _pointNames.Remove(yearId);
+        _pointLocs.Remove(yearId);
+        await ReloadAsync();
+    }
+
+    private async Task DeleteYearAsync(int yearId, int year)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar o ano {year}? Esta ação não pode ser desfeita.");
+        if (!ok) return;
+
+        _deleteError = null;
+        _saving = true;
+        var err = await Convoyage.DeleteYearAsync(yearId);
+        _saving = false;
+        if (err is not null) { _deleteError = err; return; }
+        await ReloadAsync();
+    }
+
+    private async Task DeletePointAsync(int pointId, int yearId)
+    {
+        _saving = true;
+        await Convoyage.DeleteCollectionPointAsync(pointId);
+        _saving = false;
+        await ReloadAsync();
+    }
+
+    private void StartPointEdit(ConvoyageCollectionPoint p)
+    {
+        _editingPointId = p.Id;
+        _editName = p.Name;
+        _editLoc = p.Location ?? "";
+        _editError = null;
+    }
+
+    private void CancelPointEdit()
+    {
+        _editingPointId = null;
+        _editName = "";
+        _editLoc = "";
+        _editError = null;
+    }
+
+    private async Task SavePointEditAsync(int pointId)
+    {
+        _saving = true;
+        _editError = await Convoyage.UpdateCollectionPointAsync(pointId, _editName, _editLoc);
+        _saving = false;
+        if (_editError is not null) { _deleteError = _editError; return; }
+        _editingPointId = null;
+        _editName = "";
+        _editLoc = "";
+        await ReloadAsync();
+    }
+
+    private string GetPointName(int yearId) =>
+        _pointNames.TryGetValue(yearId, out var v) ? v : "";
+    private void SetPointName(int yearId, string v) => _pointNames[yearId] = v;
+    private string GetPointLoc(int yearId) =>
+        _pointLocs.TryGetValue(yearId, out var v) ? v : "";
+    private void SetPointLoc(int yearId, string v) => _pointLocs[yearId] = v;
+
+    private async Task MovePointAsync(int pointId, int direction)
+    {
+        _saving = true;
+        await Convoyage.ReorderCollectionPointAsync(pointId, direction);
+        _saving = false;
+        await ReloadAsync();
+    }
+
+    // ── Fecho de inscrições ───────────────────────────────────────────────────
+    private readonly Dictionary<int, string> _closesAtEdits = new();
+    private readonly Dictionary<int, string> _closesFeedback = new();
+    private readonly HashSet<int> _closesIsError = new();
+
+    private string GetClosesAt(int yearId, DateTime? current)
+    {
+        if (_closesAtEdits.TryGetValue(yearId, out var edited)) return edited;
+        return current.HasValue
+            ? current.Value.ToLocalTime().ToString("yyyy-MM-ddTHH:mm")
+            : "";
+    }
+
+    private void SetClosesAt(int yearId, string value) => _closesAtEdits[yearId] = value;
+
+    private async Task SaveClosesAtAsync(int yearId)
+    {
+        _closesFeedback.Remove(yearId);
+        _closesIsError.Remove(yearId);
+
+        DateTime? utc = null;
+        if (_closesAtEdits.TryGetValue(yearId, out var raw) && !string.IsNullOrWhiteSpace(raw))
+        {
+            if (!DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeLocal, out var local))
+            {
+                _closesFeedback[yearId] = "Data inválida.";
+                _closesIsError.Add(yearId);
+                return;
+            }
+            utc = local.ToUniversalTime();
+        }
+
+        _saving = true;
+        var err = await Convoyage.UpdateRegistrationClosesAsync(yearId, utc);
+        _saving = false;
+        if (err is not null)
+        {
+            _closesFeedback[yearId] = err;
+            _closesIsError.Add(yearId);
+            return;
+        }
+        _closesFeedback[yearId] = "Guardado.";
+        _closesAtEdits.Remove(yearId);
+        await ReloadAsync();
+    }
+
+    private async Task ClearClosesAtAsync(int yearId)
+    {
+        _closesFeedback.Remove(yearId);
+        _closesIsError.Remove(yearId);
+        _saving = true;
+        var err = await Convoyage.UpdateRegistrationClosesAsync(yearId, null);
+        _saving = false;
+        if (err is not null)
+        {
+            _closesFeedback[yearId] = err;
+            _closesIsError.Add(yearId);
+            return;
+        }
+        _closesFeedback[yearId] = "Data limite removida.";
+        _closesAtEdits.Remove(yearId);
+        await ReloadAsync();
+    }
+
+    private static string FormatCountdown(TimeSpan ts)
+    {
+        if (ts.TotalSeconds <= 0) return "0h";
+        var d = (int)ts.TotalDays;
+        var h = ts.Hours;
+        var m = ts.Minutes;
+        if (d > 0) return $"{d}d {h}h";
+        if (h > 0) return $"{h}h {m}min";
+        return $"{m}min";
+    }
+
+    // ── Configuração de transportes ───────────────────────────────────────────
+    private readonly Dictionary<int, string> _cfgCargas = new();
+    private readonly Dictionary<int, string> _cfgCap = new();
+    private readonly Dictionary<int, string> _cfgMin = new();
+    private readonly Dictionary<int, string> _cfgFeedback = new();
+    private readonly HashSet<int> _cfgIsError = new();
+
+    private string GetCfgCargas(int y, int def)
+        => _cfgCargas.TryGetValue(y, out var v) ? v : def.ToString();
+    private void SetCfgCargas(int y, string v) => _cfgCargas[y] = v;
+
+    private string GetCfgCap(int y, int def)
+        => _cfgCap.TryGetValue(y, out var v) ? v : def.ToString();
+    private void SetCfgCap(int y, string v) => _cfgCap[y] = v;
+
+    private string GetCfgMin(int y, int def)
+        => _cfgMin.TryGetValue(y, out var v) ? v : def.ToString();
+    private void SetCfgMin(int y, string v) => _cfgMin[y] = v;
+
+    private async Task SaveCfgAsync(int yearId)
+    {
+        _cfgFeedback.Remove(yearId);
+        _cfgIsError.Remove(yearId);
+
+        if (!int.TryParse(GetCfgCargas(yearId, 0), out var nc) ||
+            !int.TryParse(GetCfgCap(yearId, 0), out var cap) ||
+            !int.TryParse(GetCfgMin(yearId, 0), out var min))
+        {
+            _cfgFeedback[yearId] = "Valores numéricos inválidos.";
+            _cfgIsError.Add(yearId);
+            return;
+        }
+
+        var cfg = new TransportPlanAdminService.YearConfig(nc, cap, min);
+
+        _saving = true;
+        var err = await Plans.UpdateConfigAsync(yearId, cfg);
+        _saving = false;
+
+        if (err is not null)
+        {
+            _cfgFeedback[yearId] = err;
+            _cfgIsError.Add(yearId);
+        }
+        else
+        {
+            _cfgFeedback[yearId] = "Guardado.";
+            _cfgCargas.Remove(yearId);
+            _cfgCap.Remove(yearId);
+            _cfgMin.Remove(yearId);
+            await ReloadAsync();
+        }
+    }
+}

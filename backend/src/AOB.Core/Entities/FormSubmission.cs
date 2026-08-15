@@ -18,6 +18,13 @@ public class FormSubmission
     public int? ConvoyageYearId { get; set; }
     public ConvoyageYear? ConvoyageYear { get; set; }
 
+    // Ponto de recolha escolhido no formulário (nullable — inscrições antigas
+    // podem não ter e ficam para atribuição manual).
+    public int? LocalRecolhaId { get; set; }
+    public ConvoyageCollectionPoint? LocalRecolha { get; set; }
+
+    public ICollection<ConvoyageBirdEntry> BirdEntries { get; set; } = [];
+
     public string? IpAddress { get; set; }
     public string? UserAgent { get; set; }
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;

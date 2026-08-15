@@ -31,5 +31,12 @@ public class FormSubmissionConfiguration : IEntityTypeConfiguration<FormSubmissi
             .WithMany(cy => cy.Submissions)
             .HasForeignKey(x => x.ConvoyageYearId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        b.HasOne(x => x.LocalRecolha)
+            .WithMany()
+            .HasForeignKey(x => x.LocalRecolhaId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        b.HasIndex(x => new { x.ConvoyageYearId, x.LocalRecolhaId });
     }
 }

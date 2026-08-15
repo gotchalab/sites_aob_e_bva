@@ -174,18 +174,48 @@ export type AveConvoyageDto = {
   especie: string;
   tipoClasse: string;
   anilha: string;
+  equipaId?: string | null;
+  posicaoEquipa?: "A" | "B" | "C" | "D" | null;
 };
+
+export type SexoAve = "Macho" | "Femea" | "Indefinido";
+
+export type AveVendaDto = {
+  especie: string;
+  tipoClasse?: string;
+  especieMutacao: string;
+  especieLivre: boolean;
+  dataNascimento: string; // yyyy-MM-dd
+  sexo: SexoAve;
+  preco: number;
+  anilha: string;
+};
+
+export type OrigemAveTransporte = "Compra" | "Vende";
+
+export type AveTransporteDto = {
+  especie: string;
+  origem: OrigemAveTransporte;
+  anilha: string;
+  destinatarioNome: string;
+  destinatarioWhatsapp: string;
+  destinatarioNotas?: string;
+};
+
+export type SocioBvaStatus = "JaSocio" | "PagaComInscricao" | "NaoSocio";
 
 export type InscricaoConvoyageRequest = {
   nomeCompleto: string;
   email: string;
   telefone?: string;
   pais: string;
-  numeroSocioBva?: string;
   numeroStam?: string;
   localRecolhaId: number;
   aceitouRegulamento: boolean;
+  socioBvaStatus: SocioBvaStatus;
   aves: AveConvoyageDto[];
+  avesVenda?: AveVendaDto[];
+  avesTransporte?: AveTransporteDto[];
   turnstileToken?: string;
 };
 
@@ -200,4 +230,33 @@ export type ConvoyageActiveYearDto = {
   year: number;
   description: string | null;
   collectionPoints: ConvoyageCollectionPointDto[];
+  registrationClosesAt: string | null;
+};
+
+export type Species =
+  | "Roseicollis" | "Personatus" | "Fischeri" | "Nigrigenis"
+  | "Lilianae"    | "Canus"      | "Taranta"  | "Pullarius";
+
+export type EntryType = "Individual" | "Team" | "Study";
+
+export type NomenclatureClassDto = {
+  id: number;
+  code: string;
+  mutation: string;
+  notes: string | null;
+};
+
+export type NomenclatureGroupDto = {
+  id: number;
+  codePrefix: string;
+  displayName: string;
+  species: Species;
+  entryType: EntryType;
+  classes: NomenclatureClassDto[];
+};
+
+export type NomenclatureVersionDto = {
+  convoyageYearId: number;
+  year: number;
+  groups: NomenclatureGroupDto[];
 };

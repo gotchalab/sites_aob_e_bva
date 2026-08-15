@@ -291,6 +291,10 @@ else
         try
         {
             Model.HomeConfig = Home.ToJson();
+            if (Ann.Enabled && string.IsNullOrWhiteSpace(Ann.Message))
+            {
+                Ann.Enabled = false;
+            }
             Model.Announcement = Ann.ToJson();
             await SiteAdmin.SaveAsync(Model);
             Message = "Guardado.";

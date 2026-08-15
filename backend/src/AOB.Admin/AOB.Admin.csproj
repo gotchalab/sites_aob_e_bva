@@ -6,10 +6,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Assets partilhados usados nos PDFs (logotipos por site). Copia para o
+         output/publish, o código procura em AppContext.BaseDirectory. -->
+    <Content Include="..\AOB.Api\PdfAssets\*.png" Link="PdfAssets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="10.0.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.0.884" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
   <PropertyGroup>

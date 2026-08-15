@@ -268,6 +268,7 @@ else
             if (!string.IsNullOrEmpty(siteSlug))
             {
                 _ = Revalidate.NotifyAsync(siteSlug, "/");
+                _ = Revalidate.NotifyAsync(siteSlug, "/artigos");
                 _ = Revalidate.NotifyAsync(siteSlug, $"/artigos/{Model.Slug}");
             }
 
@@ -282,7 +283,15 @@ else
     private async Task OnDelete()
     {
         if (Model is null || IsNew) return;
+        var slug = Model.Slug;
+        var siteSlug = AllSites.FirstOrDefault(s => s.Id == Model.SiteId)?.Slug;
         await Content.DeleteArticle(Model.Id);
+        if (!string.IsNullOrEmpty(siteSlug))
+        {
+            _ = Revalidate.NotifyAsync(siteSlug, "/");
+            _ = Revalidate.NotifyAsync(siteSlug, "/artigos");
+            _ = Revalidate.NotifyAsync(siteSlug, $"/artigos/{slug}");
+        }
         Nav.NavigateTo("/artigos");
     }
 

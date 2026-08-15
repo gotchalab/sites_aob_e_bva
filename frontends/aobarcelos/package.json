@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "postbuild": "node scripts/patch-build.mjs",
+    "build:prod": "node scripts/build-prod.mjs",
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

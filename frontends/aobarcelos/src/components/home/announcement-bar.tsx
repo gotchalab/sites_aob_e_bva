@@ -4,6 +4,9 @@ import type { Announcement } from "@/lib/api-types";
 
 export function AnnouncementBar({ announcement }: { announcement: Announcement | null }) {
   if (!announcement) return null;
+  if (!announcement.enabled) return null;
+  const message = announcement.message?.trim() ?? "";
+  if (message.length === 0) return null;
 
   const styles: Record<string, string> = {
     info: "bg-brand-500/95 text-white",
@@ -21,7 +24,7 @@ export function AnnouncementBar({ announcement }: { announcement: Announcement |
   const inner = (
     <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-4 py-2 text-sm">
       {icons[tone] ?? icons.info}
-      <span className="text-center">{announcement.message}</span>
+      <span className="text-center">{message}</span>
       {announcement.href && (
         <span className="hidden text-[13px] font-semibold underline underline-offset-4 sm:inline">
           Saber mais →

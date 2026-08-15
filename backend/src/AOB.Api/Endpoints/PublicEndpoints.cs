@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AOB.Application.Content;
 using AOB.Application.Contracts;
 using AOB.Core.Entities;
@@ -12,6 +13,8 @@ namespace AOB.Api.Endpoints;
 
 public static class PublicEndpoints
 {
+    private static readonly Regex FirstImgSrcRx =
+        new(@"<img[^>]+src=""([^""]+)""", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     public static RouteGroupBuilder MapPublic(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/api/sites/{siteSlug}").WithTags("Public");
@@ -135,11 +138,20 @@ public static class PublicEndpoints
         var raw = await q.OrderByDescending(a => a.PublishedAt ?? a.CreatedAt)
             .Skip(effectiveSkip)
             .Take(effectiveTake)
-            .Select(a => new ArticleSummaryDto(a.Id, a.Slug, a.Title, a.Excerpt,
-                a.CoverImagePath, a.PublishedAt, a.Category.Slug, a.Category.Name, a.IsFeatured))
+            .Select(a => new { a.Id, a.Slug, a.Title, a.Excerpt, a.CoverImagePath, a.Content, a.PublishedAt, CategorySlug = a.Category.Slug, CategoryName = a.Category.Name, a.IsFeatured })
             .ToListAsync();
         var items = raw
-            .Select(a => a with { CoverImagePath = UrlPathEncoder.EncodeUploadPath(a.CoverImagePath) })
+            .Select(a =>
+            {
+                var cover = a.CoverImagePath;
+                if (string.IsNullOrEmpty(cover) && !string.IsNullOrEmpty(a.Content))
+                {
+                    var m = FirstImgSrcRx.Match(a.Content);
+                    if (m.Success) cover = m.Groups[1].Value;
+                }
+                return new ArticleSummaryDto(a.Id, a.Slug, a.Title, a.Excerpt,
+                    UrlPathEncoder.EncodeUploadPath(cover), a.PublishedAt, a.CategorySlug, a.CategoryName, a.IsFeatured);
+            })
             .ToList();
 
         // Devolve page/pageSize coerentes com o skip usado para consumidores que so olham para page.

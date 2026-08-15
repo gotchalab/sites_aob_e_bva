@@ -1,0 +1,128 @@
+@* Combobox com pesquisa livre para escolher código/mutação da nomenclatura.
+   Filtra por código, mutação ou nome do grupo (ex: "grupo de estudo"). *@
+
+<div class="position-relative">
+    <input class="form-control form-control-sm @(Invalid ? "is-invalid" : "")"
+           value="@_query"
+           placeholder="@Placeholder"
+           disabled="@Disabled"
+           @oninput="OnInput"
+           @onfocus="OnFocus"
+           @onblur="OnBlur" />
+    @if (_open && !Disabled && HasResults)
+    {
+        <ul class="dropdown-menu show shadow"
+            style="display:block;position:absolute;top:100%;left:0;right:0;max-height:280px;overflow-y:auto;z-index:1050;">
+            @foreach (var g in Filtered)
+            {
+                <li>
+                    <h6 class="dropdown-header text-uppercase" style="font-size:0.68rem;letter-spacing:0.06em;">
+                        @g.DisplayName
+                    </h6>
+                </li>
+                @foreach (var it in g.Items)
+                {
+                    var item = it;
+                    <li>
+                        <button type="button" class="dropdown-item small"
+                                @onmousedown:preventDefault="true"
+                                @onmousedown="() => Select(item)">
+                            @item.Code — @item.Mutation
+                        </button>
+                    </li>
+                }
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter] public List<GroupView> Groups { get; set; } = new();
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Invalid { get; set; }
+    [Parameter] public EventCallback<ItemSelection> OnItemSelected { get; set; }
+
+    public record GroupView(string DisplayName, List<ItemView> Items);
+    public record ItemView(string Code, string Mutation, string EntryType);
+    public record ItemSelection(string Code, string Mutation, string EntryType);
+
+    private string _query = "";
+    private bool _open;
+    private bool _userTyped;
+    private string _syncedValue = "";
+
+    protected override void OnParametersSet()
+    {
+        // Sincronizar quando Value muda a partir do pai (ex: hydrate inicial ou save).
+        if (!string.Equals(Value ?? "", _syncedValue, StringComparison.Ordinal))
+        {
+            _query = Value ?? "";
+            _syncedValue = Value ?? "";
+            _userTyped = false;
+        }
+    }
+
+    private List<GroupView> Filtered
+    {
+        get
+        {
+            // Enquanto o utilizador não escrever nada nesta sessão de focus,
+            // mostrar todos os grupos/items — permite trocar de opção facilmente.
+            if (!_userTyped || string.IsNullOrWhiteSpace(_query)) return Groups;
+            var q = _query.Trim().ToLowerInvariant();
+            var result = new List<GroupView>();
+            foreach (var g in Groups)
+            {
+                var groupMatches = g.DisplayName.ToLowerInvariant().Contains(q);
+                var items = groupMatches
+                    ? g.Items
+                    : g.Items.Where(i =>
+                        i.Code.ToLowerInvariant().Contains(q)
+                        || i.Mutation.ToLowerInvariant().Contains(q)
+                        || ($"{i.Code} — {i.Mutation}").ToLowerInvariant().Contains(q)
+                      ).ToList();
+                if (items.Count > 0) result.Add(new GroupView(g.DisplayName, items));
+            }
+            return result;
+        }
+    }
+
+    private bool HasResults => Filtered.Any(g => g.Items.Count > 0);
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? "";
+        _userTyped = true;
+        _open = true;
+    }
+
+    private void OnFocus()
+    {
+        _open = true;
+        // Ao entrar no campo, mostrar sempre todas as opções (o filter só arranca
+        // depois de o utilizador começar a escrever).
+        _userTyped = false;
+    }
+
+    private async Task OnBlur()
+    {
+        // Pequeno delay para permitir que o mousedown do item se propague antes de fechar.
+        await Task.Delay(150);
+        _open = false;
+        // Se saiu do campo sem escolher item novo, restaurar o valor commitido.
+        _query = _syncedValue;
+        _userTyped = false;
+        StateHasChanged();
+    }
+
+    private async Task Select(ItemView item)
+    {
+        _query = $"{item.Code} — {item.Mutation}";
+        _syncedValue = _query;
+        _open = false;
+        _userTyped = false;
+        await OnItemSelected.InvokeAsync(new ItemSelection(item.Code, item.Mutation, item.EntryType));
+    }
+}

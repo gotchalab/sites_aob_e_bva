@@ -28,11 +28,12 @@ async function get<T>(path: string, revalidate = 300): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function tryGet<T>(path: string, revalidate = 300): Promise<T | null> {
-  const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}${path}`, {
-    next: { revalidate },
-    headers: { Accept: "application/json" },
-  });
+async function tryGet<T>(path: string, revalidate: number = 300): Promise<T | null> {
+  const init: RequestInit & { next?: { revalidate?: number } } =
+    revalidate === 0
+      ? { cache: "no-store", headers: { Accept: "application/json" } }
+      : { next: { revalidate }, headers: { Accept: "application/json" } };
+  const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}${path}`, init);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`API ${res.status}: GET ${path}`);
   return res.json() as Promise<T>;
@@ -70,7 +71,9 @@ export const api = {
   submitContact: (body: ContactRequest) => post<FormSubmissionResponse>(`/forms/contact`, body),
   submitInscricaoSocio: (body: FormData) => postForm<FormSubmissionResponse>(`/forms/inscricao-socio`, body),
   submitInscricaoConvoyage: (body: InscricaoConvoyageRequest) => post<FormSubmissionResponse>(`/forms/inscricao-convoyage`, body),
-  convoyageActiveYear: () => tryGet<ConvoyageActiveYearDto>(`/convoyage/active-year`, 60),
+  // Sem cache — o admin pode fechar/reabrir inscrições ou trocar ano ativo a
+  // qualquer momento e a página pública tem de reflectir isso imediatamente.
+  convoyageActiveYear: () => tryGet<ConvoyageActiveYearDto>(`/convoyage/active-year`, 0),
 };
 
 export function parseHomeConfig(site: Site | null | undefined): HomeConfig {
@@ -86,7 +89,8 @@ export function parseAnnouncement(site: Site | null | undefined): Announcement |
   if (!site?.announcement) return null;
   try {
     const a = JSON.parse(site.announcement) as Announcement;
-    if (!a.enabled || !a.message) return null;
+    if (!a.enabled) return null;
+    if (typeof a.message !== "string" || a.message.trim().length === 0) return null;
     return a;
   } catch {
     return null;

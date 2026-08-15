@@ -1,7 +1,10 @@
 import { api } from "@/lib/api";
-import { InscricaoConvoyageForm } from "./inscricao-convoyage-form";
+import { nomenclatureApi } from "@/lib/nomenclatura-api";
+import { InscricaoConvoyageFormGate } from "./form-gate";
 
-export const revalidate = 60;
+// Sem cache SSR — precisamos de reagir imediatamente a alterações no admin
+// (data de fecho, ponto de recolha adicionado, ano ativo trocado).
+export const revalidate = 0;
 
 export const metadata = {
   title: "Inscrição na Convoyage",
@@ -9,20 +12,31 @@ export const metadata = {
 };
 
 export default async function InscricaoConvoyagePage() {
-  const [site, activeYear] = await Promise.all([api.site(), api.convoyageActiveYear()]);
+  const [site, activeYear, nomenclature] = await Promise.all([
+    api.site(),
+    api.convoyageActiveYear(),
+    nomenclatureApi.active(),
+  ]);
+
+  const hasActiveYear = activeYear !== null && nomenclature !== null;
+  const alreadyClosed =
+    hasActiveYear &&
+    activeYear!.registrationClosesAt !== null &&
+    new Date(activeYear!.registrationClosesAt!).getTime() <= Date.now();
+  const ready = hasActiveYear && !alreadyClosed;
 
   return (
     <>
       <section className="hero-pattern border-b border-sand-300">
         <div className="mx-auto max-w-5xl px-4 py-10 md:py-14">
           <div className="mb-3 inline-block rounded-full border border-brand-500/40 bg-white/60 px-3 py-1 text-[11px] font-medium uppercase tracking-widest text-brand-700">
-            BVA Masters{activeYear ? ` ${activeYear.year}` : ""}
+            {activeYear?.description?.trim() || `BVA Masters${activeYear ? ` ${activeYear.year}` : ""}`}
           </div>
           <h1 className="font-display text-3xl font-bold leading-tight text-ink-900 md:text-5xl">
             Ficha de Inscrição — Convoyage
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-700 md:text-lg">
-            {activeYear
+            {ready
               ? "Preencha o formulário abaixo para inscrever as suas aves na convoyage BVA Masters. Receberá uma confirmação por email com a ficha em PDF."
               : "As inscrições estão encerradas de momento. Aguarde a abertura da próxima edição."}
           </p>
@@ -30,18 +44,17 @@ export default async function InscricaoConvoyagePage() {
       </section>
 
       <div className="mx-auto max-w-4xl px-4 py-8 md:py-12">
-        {activeYear ? (
-          <InscricaoConvoyageForm
+        {ready ? (
+          <InscricaoConvoyageFormGate
             siteName={site.name}
             contactEmail={site.contactEmail}
-            activeYear={activeYear}
+            activeYear={activeYear!}
+            nomenclature={nomenclature!}
           />
         ) : (
           <div className="rounded-2xl border border-sand-300 bg-white p-8 text-center shadow-sm">
             <p className="text-ink-600">
               As inscrições para a convoyage estão encerradas de momento.
-              <br />
-              Fique atento para a próxima edição.
             </p>
           </div>
         )}
