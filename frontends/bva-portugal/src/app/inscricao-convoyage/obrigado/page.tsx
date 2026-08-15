@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { API_URL, SITE_SLUG } from "@/lib/config";
+import { SITE_SLUG } from "@/lib/config";
 
 export const metadata = { title: "Inscrição submetida" };
 
@@ -10,9 +10,11 @@ export default async function ObrigadoConvoyagePage({
 }) {
   const sp = await searchParams;
   const idNum = sp.id ? Number(sp.id) : null;
+  // Path relativo — o nginx do dominio faz proxy de /api/ para a API interna.
+  // Absoluto (com API_INTERNAL_URL) tem 127.0.0.1 que so funciona no servidor.
   const pdfHref =
     idNum && sp.t
-      ? `${API_URL}/api/sites/${SITE_SLUG}/forms/inscricao-convoyage/${idNum}/pdf?token=${encodeURIComponent(sp.t)}`
+      ? `/api/sites/${SITE_SLUG}/forms/inscricao-convoyage/${idNum}/pdf?token=${encodeURIComponent(sp.t)}`
       : null;
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 text-center">
