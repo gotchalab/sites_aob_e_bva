@@ -26,6 +26,9 @@
     <Content Include="PdfAssets\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- appsettings.Development.json tem credenciais SMTP em texto plano.
+         Nao deve ir para o pacote de publish (Production). -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
 </Project>

@@ -9,6 +9,8 @@
     <!-- Assets partilhados usados nos PDFs (logotipos por site). Copia para o
          output/publish, o código procura em AppContext.BaseDirectory. -->
     <Content Include="..\AOB.Api\PdfAssets\*.png" Link="PdfAssets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- appsettings.Development.json tem credenciais em texto plano. Nao deve ir para publish. -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
   <ItemGroup>
