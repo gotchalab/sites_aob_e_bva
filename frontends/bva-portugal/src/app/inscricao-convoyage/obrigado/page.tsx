@@ -1,13 +1,19 @@
 import Link from "next/link";
+import { API_URL, SITE_SLUG } from "@/lib/config";
 
 export const metadata = { title: "Inscrição submetida" };
 
 export default async function ObrigadoConvoyagePage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string }>;
+  searchParams: Promise<{ id?: string; t?: string }>;
 }) {
   const sp = await searchParams;
+  const idNum = sp.id ? Number(sp.id) : null;
+  const pdfHref =
+    idNum && sp.t
+      ? `${API_URL}/api/sites/${SITE_SLUG}/forms/inscricao-convoyage/${idNum}/pdf?token=${encodeURIComponent(sp.t)}`
+      : null;
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 text-center">
       <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
@@ -22,10 +28,29 @@ export default async function ObrigadoConvoyagePage({
         A sua inscrição na convoyage BVA Masters foi recebida. Enviámos-lhe uma cópia por email
         com a ficha de inscrição em PDF.
       </p>
+      <p className="mt-3 text-sm text-ink-600">
+        <b>Não recebeu o email?</b> Verifique a caixa de <b>spam</b> ou <b>promoções</b>.
+        {pdfHref ? " Pode também transferir aqui a ficha em PDF." : ""}
+      </p>
       {sp.id && (
         <p className="mt-3 text-sm text-ink-500">Referência: #{sp.id}</p>
       )}
       <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+        {pdfHref && (
+          <a
+            href={pdfHref}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" x2="12" y1="15" y2="3" />
+            </svg>
+            Descarregar PDF
+          </a>
+        )}
         <Link
           href="/"
           className="inline-flex items-center justify-center rounded-full bg-brand-500 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600"

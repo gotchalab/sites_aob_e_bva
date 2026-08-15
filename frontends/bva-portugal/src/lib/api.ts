@@ -97,32 +97,48 @@ export function parseAnnouncement(site: Site | null | undefined): Announcement |
   }
 }
 
+const POST_TIMEOUT_MS = 90_000;
+
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    return { ok: false, error: (json as { error?: string }).error ?? `HTTP ${res.status}` } as T;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), POST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: ctrl.signal,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: (json as { error?: string }).error ?? `HTTP ${res.status}` } as T;
+    }
+    return json as T;
+  } finally {
+    clearTimeout(timer);
   }
-  return json as T;
 }
 
 async function postForm<T>(path: string, body: FormData): Promise<T> {
-  const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}${path}`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-    body,
-    cache: "no-store",
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    return { ok: false, error: (json as { error?: string }).error ?? `HTTP ${res.status}` } as T;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), POST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}${path}`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body,
+      cache: "no-store",
+      signal: ctrl.signal,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: (json as { error?: string }).error ?? `HTTP ${res.status}` } as T;
+    }
+    return json as T;
+  } finally {
+    clearTimeout(timer);
   }
-  return json as T;
 }
 
 const HTML_ENTITIES: Record<string, string> = {

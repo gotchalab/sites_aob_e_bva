@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AOB.Application.Contracts;
 using AOB.Application.Forms;
@@ -23,7 +25,80 @@ public static class FormEndpoints
         g.MapPost("/contact", SubmitContact);
         g.MapPost("/inscricao-socio", SubmitInscricaoSocio);
         g.MapPost("/inscricao-convoyage", SubmitInscricaoConvoyage);
+        g.MapGet("/inscricao-convoyage/{id:int}/pdf", DownloadConvoyagePdf);
         return g;
+    }
+
+    // Token HMAC opaco para autorizar download público do PDF logo após submissão.
+    // Usa a chave JWT como segredo — se o operador rodar a chave, tokens antigos deixam
+    // de ser válidos (aceitável: o utilizador ainda tem o PDF por email).
+    private static string GetPdfTokenSecret(IConfiguration config)
+    {
+        var key = config["Jwt:SigningKey"];
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("Jwt:SigningKey em falta para assinar token de PDF.");
+        return key;
+    }
+
+    private static string BuildPdfToken(IConfiguration config, string siteSlug, int submissionId)
+    {
+        var payload = $"convoyage-pdf:{siteSlug}:{submissionId}";
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(GetPdfTokenSecret(config)));
+        var sig = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
+        return Base64UrlEncode(sig);
+    }
+
+    private static bool VerifyPdfToken(IConfiguration config, string siteSlug, int submissionId, string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return false;
+        var expected = BuildPdfToken(config, siteSlug, submissionId);
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(expected),
+            Encoding.ASCII.GetBytes(token));
+    }
+
+    private static string Base64UrlEncode(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static async Task<IResult> DownloadConvoyagePdf(
+        string siteSlug,
+        int id,
+        [FromQuery] string? token,
+        AppDbContext db,
+        IConfiguration config,
+        IHostEnvironment env,
+        CancellationToken ct)
+    {
+        if (!VerifyPdfToken(config, siteSlug, id, token))
+            return Results.NotFound();
+
+        var submission = await db.FormSubmissions
+            .AsNoTracking()
+            .Include(s => s.Site)
+            .FirstOrDefaultAsync(s => s.Id == id && s.FormType == FormType.InscricaoConvoyage, ct);
+        if (submission is null || submission.Site.Slug != siteSlug)
+            return Results.NotFound();
+
+        string? relPath = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(submission.DataJson);
+            if (doc.RootElement.TryGetProperty("PdfPath", out var p) && p.ValueKind == JsonValueKind.String)
+                relPath = p.GetString();
+        }
+        catch { /* ignore */ }
+        if (string.IsNullOrWhiteSpace(relPath)) return Results.NotFound();
+
+        var storageRoot = config["Inscricoes:StorageRoot"];
+        if (string.IsNullOrWhiteSpace(storageRoot))
+            storageRoot = Path.Combine(env.ContentRootPath, "PrivateData", "inscricoes");
+        var absPath = Path.GetFullPath(Path.Combine(storageRoot, relPath));
+        var rootFull = Path.GetFullPath(storageRoot);
+        if (!absPath.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase)) return Results.NotFound();
+        if (!File.Exists(absPath)) return Results.NotFound();
+
+        var bytes = await File.ReadAllBytesAsync(absPath, ct);
+        return Results.File(bytes, "application/pdf", $"convoyage-{id}.pdf");
     }
 
     private static async Task<Results<Ok<FormSubmissionResponse>, BadRequest<FormSubmissionResponse>, NotFound>>
@@ -595,7 +670,8 @@ public static class FormEndpoints
             }
         }
 
-        return TypedResults.Ok(new FormSubmissionResponse(true, SubmissionId: submission.Id));
+        var downloadToken = BuildPdfToken(config, siteSlug, submission.Id);
+        return TypedResults.Ok(new FormSubmissionResponse(true, SubmissionId: submission.Id, DownloadToken: downloadToken));
     }
 
     private static string? ValidateConvoyage(InscricaoConvoyageRequest r)

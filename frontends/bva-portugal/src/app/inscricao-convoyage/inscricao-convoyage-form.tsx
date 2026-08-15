@@ -1572,15 +1572,28 @@ export function InscricaoConvoyageForm({
       turnstileToken: token,
     };
 
-    const res = await api.submitInscricaoConvoyage(body);
-    if (res.ok) {
-      router.push(`/inscricao-convoyage/obrigado?id=${res.submissionId ?? ""}`);
-      return;
+    try {
+      const res = await api.submitInscricaoConvoyage(body);
+      if (res.ok) {
+        const q = new URLSearchParams();
+        if (res.submissionId != null) q.set("id", String(res.submissionId));
+        if (res.downloadToken) q.set("t", res.downloadToken);
+        router.push(`/inscricao-convoyage/obrigado?${q.toString()}`);
+        return;
+      }
+      setState("error");
+      setErrorMsg(res.error ?? "Erro desconhecido");
+    } catch (err) {
+      setState("error");
+      setErrorMsg(
+        err instanceof Error && err.name === "AbortError"
+          ? "O servidor demorou demasiado tempo a responder. Verifica se a inscrição foi registada antes de submeter de novo."
+          : "Falha de ligação ao servidor. Verifica a tua Internet e tenta novamente."
+      );
+    } finally {
+      if (window.turnstile && widgetId.current) window.turnstile.reset(widgetId.current);
+      setToken(undefined);
     }
-    setState("error");
-    setErrorMsg(res.error ?? "Erro desconhecido");
-    if (window.turnstile && widgetId.current) window.turnstile.reset(widgetId.current);
-    setToken(undefined);
   }
 
   return (
@@ -1843,44 +1856,45 @@ export function InscricaoConvoyageForm({
         </div>
       </section>
 
-      {saleBirds.length > 0 && (
-        <section className={sectionCls}>
-          <h2 className={sectionTitleCls}>3. Aves para venda</h2>
-          <p className="mt-1 text-sm text-ink-500">
-            Preencha os dados de cada ave que pretende levar para a área de vendas. As aves para
-            venda têm de ter anilha fechada do proprietário.
-          </p>
+      <section className={sectionCls}>
+        <h2 className={sectionTitleCls}>3. Aves para a sala de vendas</h2>
+        <p className="mt-1 text-sm text-ink-500">
+          Aves que pretende expor e vender na <b>sala de vendas BVA</b>. Vão à exposição, ocupam
+          gaiola e têm de ter anilha fechada do proprietário.
+        </p>
+        <p className="mt-2 text-xs font-medium text-ink-700">
+          {saleBirds.length} {saleBirds.length === 1 ? "ave para venda" : "aves para venda"}
+        </p>
 
-          <div className="mt-5 flex flex-col gap-4">
-            {saleBirds.map((b, i) => (
-              <div id={`sale-bird-${i}`} key={b.id}>
-                <SaleBirdCard
-                  bird={b}
-                  idx={i}
-                  version={nomenclature}
-                  onUpdate={(u) => updateSaleBird(i, u)}
-                  onRemove={() => removeSaleBird(i)}
-                  birdErrors={saleBirdErrors[i] ?? {}}
-                />
-              </div>
-            ))}
-          </div>
+        <div className="mt-5 flex flex-col gap-4">
+          {saleBirds.map((b, i) => (
+            <div id={`sale-bird-${i}`} key={b.id}>
+              <SaleBirdCard
+                bird={b}
+                idx={i}
+                version={nomenclature}
+                onUpdate={(u) => updateSaleBird(i, u)}
+                onRemove={() => removeSaleBird(i)}
+                birdErrors={saleBirdErrors[i] ?? {}}
+              />
+            </div>
+          ))}
+        </div>
 
+        <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={addSaleBird}
-            className="mt-4 inline-flex items-center gap-2 rounded-full border border-brand-500/40 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-500/10"
+            className="inline-flex items-center gap-2 rounded-full border border-brand-500/40 bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-500/10"
           >
             <span className="text-base leading-none">+</span>
             Adicionar ave para venda
           </button>
-        </section>
-      )}
+        </div>
+      </section>
 
       <section className={sectionCls}>
-        <h2 className={sectionTitleCls}>
-          {saleBirds.length > 0 ? 4 : 3}. Aves para transporte (compra/venda)
-        </h2>
+        <h2 className={sectionTitleCls}>4. Aves para transporte (compra/venda)</h2>
         <p className="mt-1 text-sm text-ink-500">
           Aves que <b>compra ou vende</b> e que <b>não entram no concurso BVA Masters nem vão para a sala
           de vendas da BVA</b>. Cada ave ocupa um espaço na transportadora (reservado para ida e volta).
@@ -1957,11 +1971,9 @@ export function InscricaoConvoyageForm({
         const cTransporteAdq = tarifaAdq * nTransporte;
         const cQuota = socioBvaStatus === "PagaComInscricao" ? 40.0 : 0.0;
         const cTotal = cInscricao + cAves + cGaiolas + cTransporte + cTransporteAdq + cQuota;
-        // Secções: 1 Dados · 2 Aves inscritas · [3 Venda opcional] · Transporte (sempre) · Custos · Declaração
-        const idx = saleBirds.length > 0 ? 5 : 4;
         return (
           <section className={sectionCls}>
-            <h2 className={sectionTitleCls}>{idx}. Resumo de custos</h2>
+            <h2 className={sectionTitleCls}>5. Resumo de custos</h2>
             <p className="mt-1 text-sm text-ink-500">
               Valores calculados automaticamente com base nas aves inscritas, aves para venda e aves para transporte.
             </p>
@@ -2034,7 +2046,7 @@ export function InscricaoConvoyageForm({
       })()}
 
       <section className={sectionCls}>
-        <h2 className={sectionTitleCls}>{saleBirds.length > 0 ? 6 : 5}. Declaração</h2>
+        <h2 className={sectionTitleCls}>6. Declaração</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-700">
           Declaro que os dados acima são correctos e que aceito o regulamento da convoyage BVA Masters.
         </p>

@@ -52,7 +52,7 @@ public record InscricaoSocioRequest(
     string? Notas,
     string? TurnstileToken);
 
-public record FormSubmissionResponse(bool Ok, string? Error = null, int? SubmissionId = null);
+public record FormSubmissionResponse(bool Ok, string? Error = null, int? SubmissionId = null, string? DownloadToken = null);
 
 public record AveConvoyageDto(
     string Serie,

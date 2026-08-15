@@ -166,4 +166,5 @@ export type FormSubmissionResponse = {
   ok: boolean;
   error?: string | null;
   submissionId?: number | null;
+  downloadToken?: string | null;
 };
