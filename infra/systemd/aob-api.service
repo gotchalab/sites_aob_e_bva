@@ -25,6 +25,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/log/aob /var/www/uploads /var/lib/aob
+UMask=0002
 CapabilityBoundingSet=
 AmbientCapabilities=
 LockPersonality=true
