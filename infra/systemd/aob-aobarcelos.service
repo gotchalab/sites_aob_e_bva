@@ -23,6 +23,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+# Next.js escreve em .next/cache (ISR fetch-cache, imagens optimizadas).
+# Sem isto os pedidos de imagem/prerender falham com EROFS.
+ReadWritePaths=/opt/aob/aobarcelos/.next/cache
 CapabilityBoundingSet=
 AmbientCapabilities=
 
