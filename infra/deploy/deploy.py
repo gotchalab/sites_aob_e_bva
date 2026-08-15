@@ -366,7 +366,9 @@ def deploy_infra(ssh: paramiko.SSHClient) -> None:
             f"       /etc/nginx/sites-enabled/{domain}.conf || true",
             check=False)
     sudo(ssh, "rm -f /etc/nginx/sites-enabled/default", check=False)
-    sudo(ssh, "nginx -t")  # apenas valida config; o 'services' arranca o nginx
+    sudo(ssh, "nginx -t")  # valida config antes do reload
+    # Reload em vez de restart — nao interrompe pedidos em curso.
+    sudo(ssh, "systemctl reload nginx")
     print("[infra] Concluido.")
 
 
