@@ -279,27 +279,27 @@ else
                 </h6>
                 <div class="row g-2">
                     <div class="col-md-4">
-                        <label class="form-label small text-muted mb-1">Nº total de cargas alvo</label>
+                        <label class="form-label small text-muted mb-1">Nº total de transportadoras</label>
                         <input type="number" class="form-control form-control-sm" min="1" max="100"
                                value="@GetCfgCargas(y.Id, y.NumCargasAlvo)"
                                @oninput="e => SetCfgCargas(y.Id, e.Value?.ToString() ?? string.Empty)" />
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label small text-muted mb-1">Aves por carga</label>
+                        <label class="form-label small text-muted mb-1">Aves por transportadora</label>
                         <input type="number" class="form-control form-control-sm" min="1" max="100"
                                value="@GetCfgCap(y.Id, y.CapacidadePorCarga)"
                                @oninput="e => SetCfgCap(y.Id, e.Value?.ToString() ?? string.Empty)" />
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label small text-muted mb-1">Mínimo por carga (para merge de zonas)</label>
+                        <label class="form-label small text-muted mb-1">Mínimo por transportadora (para merge de zonas)</label>
                         <input type="number" class="form-control form-control-sm" min="0" max="100"
                                value="@GetCfgMin(y.Id, y.MinPorCarga)"
                                @oninput="e => SetCfgMin(y.Id, e.Value?.ToString() ?? string.Empty)" />
                     </div>
                 </div>
                 <div class="small text-muted mt-1 mb-3">
-                    Se a última carga de um ponto ficar &lt; mínimo, junta-se ao ponto seguinte na ordem sul→norte.
-                    O sistema sugere quantas cargas são necessárias por ponto — vais preencher o nome de quem faz cada uma na página de <em>Transportes</em>.
+                    Se a última transportadora de um ponto ficar &lt; mínimo, junta-se ao ponto seguinte na ordem sul→norte.
+                    O sistema sugere quantas transportadoras são necessárias por ponto — vais preencher o nome de quem faz cada uma na página de <em>Transportes</em>.
                 </div>
 
                 <div class="d-flex align-items-center gap-2 mt-3">
@@ -312,6 +312,65 @@ else
                     {
                         <span class="small @(_cfgIsError.Contains(y.Id) ? "text-danger" : "text-success")">
                             @msg
+                        </span>
+                    }
+                </div>
+
+                <hr class="my-4" />
+
+                <h6 class="small text-uppercase text-muted fw-semibold mb-3 tracking-wider">
+                    Tarifas e taxas
+                </h6>
+                <div class="small text-muted mb-3">
+                    Preços aplicados neste ano — alimentam o formulário público, o PDF e o Excel.
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-2" style="max-width:640px;">
+                        <thead>
+                            <tr>
+                                <th style="width:60%;">Parâmetro</th>
+                                <th class="text-end" style="width:120px;">Valor (€)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var pricingRows = new (string Label, Func<string> Get, Action<string> Set)[]
+                                {
+                                    ("Inscrição (por inscrição)",           () => GetPrice(y.Id, "insc", y.Pricing.PrecoInscricao),           v => SetPrice(y.Id, "insc", v)),
+                                    ("Aves BVA (por ave concurso)",         () => GetPrice(y.Id, "ave",  y.Pricing.PrecoAveBva),              v => SetPrice(y.Id, "ave",  v)),
+                                    ("Gaiolas (por ave concurso+venda)",    () => GetPrice(y.Id, "gaio", y.Pricing.PrecoGaiola),              v => SetPrice(y.Id, "gaio", v)),
+                                    ("Tarifa transporte sócio",             () => GetPrice(y.Id, "trs",  y.Pricing.TarifaTransporteSocio),    v => SetPrice(y.Id, "trs",  v)),
+                                    ("Tarifa transporte não sócio",         () => GetPrice(y.Id, "trns", y.Pricing.TarifaTransporteNaoSocio), v => SetPrice(y.Id, "trns", v)),
+                                    ("Tarifa adquirente sócio",             () => GetPrice(y.Id, "adqs", y.Pricing.TarifaAdquirenteSocio),    v => SetPrice(y.Id, "adqs", v)),
+                                    ("Tarifa adquirente não sócio",         () => GetPrice(y.Id, "adqns",y.Pricing.TarifaAdquirenteNaoSocio), v => SetPrice(y.Id, "adqns",v)),
+                                    ("Quota",                               () => GetPrice(y.Id, "quo",  y.Pricing.Quota),                    v => SetPrice(y.Id, "quo",  v)),
+                                }; }
+                            @foreach (var row in pricingRows)
+                            {
+                                <tr>
+                                    <td class="text-muted">@row.Label</td>
+                                    <td class="text-end">
+                                        <input type="text" inputmode="decimal"
+                                               pattern="[0-9]+([.,][0-9]{1,2})?"
+                                               class="form-control form-control-sm text-end"
+                                               style="width:110px; display:inline-block;"
+                                               value="@row.Get()"
+                                               @oninput="e => row.Set(e.Value?.ToString() ?? string.Empty)" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-2">
+                    <button class="btn btn-sm btn-primary"
+                            @onclick="() => SavePricingAsync(y.Id)"
+                            disabled="@_saving">
+                        Guardar tarifas
+                    </button>
+                    @if (_priceFeedback.TryGetValue(y.Id, out var pmsg))
+                    {
+                        <span class="small @(_priceIsError.Contains(y.Id) ? "text-danger" : "text-success")">
+                            @pmsg
                         </span>
                     }
                 </div>
@@ -584,6 +643,67 @@ else
             _cfgCargas.Remove(yearId);
             _cfgCap.Remove(yearId);
             _cfgMin.Remove(yearId);
+            await ReloadAsync();
+        }
+    }
+
+    // ── Tarifas e taxas ───────────────────────────────────────────────────────
+    // Chave composta: "{yearId}:{campo}" para reutilizar um único dicionário.
+    private readonly Dictionary<string, string> _prices = new();
+    private readonly Dictionary<int, string> _priceFeedback = new();
+    private readonly HashSet<int> _priceIsError = new();
+
+    // Formata com vírgula (pt-PT). Se o utilizador estiver a editar em vivo,
+    // devolve o que ele digitou (pode ter ponto — o backend aceita ambos).
+    private static readonly System.Globalization.CultureInfo _ptPt =
+        System.Globalization.CultureInfo.GetCultureInfo("pt-PT");
+    private string GetPrice(int y, string key, decimal def)
+        => _prices.TryGetValue($"{y}:{key}", out var v)
+            ? v
+            : def.ToString("0.00", _ptPt);
+
+    private void SetPrice(int y, string key, string v) => _prices[$"{y}:{key}"] = v;
+
+    private async Task SavePricingAsync(int yearId)
+    {
+        _priceFeedback.Remove(yearId);
+        _priceIsError.Remove(yearId);
+
+        static bool TryParseEuro(string s, out decimal v) =>
+            decimal.TryParse(s?.Replace(',', '.'),
+                System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out v);
+
+        var year = Years?.FirstOrDefault(y => y.Id == yearId);
+        if (year is null) { _priceFeedback[yearId] = "Ano não encontrado."; _priceIsError.Add(yearId); return; }
+
+        decimal Read(string key, decimal def)
+            => TryParseEuro(GetPrice(yearId, key, def), out var v) ? v : def;
+
+        var p = new ConvoyageAdminService.PricingConfig(
+            Read("insc",  year.Pricing.PrecoInscricao),
+            Read("ave",   year.Pricing.PrecoAveBva),
+            Read("gaio",  year.Pricing.PrecoGaiola),
+            Read("trs",   year.Pricing.TarifaTransporteSocio),
+            Read("trns",  year.Pricing.TarifaTransporteNaoSocio),
+            Read("adqs",  year.Pricing.TarifaAdquirenteSocio),
+            Read("adqns", year.Pricing.TarifaAdquirenteNaoSocio),
+            Read("quo",   year.Pricing.Quota));
+
+        _saving = true;
+        var err = await Convoyage.UpdatePricingAsync(yearId, p);
+        _saving = false;
+
+        if (err is not null)
+        {
+            _priceFeedback[yearId] = err;
+            _priceIsError.Add(yearId);
+        }
+        else
+        {
+            _priceFeedback[yearId] = "Guardado.";
+            foreach (var k in new[] { "insc", "ave", "gaio", "trs", "trns", "adqs", "adqns", "quo" })
+                _prices.Remove($"{yearId}:{k}");
             await ReloadAsync();
         }
     }

@@ -624,8 +624,14 @@ public class TransportPlanAdminService(AppDbContext db)
             }
         }
 
+        var pricing = new TransportExcelExporter.Pricing(
+            y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
+            y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
+            y.TarifaAdquirenteSocio, y.TarifaAdquirenteNaoSocio,
+            y.Quota);
+
         return TransportExcelExporter.Render(
-            y.Year, "Agapornis", overview.Config.CapacidadePorCarga,
+            y.Year, "Agapornis", overview.Config.CapacidadePorCarga, pricing,
             transportes, inscricoes, aves);
     }
 
@@ -635,7 +641,7 @@ public class TransportPlanAdminService(AppDbContext db)
     private record SubmissionMeta(
         string Nome, string Email, string Telefone, string Pais, string LocalRecolha,
         int NumAvesConcurso, int NumAvesVenda, int NumAvesTransporte,
-        string SocioBvaLabel, decimal TotalPago,
+        string SocioBvaLabel, string SocioBvaStatus, decimal TotalPago,
         List<AveMeta> Aves);
 
     private static SubmissionMeta ParseSubmission(string json)
@@ -710,26 +716,33 @@ public class TransportPlanAdminService(AppDbContext db)
             if (totalAves > numConcurso) numConcurso = totalAves;
 
             var status = S("SocioBvaStatus", r);
+            // Labels curtos/intuitivos — as fórmulas do Excel comparam com estes valores.
             var socioLabel = status switch
             {
-                "JaSocio" => "Sócio (quotas pagas)",
-                "PagaComInscricao" => "Vai pagar com inscrição",
-                "NaoSocio" => "Não sócio",
-                _ => S("SocioBva", r) == "True" ? "Sócio" : "—",
+                "JaSocio"          => "Sócio",
+                "PagaComInscricao" => "Paga na inscrição",
+                "NaoSocio"         => "Não sócio",
+                _ => S("SocioBva", r) == "True" ? "Sócio" : "Não sócio",
             };
 
             decimal totalPago = 0m;
             if (r.TryGetProperty("Custos", out var custos) && custos.ValueKind == JsonValueKind.Object)
                 totalPago = D(custos, "total");
 
+            var socioStatus = status switch
+            {
+                "JaSocio" or "PagaComInscricao" or "NaoSocio" => status,
+                _ => S("SocioBva", r) == "True" ? "JaSocio" : "NaoSocio",
+            };
+
             return new SubmissionMeta(
                 S("NomeCompleto", r), S("Email", r), S("Telefone", r),
                 S("Pais", r), S("LocalRecolha", r),
-                numConcurso, numVenda, numTransporte, socioLabel, totalPago, aves);
+                numConcurso, numVenda, numTransporte, socioLabel, socioStatus, totalPago, aves);
         }
         catch
         {
-            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, "—", 0m, new());
+            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, "—", "NaoSocio", 0m, new());
         }
     }
 

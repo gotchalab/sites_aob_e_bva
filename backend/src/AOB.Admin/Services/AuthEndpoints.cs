@@ -198,6 +198,10 @@ public static class AuthEndpoints
             var name = Path.GetFileName(abs);
             http.Response.Headers.ContentDisposition = $"inline; filename=\"{name}\"";
             http.Response.ContentType = "application/pdf";
+            // Sem cache: o PDF pode ser regenerado depois de edições, pelo que
+            // o browser deve puxar sempre a versão actual em disco.
+            http.Response.Headers.CacheControl = "no-store, must-revalidate";
+            http.Response.Headers.Pragma = "no-cache";
             await http.Response.Body.WriteAsync(bytes);
             return Results.Empty;
         }).RequireAuthorization();

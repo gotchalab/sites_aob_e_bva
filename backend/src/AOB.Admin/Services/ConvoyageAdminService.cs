@@ -11,7 +11,14 @@ public class ConvoyageAdminService(AppDbContext db)
         int TotalInscricoes, List<ConvoyageCollectionPoint> CollectionPoints,
         int NumCargasAlvo, int CapacidadePorCarga, int MinPorCarga,
         string TransportadorasJson,
-        DateTime? RegistrationClosesAt);
+        DateTime? RegistrationClosesAt,
+        PricingConfig Pricing);
+
+    public record PricingConfig(
+        decimal PrecoInscricao, decimal PrecoAveBva, decimal PrecoGaiola,
+        decimal TarifaTransporteSocio, decimal TarifaTransporteNaoSocio,
+        decimal TarifaAdquirenteSocio, decimal TarifaAdquirenteNaoSocio,
+        decimal Quota);
 
     public async Task<List<YearWithPoints>> ListYearsAsync(int siteId)
     {
@@ -25,6 +32,10 @@ public class ConvoyageAdminService(AppDbContext db)
                 Points = y.CollectionPoints.OrderBy(p => p.SortOrder).ToList(),
                 y.NumCargasAlvo, y.CapacidadePorCarga, y.MinPorCarga, y.TransportadorasJson,
                 y.RegistrationClosesAt,
+                y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
+                y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
+                y.TarifaAdquirenteSocio, y.TarifaAdquirenteNaoSocio,
+                y.Quota,
             })
             .AsNoTracking()
             .ToListAsync();
@@ -33,7 +44,33 @@ public class ConvoyageAdminService(AppDbContext db)
             y.Id, y.Year, y.IsActive, y.Description, y.CreatedAt,
             y.TotalInscricoes, y.Points,
             y.NumCargasAlvo, y.CapacidadePorCarga, y.MinPorCarga, y.TransportadorasJson ?? "{}",
-            y.RegistrationClosesAt)).ToList();
+            y.RegistrationClosesAt,
+            new PricingConfig(
+                y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
+                y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
+                y.TarifaAdquirenteSocio, y.TarifaAdquirenteNaoSocio,
+                y.Quota))).ToList();
+    }
+
+    public async Task<string?> UpdatePricingAsync(int yearId, PricingConfig p)
+    {
+        if (p.PrecoInscricao < 0 || p.PrecoAveBva < 0 || p.PrecoGaiola < 0
+            || p.TarifaTransporteSocio < 0 || p.TarifaTransporteNaoSocio < 0
+            || p.TarifaAdquirenteSocio < 0 || p.TarifaAdquirenteNaoSocio < 0
+            || p.Quota < 0)
+            return "Todos os valores têm de ser >= 0.";
+        var y = await db.ConvoyageYears.FirstOrDefaultAsync(x => x.Id == yearId);
+        if (y is null) return "Ano não encontrado.";
+        y.PrecoInscricao = p.PrecoInscricao;
+        y.PrecoAveBva = p.PrecoAveBva;
+        y.PrecoGaiola = p.PrecoGaiola;
+        y.TarifaTransporteSocio = p.TarifaTransporteSocio;
+        y.TarifaTransporteNaoSocio = p.TarifaTransporteNaoSocio;
+        y.TarifaAdquirenteSocio = p.TarifaAdquirenteSocio;
+        y.TarifaAdquirenteNaoSocio = p.TarifaAdquirenteNaoSocio;
+        y.Quota = p.Quota;
+        await db.SaveChangesAsync();
+        return null;
     }
 
     /// <summary>

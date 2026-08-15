@@ -15,8 +15,8 @@
 <h1 class="h3 mb-1">Plano de transportes</h1>
 <p class="text-muted small mb-4">
     Zonas processadas sul→norte (ordem dos pontos de recolha).
-    O sistema sugere quantas cargas são precisas em cada zona; tu preenches
-    depois o nome de quem faz cada carga.
+    O sistema sugere quantas transportadoras são precisas em cada zona; tu preenches
+    depois o nome de quem faz cada transportadora.
 </p>
 
 @if (_overview is null)
@@ -31,7 +31,7 @@ else
         <div class="col-md-3">
             <div class="card h-100 shadow-sm">
                 <div class="card-body">
-                    <div class="text-muted small text-uppercase">Cargas planeadas</div>
+                    <div class="text-muted small text-uppercase">Transportadoras planeadas</div>
                     <div class="h3 mb-0">@_overview.Cargas.Count / @_overview.Config.NumCargasAlvo</div>
                     <div class="small text-muted">Sugerido: @totalCargasNecessarias</div>
                 </div>
@@ -40,7 +40,7 @@ else
         <div class="col-md-3">
             <div class="card h-100 shadow-sm">
                 <div class="card-body">
-                    <div class="text-muted small text-uppercase">Capacidade / carga</div>
+                    <div class="text-muted small text-uppercase">Capacidade / transportadora</div>
                     <div class="h3 mb-0">@_overview.Config.CapacidadePorCarga</div>
                     <div class="small text-muted">mín. @_overview.Config.MinPorCarga p/ merge</div>
                 </div>
@@ -77,7 +77,7 @@ else
             <i class="bi bi-file-earmark-excel"></i> Exportar Excel
         </a>
         <button class="btn btn-outline-secondary" @onclick="AddCargaAsync" disabled="@_busy">
-            + Carga vazia
+            + Transportadora vazia
         </button>
         @if (_overview.SubmissoesSemPontoRecolha.Count > 0)
         {
@@ -102,9 +102,9 @@ else
     @* ── Painel de sugestão por ponto ─────────────────────────────────── *@
     <div class="card mb-4 shadow-sm">
         <div class="card-header py-2 fw-semibold d-flex justify-content-between">
-            <span>Sugestão de cargas por ponto de recolha</span>
+            <span>Sugestão de transportadoras por ponto de recolha</span>
             <span class="text-muted small">
-                Ordem sul→norte · @_overview.Config.CapacidadePorCarga aves/carga
+                Ordem sul→norte · @_overview.Config.CapacidadePorCarga aves/transportadora
             </span>
         </div>
         <div class="table-responsive">
@@ -116,7 +116,7 @@ else
                         <th style="cursor:pointer;" @onclick="@(() => ToggleSort("sug", "local"))">Local @SortIcon("sug", "local")</th>
                         <th class="text-end" style="width:100px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "insc"))">Inscrições @SortIcon("sug", "insc")</th>
                         <th class="text-end" style="width:80px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "aves"))">Aves @SortIcon("sug", "aves")</th>
-                        <th class="text-end" style="width:150px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "cargas"))">Cargas necessárias @SortIcon("sug", "cargas")</th>
+                        <th class="text-end" style="width:150px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "cargas"))">Transportadoras necessárias @SortIcon("sug", "cargas")</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -206,7 +206,7 @@ else
     {
         <div class="card mb-4 border-info">
             <div class="card-header bg-info-subtle fw-semibold">
-                Com ponto mas sem carga atribuída (@_overview.SubmissoesSemCarga.Count)
+                Com ponto mas sem transportadora atribuída (@_overview.SubmissoesSemCarga.Count)
             </div>
             <div class="table-responsive">
                 <table class="table table-sm mb-0 align-middle">
@@ -216,7 +216,7 @@ else
                             <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semc", "criador"))">Criador @SortIcon("semc", "criador")</th>
                             <th style="cursor:pointer;" @onclick="@(() => ToggleSort("semc", "zona"))">Ponto @SortIcon("semc", "zona")</th>
                             <th class="text-end" style="cursor:pointer;" @onclick="@(() => ToggleSort("semc", "aves"))">Aves @SortIcon("semc", "aves")</th>
-                            <th style="width:220px;">Mover para carga</th>
+                            <th style="width:220px;">Mover para transportadora</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -254,7 +254,7 @@ else
         <table class="table table-hover align-middle">
             <thead class="table-dark">
                 <tr>
-                    <th style="width:60px;">Carga</th>
+                    <th style="width:60px;">Transportadora</th>
                     <th style="width:60px;" class="text-end">Aves</th>
                     <th style="width:60px;" class="text-end">Sobras</th>
                     <th style="width:240px;">Zonas</th>
@@ -267,7 +267,7 @@ else
                 {
                     <tr>
                         <td colspan="6" class="text-center text-muted py-4">
-                            Sem cargas planeadas. Carrega "Gerar plano automático".
+                            Sem transportadoras planeadas. Carrega "Gerar plano automático".
                         </td>
                     </tr>
                 }
@@ -396,7 +396,7 @@ else
                                         <select class="form-select"
                                                 value=""
                                                 @onchange="e => MoveAssignmentAsync(s.Id, partAves, e.Value?.ToString())">
-                                            <option value="" selected>carga…</option>
+                                            <option value="" selected>transportadora…</option>
                                             @foreach (var target in _overview.Cargas.Where(x => x.Id != cid))
                                             {
                                                 <option value="@target.Id">@target.Codigo</option>
@@ -415,7 +415,7 @@ else
                             <button class="btn btn-sm btn-outline-danger"
                                     @onclick="() => DeleteCargaAsync(cid)"
                                     disabled="@_busy"
-                                    title="Eliminar carga">
+                                    title="Eliminar transportadora">
                                 <i class="bi bi-trash"></i> Eliminar
                             </button>
                         </td>
@@ -601,7 +601,7 @@ else
     private async Task ClearAsync()
     {
         var ok = await JS.InvokeAsync<bool>("confirm",
-            "Eliminar todas as cargas planeadas? As inscrições voltam a ficar sem carga.");
+            "Eliminar todas as transportadoras planeadas? As inscrições voltam a ficar sem transportadora.");
         if (!ok) return;
         _busy = true; _error = null;
         await Plans.ClearPlanAsync(YearId);
@@ -615,7 +615,7 @@ else
         _busy = true; _error = null;
         var c = await Plans.AddCargaAsync(YearId, "—", "");
         _busy = false;
-        if (c is null) _error = "Não foi possível criar a carga.";
+        if (c is null) _error = "Não foi possível criar a transportadora.";
         await ReloadAsync();
     }
 
@@ -659,7 +659,7 @@ else
 
     private async Task DeleteCargaAsync(int cid)
     {
-        var ok = await JS.InvokeAsync<bool>("confirm", "Eliminar esta carga?");
+        var ok = await JS.InvokeAsync<bool>("confirm", "Eliminar esta transportadora?");
         if (!ok) return;
         _busy = true; _error = null;
         _error = await Plans.DeleteCargaAsync(YearId, cid);

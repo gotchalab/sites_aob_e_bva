@@ -22,6 +22,16 @@ public class ConvoyageYear
     // JSON: { "ZONA": ["Nome1","Nome2"], ... } — round-robin por zona.
     public string TransportadorasJson { get; set; } = "{}";
 
+    // Tarifas e taxas do ano (editáveis no backoffice; alimentam form/Excel/PDF).
+    public decimal PrecoInscricao            { get; set; } = 8.00m;
+    public decimal PrecoAveBva               { get; set; } = 3.00m;
+    public decimal PrecoGaiola               { get; set; } = 3.00m;
+    public decimal TarifaTransporteSocio     { get; set; } = 5.50m;
+    public decimal TarifaTransporteNaoSocio  { get; set; } = 15.50m;
+    public decimal TarifaAdquirenteSocio     { get; set; } = 15.50m;
+    public decimal TarifaAdquirenteNaoSocio  { get; set; } = 20.50m;
+    public decimal Quota                     { get; set; } = 40.00m;
+
     public ICollection<ConvoyageCollectionPoint> CollectionPoints { get; set; } = [];
     public ICollection<FormSubmission> Submissions { get; set; } = [];
     public ICollection<NomenclatureGroup> NomenclatureGroups { get; set; } = [];

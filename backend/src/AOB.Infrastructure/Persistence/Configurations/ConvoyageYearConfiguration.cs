@@ -23,6 +23,15 @@ public class ConvoyageYearConfiguration : IEntityTypeConfiguration<ConvoyageYear
             .HasColumnType("jsonb")
             .HasDefaultValue("{}");
 
+        b.Property(x => x.PrecoInscricao).HasColumnType("numeric(10,2)").HasDefaultValue(8.00m);
+        b.Property(x => x.PrecoAveBva).HasColumnType("numeric(10,2)").HasDefaultValue(3.00m);
+        b.Property(x => x.PrecoGaiola).HasColumnType("numeric(10,2)").HasDefaultValue(3.00m);
+        b.Property(x => x.TarifaTransporteSocio).HasColumnType("numeric(10,2)").HasDefaultValue(5.50m);
+        b.Property(x => x.TarifaTransporteNaoSocio).HasColumnType("numeric(10,2)").HasDefaultValue(15.50m);
+        b.Property(x => x.TarifaAdquirenteSocio).HasColumnType("numeric(10,2)").HasDefaultValue(15.50m);
+        b.Property(x => x.TarifaAdquirenteNaoSocio).HasColumnType("numeric(10,2)").HasDefaultValue(20.50m);
+        b.Property(x => x.Quota).HasColumnType("numeric(10,2)").HasDefaultValue(40.00m);
+
         b.HasOne(x => x.Site)
             .WithMany()
             .HasForeignKey(x => x.SiteId)

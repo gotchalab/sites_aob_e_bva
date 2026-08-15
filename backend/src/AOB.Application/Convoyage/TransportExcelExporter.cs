@@ -2,16 +2,21 @@ using ClosedXML.Excel;
 
 namespace AOB.Application.Convoyage;
 
-/// Gera o ficheiro .xlsx com 3 folhas:
-///   1. Transportes — layout do ano anterior (Transportadora | Carga | Nº aves | Zonas | Criadores | Tipo | Sobras).
-///   2. Inscrições — 1 linha por inscrição.
-///   3. Aves — 1 linha por ave.
+/// Gera o ficheiro .xlsx com 4 folhas:
+///   1. Preços — constantes editáveis (tarifas, quotas, capacidade) referenciadas pelas restantes folhas.
+///   2. Transportes — Nº aves e Sobras derivados por fórmula sobre a folha Aves.
+///   3. Inscrições — colunas de custo derivadas por fórmula a partir de Preços; Total = SUM.
+///   4. Aves — 1 linha por ave (fonte de verdade para as contagens/atribuições).
 public static class TransportExcelExporter
 {
     public record TransporteRow(
         string Transportadora, string Codigo, int NumAves,
         string Zonas, string CriadoresLabel, string Tipo, int Sobras);
 
+    /// <summary>
+    /// SocioBva deve ser um de: "Sócio", "Paga na inscrição", "Não sócio".
+    /// Estes valores são referenciados directamente pelas fórmulas de tarifa/quota.
+    /// </summary>
     public record InscricaoRow(
         int SubmissionId, DateTime SubmittedAt,
         string Nome, string Email, string Telefone, string Pais,
@@ -19,19 +24,49 @@ public static class TransportExcelExporter
         int NumAvesTransporte,
         string SocioBva, decimal TotalPago, string CargaAtribuida);
 
+    // Valores permitidos na coluna Sócio (usados na data validation e nas fórmulas).
+    public const string SOCIO_SIM        = "Sócio";
+    public const string SOCIO_PAGA_INSCR = "Paga na inscrição";
+    public const string SOCIO_NAO        = "Não sócio";
+
+    /// <summary>Tarifas e taxas do ano — usadas como defaults na folha "Preços".</summary>
+    public record Pricing(
+        decimal Inscricao, decimal AveBva, decimal Gaiola,
+        decimal TarifaTranspSocio, decimal TarifaTranspNaoSocio,
+        decimal TarifaAdqSocio, decimal TarifaAdqNaoSocio,
+        decimal Quota)
+    {
+        public static Pricing Defaults => new(8.00m, 3.00m, 3.00m, 5.50m, 15.50m, 15.50m, 20.50m, 40.00m);
+    }
+
     public record AveRow(
         int SubmissionId, string Criador, string Serie, string Especie,
         string Mutacao, string Anilha, string Equipa, string Posicao,
         string CargaAtribuida);
 
+    // ── Layout da folha "Preços" ─────────────────────────────────────────────
+    // Coluna B contém os valores editáveis. Named ranges facilitam as fórmulas.
+    private const string PRICES_SHEET = "Preços";
+    private const string R_CAP        = "CapacidadePorCarga";
+    private const string R_INSCR      = "PrecoInscricao";
+    private const string R_AVES       = "PrecoAveBva";
+    private const string R_GAIOLAS    = "PrecoGaiolaBva";
+    private const string R_TAR_S      = "TarifaTransporteSocio";
+    private const string R_TAR_NS     = "TarifaTransporteNaoSocio";
+    private const string R_ADQ_S      = "TarifaAdquirenteSocio";
+    private const string R_ADQ_NS     = "TarifaAdquirenteNaoSocio";
+    private const string R_QUOTA      = "Quota";
+
     public static byte[] Render(
         int year, string tipo, int capacidadePorCarga,
+        Pricing pricing,
         List<TransporteRow> transportes,
         List<InscricaoRow> inscricoes,
         List<AveRow> aves)
     {
         using var wb = new XLWorkbook();
-        WriteTransportes(wb, tipo, capacidadePorCarga, transportes);
+        WritePrecos(wb, capacidadePorCarga, pricing);
+        WriteTransportes(wb, tipo, transportes);
         WriteInscricoes(wb, inscricoes);
         WriteAves(wb, aves);
 
@@ -43,12 +78,96 @@ public static class TransportExcelExporter
         return ms.ToArray();
     }
 
+    private static void WritePrecos(XLWorkbook wb, int capacidadePorCarga, Pricing p)
+    {
+        var ws = wb.Worksheets.Add(PRICES_SHEET);
+
+        void SectionHeader(int row, string title)
+        {
+            ws.Range(row, 1, row, 3).Merge();
+            ws.Cell(row, 1).Value = title;
+            ws.Cell(row, 1).Style.Font.Bold = true;
+            ws.Cell(row, 1).Style.Fill.BackgroundColor = XLColor.FromArgb(26, 67, 128);
+            ws.Cell(row, 1).Style.Font.FontColor = XLColor.White;
+        }
+
+        // ── Secção 1: Configuração vinda do backoffice (só leitura) ──────────
+        SectionHeader(1, "Configuração (definida no backoffice — só leitura)");
+
+        ws.Cell(2, 1).Value = "Capacidade máxima por transportadora";
+        var capCell = ws.Cell(2, 2);
+        capCell.Value = capacidadePorCarga;
+        capCell.Style.NumberFormat.Format = "0";
+        capCell.Style.Fill.BackgroundColor = XLColor.FromArgb(232, 232, 232);
+        capCell.Style.Font.Italic = true;
+        capCell.Style.Protection.Locked = true;
+        wb.NamedRanges.Add(R_CAP,
+            $"'{PRICES_SHEET}'!${capCell.Address.ColumnLetter}${capCell.Address.RowNumber}");
+        ws.Cell(2, 3).Value = "Alterar no backoffice → Configuração do ano";
+        ws.Cell(2, 3).Style.Font.Italic = true;
+        ws.Cell(2, 3).Style.Font.FontColor = XLColor.FromArgb(120, 120, 120);
+
+        // Proteger a folha permite manter o resto editável mas travar a capacidade.
+        ws.Protect().AllowElement(XLSheetProtectionElements.FormatCells)
+                    .AllowElement(XLSheetProtectionElements.FormatColumns)
+                    .AllowElement(XLSheetProtectionElements.FormatRows)
+                    .AllowElement(XLSheetProtectionElements.SelectLockedCells)
+                    .AllowElement(XLSheetProtectionElements.SelectUnlockedCells);
+
+        // ── Secção 2: Tarifas e taxas editáveis ──────────────────────────────
+        SectionHeader(4, "Tarifas e taxas (editáveis — recalculam as inscrições)");
+
+        // Cabeçalhos das colunas da tabela de preços.
+        ws.Cell(5, 1).Value = "Parâmetro";
+        ws.Cell(5, 2).Value = "Valor (€)";
+        ws.Cell(5, 3).Value = "Notas";
+        var subHeader = ws.Range(5, 1, 5, 3);
+        subHeader.Style.Font.Bold = true;
+        subHeader.Style.Fill.BackgroundColor = XLColor.FromArgb(230, 235, 245);
+
+        var linhas = new (string Rot, double Val, string Named, string Nota)[]
+        {
+            ("Inscrição (por inscrição)",      (double)p.Inscricao,            R_INSCR,   "Aplicada se houver aves concurso + venda"),
+            ("Aves BVA (por ave concurso)",    (double)p.AveBva,               R_AVES,    "Multiplica pelo nº aves concurso"),
+            ("Gaiolas (por ave concurso+venda)", (double)p.Gaiola,             R_GAIOLAS, "Multiplica por (concurso + venda)"),
+            ("Tarifa transporte sócio",        (double)p.TarifaTranspSocio,    R_TAR_S,   "Para concurso+venda de sócios"),
+            ("Tarifa transporte não sócio",    (double)p.TarifaTranspNaoSocio, R_TAR_NS,  "Para concurso+venda de não sócios"),
+            ("Tarifa adquirente sócio",        (double)p.TarifaAdqSocio,       R_ADQ_S,   "Aves de transporte, sócio"),
+            ("Tarifa adquirente não sócio",    (double)p.TarifaAdqNaoSocio,    R_ADQ_NS,  "Aves de transporte, não sócio"),
+            ("Quota",                          (double)p.Quota,                R_QUOTA,   "Aplicada se paga com inscrição"),
+        };
+
+        int r = 6;
+        foreach (var (rot, val, named, nota) in linhas)
+        {
+            ws.Cell(r, 1).Value = rot;
+            var cell = ws.Cell(r, 2);
+            cell.Value = val;
+            cell.Style.NumberFormat.Format = "0.00";
+            cell.Style.Protection.Locked = false; // desbloqueada para edição
+            cell.Style.Fill.BackgroundColor = XLColor.FromArgb(255, 249, 220);
+            wb.NamedRanges.Add(named,
+                $"'{PRICES_SHEET}'!${cell.Address.ColumnLetter}${cell.Address.RowNumber}");
+            ws.Cell(r, 3).Value = nota;
+            r++;
+        }
+
+        ws.Column(1).Width = 40;
+        ws.Column(2).Width = 12;
+        ws.Column(3).Width = 44;
+
+        var data = ws.Range(5, 1, r - 1, 3);
+        data.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        data.Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+    }
+
     private static void WriteTransportes(
-        XLWorkbook wb, string tipo, int cap, List<TransporteRow> rows)
+        XLWorkbook wb, string tipo, List<TransporteRow> rows)
     {
         var ws = wb.Worksheets.Add("Transportes");
 
-        var headers = new[] { "Carga", "Nº aves", "Zonas", "Criadores", "Tipo", "Sobras" };
+        //  A Transportadora  B Zonas  C Criadores  D Tipo  E Nº aves  F Sobras
+        var headers = new[] { "Transportadora", "Zonas", "Criadores", "Tipo", "Nº aves", "Sobras" };
         for (int i = 0; i < headers.Length; i++)
             ws.Cell(1, i + 1).Value = headers[i];
 
@@ -63,48 +182,51 @@ public static class TransportExcelExporter
         foreach (var row in rows)
         {
             ws.Cell(r, 1).Value = row.Codigo;
-            ws.Cell(r, 2).Value = row.NumAves;
-            ws.Cell(r, 3).Value = row.Zonas;
-            ws.Cell(r, 4).Value = row.CriadoresLabel;
-            ws.Cell(r, 5).Value = string.IsNullOrWhiteSpace(row.Tipo) ? tipo : row.Tipo;
-            ws.Cell(r, 6).Value = row.Sobras;
-
-            // Destaques visuais.
-            if (row.NumAves > cap)
-            {
-                ws.Cell(r, 2).Style.Fill.BackgroundColor = XLColor.FromArgb(255, 220, 220);
-                ws.Cell(r, 2).Style.Font.Bold = true;
-            }
-            if (row.Sobras > 4)
-            {
-                ws.Cell(r, 6).Style.Fill.BackgroundColor = XLColor.FromArgb(255, 240, 200);
-            }
-
+            ws.Cell(r, 2).Value = row.Zonas;
+            ws.Cell(r, 3).Value = row.CriadoresLabel;
+            ws.Cell(r, 4).Value = string.IsNullOrWhiteSpace(row.Tipo) ? tipo : row.Tipo;
+            // Nº aves vem calculado do backend (contabiliza splits entre transportadoras
+            // que a folha Aves não consegue exprimir num único COUNTIF).
+            ws.Cell(r, 5).Value = row.NumAves;
+            // Sobras = capacidade - Nº aves (nunca negativo).
+            ws.Cell(r, 6).FormulaA1 = $"MAX(0, {R_CAP} - $E{r})";
             r++;
+        }
+
+        // Formatação condicional: transportadoras cheias/vazias.
+        if (rows.Count > 0)
+        {
+            var lastData = r - 1;
+            ws.Range(2, 5, lastData, 5).AddConditionalFormat()
+                .WhenGreaterThan(R_CAP)
+                .Fill.SetBackgroundColor(XLColor.FromArgb(255, 220, 220))
+                .Font.SetBold();
+            ws.Range(2, 6, lastData, 6).AddConditionalFormat()
+                .WhenGreaterThan(4)
+                .Fill.SetBackgroundColor(XLColor.FromArgb(255, 240, 200));
         }
 
         var data = ws.Range(2, 1, Math.Max(2, r - 1), headers.Length);
         data.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
         data.Style.Border.InsideBorder = XLBorderStyleValues.Hair;
-        ws.Column(4).Style.Alignment.WrapText = true;
+        ws.Column(3).Style.Alignment.WrapText = true;
 
-        ws.Column(1).Width = 8;
-        ws.Column(2).Width = 8;
-        ws.Column(3).Width = 22;
-        ws.Column(4).Width = 70;
-        ws.Column(5).Width = 14;
-        ws.Column(6).Width = 8;
+        ws.Column(1).Width = 14; // Transportadora
+        ws.Column(2).Width = 22; // Zonas
+        ws.Column(3).Width = 70; // Criadores
+        ws.Column(4).Width = 14; // Tipo
+        ws.Column(5).Width = 10; // Nº aves
+        ws.Column(6).Width = 10; // Sobras
 
         ws.SheetView.FreezeRows(1);
 
-        // Totais.
         if (rows.Count > 0)
         {
             var totalRow = r;
             ws.Cell(totalRow, 1).Value = "TOTAL";
             ws.Cell(totalRow, 1).Style.Font.Bold = true;
-            ws.Cell(totalRow, 2).FormulaA1 = $"SUM(B2:B{totalRow - 1})";
-            ws.Cell(totalRow, 2).Style.Font.Bold = true;
+            ws.Cell(totalRow, 5).FormulaA1 = $"SUM(E2:E{totalRow - 1})";
+            ws.Cell(totalRow, 5).Style.Font.Bold = true;
             ws.Cell(totalRow, 6).FormulaA1 = $"SUM(F2:F{totalRow - 1})";
             ws.Cell(totalRow, 6).Style.Font.Bold = true;
         }
@@ -114,11 +236,20 @@ public static class TransportExcelExporter
     {
         var ws = wb.Worksheets.Add("Inscrições");
 
+        // Layout:
+        //  A #  B Submetido em  C Nome  D Email  E Telefone  F País  G Local recolha
+        //  H Aves concurso  I Aves venda  J Aves transporte  K Sócio
+        //  L Inscrição  M Aves BVA  N Gaiolas  O Transporte  P Transp. adq.
+        //  Q Quota  R Total (€)  S BVA Portugal (€)  T BVA Masters (€)  U Transportadora
         var headers = new[]
         {
             "#", "Submetido em", "Nome", "Email", "Telefone", "País",
-            "Local de recolha", "Aves concurso", "Aves venda", "Aves transporte", "Sócio BVA",
-            "Total pago (€)", "Carga",
+            "Local de recolha", "Aves concurso", "Aves venda", "Aves transporte",
+            "Sócio",
+            "Inscrição (€)", "Aves BVA (€)", "Gaiolas (€)", "Transporte (€)",
+            "Transp. adq. (€)", "Quota (€)",
+            "Total pago (€)", "BVA Portugal (€)", "BVA Masters (€)",
+            "Transportadora",
         };
         for (int i = 0; i < headers.Length; i++)
             ws.Cell(1, i + 1).Value = headers[i];
@@ -143,10 +274,81 @@ public static class TransportExcelExporter
             ws.Cell(r, 9).Value = row.NumAvesVenda;
             ws.Cell(r, 10).Value = row.NumAvesTransporte;
             ws.Cell(r, 11).Value = row.SocioBva;
-            ws.Cell(r, 12).Value = row.TotalPago;
-            ws.Cell(r, 12).Style.NumberFormat.Format = "0.00";
-            ws.Cell(r, 13).Value = row.CargaAtribuida;
+
+            // Fórmulas de custo — a coluna Sócio (K) é o único discriminador.
+            ws.Cell(r, 12).FormulaA1 = $"IF(($H{r}+$I{r})>0,{R_INSCR},0)";
+            ws.Cell(r, 13).FormulaA1 = $"{R_AVES}*$H{r}";
+            ws.Cell(r, 14).FormulaA1 = $"{R_GAIOLAS}*($H{r}+$I{r})";
+            ws.Cell(r, 15).FormulaA1 =
+                $"IF($K{r}=\"{SOCIO_NAO}\",{R_TAR_NS},{R_TAR_S})*($H{r}+$I{r})";
+            ws.Cell(r, 16).FormulaA1 =
+                $"IF($K{r}=\"{SOCIO_NAO}\",{R_ADQ_NS},{R_ADQ_S})*$J{r}";
+            ws.Cell(r, 17).FormulaA1 = $"IF($K{r}=\"{SOCIO_PAGA_INSCR}\",{R_QUOTA},0)";
+            ws.Cell(r, 18).FormulaA1 = $"SUM($L{r}:$Q{r})";
+            // BVA Masters = Inscrição (L) + Aves BVA (M).
+            // Aves BVA já multiplica só pelas aves concurso; aves venda pagam só a gaiola.
+            ws.Cell(r, 20).FormulaA1 = $"$L{r}+$M{r}";
+            // BVA Portugal: o que sobra do total pago depois de pagar à Masters.
+            ws.Cell(r, 19).FormulaA1 = $"$R{r}-$T{r}";
+
+            for (int c = 12; c <= 20; c++)
+                ws.Cell(r, c).Style.NumberFormat.Format = "0.00";
+
+            ws.Cell(r, 21).Value = row.CargaAtribuida;
             r++;
+        }
+
+        // Data validation na coluna Sócio: dropdown com os 3 valores válidos.
+        if (rows.Count > 0)
+        {
+            var socioRange = ws.Range(2, 11, r - 1, 11);
+            var dv = socioRange.CreateDataValidation();
+            dv.List($"\"{SOCIO_SIM},{SOCIO_PAGA_INSCR},{SOCIO_NAO}\"", true);
+            dv.InCellDropdown = true;
+            dv.ErrorStyle = XLErrorStyle.Warning;
+            dv.ErrorTitle = "Valor inválido";
+            dv.ErrorMessage = $"Usa um de: {SOCIO_SIM}, {SOCIO_PAGA_INSCR}, {SOCIO_NAO}";
+        }
+
+        // Destaque das colunas de síntese: Total (neutro), BVA Portugal (verde), BVA Masters (laranja).
+        if (rows.Count > 0)
+        {
+            var lastData = r - 1;
+            // Header + dados — cada uma com cor distinta.
+            ws.Cell(1, 18).Style.Fill.BackgroundColor = XLColor.FromArgb(80, 96, 128);   // Total (azul-escuro)
+            ws.Cell(1, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(56, 118, 74);   // BVA Portugal (verde)
+            ws.Cell(1, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(180, 95, 6);    // BVA Masters (laranja)
+
+            ws.Range(2, 18, lastData, 18).Style.Fill.BackgroundColor = XLColor.FromArgb(230, 234, 244); // Total
+            ws.Range(2, 19, lastData, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(217, 234, 211); // Portugal
+            ws.Range(2, 20, lastData, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(252, 229, 205); // Masters
+        }
+
+        // Linha TOTAL
+        if (rows.Count > 0)
+        {
+            var totalRow = r;
+            ws.Cell(totalRow, 3).Value = "TOTAL";
+            ws.Cell(totalRow, 3).Style.Font.Bold = true;
+            for (int col = 8; col <= 10; col++) // Aves concurso/venda/transporte
+            {
+                ws.Cell(totalRow, col).FormulaA1 =
+                    $"SUM({ws.Cell(2, col).Address.ColumnLetter}2:{ws.Cell(2, col).Address.ColumnLetter}{totalRow - 1})";
+                ws.Cell(totalRow, col).Style.Font.Bold = true;
+            }
+            for (int col = 12; col <= 20; col++)
+            {
+                ws.Cell(totalRow, col).FormulaA1 =
+                    $"SUM({ws.Cell(2, col).Address.ColumnLetter}2:{ws.Cell(2, col).Address.ColumnLetter}{totalRow - 1})";
+                ws.Cell(totalRow, col).Style.NumberFormat.Format = "0.00";
+                ws.Cell(totalRow, col).Style.Font.Bold = true;
+            }
+            ws.Range(totalRow, 1, totalRow, headers.Length).Style.Fill.BackgroundColor =
+                XLColor.FromArgb(240, 240, 240);
+            // Preservar destaque das 3 colunas de síntese na linha TOTAL (tons mais saturados).
+            ws.Cell(totalRow, 18).Style.Fill.BackgroundColor = XLColor.FromArgb(197, 208, 232);
+            ws.Cell(totalRow, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(182, 215, 168);
+            ws.Cell(totalRow, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(249, 203, 156);
         }
 
         ws.Columns(1, headers.Length).AdjustToContents();
@@ -157,11 +359,7 @@ public static class TransportExcelExporter
     {
         var ws = wb.Worksheets.Add("Aves");
 
-        var headers = new[]
-        {
-            "Inscrição #", "Criador", "Série", "Espécie", "Mutação",
-            "Anilha", "Equipa (T)", "Pos.", "Carga",
-        };
+        var headers = new[] { "Inscrição #", "Criador", "Espécie", "Anilha", "Transportadora" };
         for (int i = 0; i < headers.Length; i++)
             ws.Cell(1, i + 1).Value = headers[i];
 
@@ -175,13 +373,9 @@ public static class TransportExcelExporter
         {
             ws.Cell(r, 1).Value = row.SubmissionId;
             ws.Cell(r, 2).Value = row.Criador;
-            ws.Cell(r, 3).Value = row.Serie;
-            ws.Cell(r, 4).Value = EspecieLabel(row.Especie);
-            ws.Cell(r, 5).Value = row.Mutacao;
-            ws.Cell(r, 6).Value = row.Anilha;
-            ws.Cell(r, 7).Value = row.Equipa;
-            ws.Cell(r, 8).Value = row.Posicao;
-            ws.Cell(r, 9).Value = row.CargaAtribuida;
+            ws.Cell(r, 3).Value = EspecieLabel(row.Especie);
+            ws.Cell(r, 4).Value = row.Anilha;
+            ws.Cell(r, 5).Value = row.CargaAtribuida;
             r++;
         }
 
