@@ -1859,8 +1859,8 @@ export function InscricaoConvoyageForm({
       <section className={sectionCls}>
         <h2 className={sectionTitleCls}>3. Aves para a sala de vendas</h2>
         <p className="mt-1 text-sm text-ink-500">
-          Aves que pretende vender na <b>sala de vendas BVA</b> (não entram no concurso). Ocupam
-          gaiola no transporte e têm de ter anilha fechada do proprietário.
+          Aves que pretende vender na <b>sala de vendas BVA</b> (não entram no concurso). Têm de
+          ter anilha fechada do proprietário.
         </p>
         <p className="mt-2 text-xs font-medium text-ink-700">
           {saleBirds.length} {saleBirds.length === 1 ? "ave para venda" : "aves para venda"}
