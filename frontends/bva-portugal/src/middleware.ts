@@ -64,7 +64,12 @@ function unauthorized(req: NextRequest, path: string, isApi: boolean) {
   if (isApi) {
     return NextResponse.json({ ok: false, error: "Sessão expirada" }, { status: 401 });
   }
-  const url = new URL("/socio/login", req.url);
+  // Behind nginx: `next start -H 127.0.0.1` makes req.url reconstruct with the
+  // internal host, so absolute redirects would leak "localhost:3001" to browsers.
+  // Prefer X-Forwarded-* to build the public URL.
+  const proto = req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? req.nextUrl.host;
+  const url = new URL("/socio/login", `${proto}://${host}`);
   url.searchParams.set("redirect", path);
   return NextResponse.redirect(url);
 }
