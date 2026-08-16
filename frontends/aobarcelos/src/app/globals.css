@@ -55,6 +55,15 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.01em; }
 .prose-article table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; font-size: 0.95rem; }
 .prose-article th, .prose-article td { border: 1px solid #E5D9BC; padding: 0.5rem 0.75rem; text-align: left; }
 .prose-article th { background: var(--color-cream-200); font-weight: 600; }
+/* Neutraliza inline styles trazidos por pastes de dark-mode (bg/border/color pretos
+   embutidos em <table>/<td>/<th> pelo TinyMCE ao copiar do DevTools ou de sites
+   dark). Forca o esquema de cores do site. */
+.prose-article table,
+.prose-article thead,
+.prose-article tbody,
+.prose-article tr,
+.prose-article td { background-color: transparent !important; color: inherit !important; border-color: #E5D9BC !important; }
+.prose-article th { background-color: var(--color-cream-200) !important; color: var(--color-earth-900) !important; border-color: #E5D9BC !important; }
 
 .category-lead {
   margin-top: 1.25rem;

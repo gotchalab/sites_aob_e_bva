@@ -13,6 +13,40 @@ public class ContentService(AppDbContext db)
 {
     private static readonly HtmlSanitizer Sanitizer = BuildSanitizer();
 
+    // Strip style="…" em <table>/<tr>/<thead>/<tbody> — elementos estruturais que
+    // nao devem ter estilo inline (cor de fundo, borda) num tema light-only.
+    // Pastes de dark-mode injectam ai "background-color: rgba(25,26,27,1)" que
+    // torna a tabela ilegivel. <td>/<th> preservam style (podem ter text-align,
+    // width, etc. legitimos definidos pelo autor).
+    private static readonly System.Text.RegularExpressions.Regex TableWrapperStyleRx =
+        new(@"(<(?:table|tr|thead|tbody)\b[^>]*?)\s+style\s*=\s*""[^""]*""",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+    // Nos <td>/<th> so remove propriedades cromaticas problematicas, preservando
+    // outras (text-align, width, vertical-align, padding).
+    private static readonly System.Text.RegularExpressions.Regex CellColorPropRx =
+        new(@"(?:background-color|background|color|border-color|border)\s*:\s*[^;""]+;?",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex CellStyleRx =
+        new(@"(<(?:td|th)\b[^>]*?\s)style\s*=\s*""([^""]*)""",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static string CleanTableStyles(string html)
+    {
+        if (string.IsNullOrEmpty(html) || !html.Contains("<t", StringComparison.OrdinalIgnoreCase)) return html;
+        // 1) Remove style inteiro de <table>/<tr>/<thead>/<tbody>.
+        html = TableWrapperStyleRx.Replace(html, "$1");
+        // 2) Em <td>/<th>, remove apenas propriedades cromaticas do style. Se sobrar
+        // string vazia, remove o atributo inteiro.
+        html = CellStyleRx.Replace(html, m =>
+        {
+            var prefix = m.Groups[1].Value;
+            var cleaned = CellColorPropRx.Replace(m.Groups[2].Value, "").Trim();
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @";\s*;", ";").Trim(';', ' ');
+            return string.IsNullOrEmpty(cleaned) ? prefix.TrimEnd() : $"{prefix}style=\"{cleaned}\"";
+        });
+        return html;
+    }
+
     public IQueryable<Site> Sites() => db.Sites.AsNoTracking().OrderBy(s => s.Slug);
 
     public Task<List<Category>> ListCategories(int siteId, bool includeDownloads = false) =>
@@ -128,7 +162,7 @@ public class ContentService(AppDbContext db)
     public async Task SaveArticle(Article art)
     {
         if (string.IsNullOrWhiteSpace(art.Slug)) art.Slug = SlugHelper.Slugify(art.Title);
-        art.Content = Sanitizer.Sanitize(art.Content ?? "");
+        art.Content = CleanTableStyles(Sanitizer.Sanitize(art.Content ?? ""));
         if (string.IsNullOrWhiteSpace(art.CoverImagePath) && !string.IsNullOrWhiteSpace(art.Content))
         {
             var m = FirstImgSrcRx.Match(art.Content);
@@ -221,6 +255,11 @@ public class ContentService(AppDbContext db)
     public record CategoryNode(Category Category, int Depth)
     {
         public string IndentedName => Depth == 0 ? Category.Name : string.Concat(Enumerable.Repeat("— ", Depth)) + Category.Name;
+        /// Como <see cref="IndentedName"/> mas sufixado com o slug entre parentesis
+        /// para desambiguar quando duas categorias diferentes partilham o mesmo nome
+        /// (comum entre as arvores de artigos e de downloads, ex.: "BVA Masters" +
+        /// "BVA Masters" com slug "dl-bva-masters").
+        public string IndentedNameWithSlug => $"{IndentedName} ({Category.Slug})";
     }
 
     private static HtmlSanitizer BuildSanitizer()

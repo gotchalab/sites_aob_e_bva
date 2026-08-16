@@ -73,6 +73,15 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.015em; }
 .prose-article table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; font-size: 0.95rem; }
 .prose-article th, .prose-article td { border: 1px solid var(--color-sand-300); padding: 0.5rem 0.75rem; text-align: left; }
 .prose-article th { background: var(--color-brand-50); font-weight: 600; }
+/* Neutraliza inline styles trazidos por pastes de dark-mode (bg/border/color pretos
+   embutidos em <table>/<td>/<th> pelo TinyMCE ao copiar do DevTools ou de sites
+   dark). Forca o esquema de cores do site. */
+.prose-article table,
+.prose-article thead,
+.prose-article tbody,
+.prose-article tr,
+.prose-article td { background-color: transparent !important; color: inherit !important; border-color: var(--color-sand-300) !important; }
+.prose-article th { background-color: var(--color-brand-50) !important; color: var(--color-ink-900) !important; border-color: var(--color-sand-300) !important; }
 
 /* Descrição de categoria em HTML — serve de "lead" no topo da listagem */
 .category-lead {

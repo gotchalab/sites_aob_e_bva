@@ -22,7 +22,8 @@ public class RevalidateNotifier(HttpClient http, IConfiguration cfg, ILogger<Rev
 
         try
         {
-            http.Timeout = TimeSpan.FromSeconds(3);
+            // Timeout configurado em Program.cs (AddHttpClient); nao pode ser
+            // alterado aqui porque este e um typed client partilhado.
             var res = await http.PostAsync(url, content: null, ct);
             if (!res.IsSuccessStatusCode)
                 log.LogWarning("Revalidate {Site} {Path}: {Status}", siteSlug, path, res.StatusCode);

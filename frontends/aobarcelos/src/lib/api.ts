@@ -143,14 +143,37 @@ const HTML_ENTITIES: Record<string, string> = {
  */
 export function stripDuplicateCover(html: string, coverPath: string | null | undefined): string {
   if (!html || !coverPath) return html;
-  const rx = /^\s*(?:<p[^>]*>\s*)?(?:<a[^>]*>\s*)?<img[^>]+src=(["'])([^"']+)\1[^>]*>\s*(?:<\/a>\s*)?(?:<\/p>)?/i;
-  const m = html.match(rx);
-  if (!m) return html;
-  const src = m[2];
   const norm = (u: string) => u.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
-  if (norm(src) === norm(coverPath)) {
-    return html.slice(m[0].length).trimStart();
+  const target = norm(coverPath);
+
+  // "padding" = whitespace, <br>, &nbsp; ou &#160;. Comum entre <p> e <img> em
+  // HTML herdado do Joomla/TinyMCE.
+  const PAD = "(?:\\s|<br\\s*/?>|&nbsp;|&#160;)*";
+  // src="..." OU src='...' — sem backref para nao colidir quando concatenado
+  // com outros grupos (ex.: (p|div) no blockRx).
+  const imgSrc = "<img[^>]+src=[\"']([^\"']+)[\"'][^>]*>";
+
+  // 1) Remove ocorrencia inicial: <p><br><img cover></p> (com variacoes).
+  const leadRx = new RegExp(
+    `^\\s*(?:<p[^>]*>)?${PAD}(?:<a[^>]*>${PAD})?${imgSrc}${PAD}(?:</a>)?${PAD}(?:</p>)?`,
+    "i",
+  );
+  const lead = html.match(leadRx);
+  if (lead && norm(lead[1]) === target) {
+    html = html.slice(lead[0].length).trimStart();
   }
+
+  // 2) Remove qualquer <p>...</p> ou <div>...</div> cujo unico conteudo seja
+  // o cover image (com padding a volta). Nao toca em imagens inline com texto.
+  // Grupo 1 = tag (p|div), grupo 2 = src.
+  const blockRx = new RegExp(
+    `<(p|div)[^>]*>${PAD}(?:<a[^>]*>${PAD})?${imgSrc}${PAD}(?:</a>)?${PAD}</\\1>`,
+    "gi",
+  );
+  html = html.replace(blockRx, (m, _tag, src) =>
+    norm(src) === target ? "" : m,
+  );
+
   return html;
 }
 

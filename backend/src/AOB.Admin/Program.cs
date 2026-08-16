@@ -49,7 +49,17 @@ builder.Services.AddScoped<SiteAdminService>();
 builder.Services.AddScoped<ConvoyageAdminService>();
 builder.Services.AddScoped<NomenclatureAdminService>();
 builder.Services.AddScoped<TransportPlanAdminService>();
-builder.Services.AddHttpClient<RevalidateNotifier>();
+// Timeout definido AQUI porque HttpClient.Timeout so pode ser configurado antes
+// da primeira request; dentro do NotifyAsync lancava InvalidOperationException
+// apos a 1a chamada — as 3 revalidacoes por save (/, /artigos, /artigos/{slug})
+// so a 1a passava. Configuravel via Revalidate:TimeoutSeconds (default 10s —
+// chamada interna loopback ao Next.js; 3s era demasiado apertado se o Next
+// estivesse a re-renderizar uma pagina pesada em SSR).
+builder.Services.AddHttpClient<RevalidateNotifier>((sp, c) =>
+{
+    var seconds = sp.GetRequiredService<IConfiguration>().GetValue<int?>("Revalidate:TimeoutSeconds") ?? 10;
+    c.Timeout = TimeSpan.FromSeconds(seconds);
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
