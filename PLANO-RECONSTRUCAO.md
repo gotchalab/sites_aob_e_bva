@@ -932,6 +932,16 @@ Uma equipa = 4 aves da mesma espécie/classe/mutação, com anilhas próprias, o
 
 **Notas de desenvolvimento Windows:** `next build` com `output: "standalone"` falha na fase de trace files por não conseguir criar symlinks sem admin (EPERM). O compile e a geração de páginas passam — o problema é apenas o empacotamento standalone e não afeta `dev` nem builds em Linux (VPS). Se preciso testar standalone localmente, correr o terminal como Administrador.
 
+**Workflow de uploads (obrigatório após qualquer `AOB.Migrator`):**
+O `AOB.Migrator` grava ficheiros no filesystem **local** (`Uploads:RootPath` em `appsettings.Development.json`, hoje `d:/PROJETOS/aob/backup-vps-2026-07-15/uploads-target/`). Estes ficheiros **não chegam ao VPS** por outra via — foi exactamente isto que causou o incidente de 2026-08-15 em que os patrocinadores e capas de artigos apareciam partidos em produção.
+- Após qualquer `AOB.Migrator sponsors|articles|downloads`, correr **sempre**: `python infra/deploy/deploy.py uploads`
+- O target é idempotente e usa `tar --keep-newer-files` na extracção — nunca sobrescreve ficheiros mais recentes criados no VPS pelo backoffice de admin.
+- Uploads criados via admin (backoffice em `admin.aobarcelos.pt`) escrevem directamente em `/var/www/uploads/` no VPS — não requerem sync (o `aob-api` service tem write access nativo).
+- Se o site crescer significativamente (dezenas de GB de uploads, tráfego internacional), a recomendação é migrar para Cloudflare R2 (grátis até 10 GB, S3-compatible). Nessa altura o `UploadService` passa a escrever no bucket, os DTOs devolvem URLs absolutas, e o `remotePatterns` do Next inclui o CDN. O symlink `public/uploads` deixa de ser necessário.
+
+**Permissões `/var/www/uploads/` (2026-08-15):**
+Dir top-level é `2750 aob-api:www-data`. O setgid (`2xxx`) faz com que novos subdirs herdem o grupo `www-data`, para que o `aob-web` (frontend Next.js — via membro do grupo `www-data`) consiga ler via symlink `public/uploads` → `/var/www/uploads`. Sem este symlink o Next.js image optimizer devolve 400 "received null" porque tenta ler URLs `/uploads/*` do filesystem local (comportamento standard do Next 15). Ficheiros são `0640`.
+
 ### Estado do VPS após limpeza (2026-08-12) ✅
 
 - **`https://bva-p-socios.aobarcelos.pt`** — **no ar** com SSL (Let's Encrypt, válido até 2026-11-10)

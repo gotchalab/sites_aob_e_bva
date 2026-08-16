@@ -16,9 +16,12 @@ Targets:
     admin       — build + deploy AOB.Admin
     aobarcelos  — deploy .next/ do frontend aobarcelos.pt
     bva         — deploy .next/ do frontend bva-p.aobarcelos.pt
+    uploads     — sincroniza /uploads/ local (Uploads:RootPath) para /var/www/uploads/
+                  (correr apos AOB.Migrator; nunca sobrescreve ficheiros mais recentes
+                  no VPS — respeita uploads criados pelo backoffice de admin)
     infra       — copia nginx.conf + systemd units + daemon-reload
     services    — para Apache2, arranca nginx e todos os servicos AOB
-    all         — setup + db + infra + api + admin + aobarcelos + bva + services
+    all         — setup + db + infra + api + admin + uploads + aobarcelos + bva + services
 
 Variaveis de ambiente (opcionais):
     AOB_SSH_HOST  — default: 51.83.40.43
@@ -192,6 +195,11 @@ def setup(ssh: paramiko.SSHClient) -> None:
     print("\n[setup] Utilizadores de servico")
     for u in ("aob-api", "aob-admin", "aob-web"):
         sudo(ssh, f"id -u {u} >/dev/null 2>&1 || useradd -r -M -s /usr/sbin/nologin {u}", check=False)
+    # aob-web tem de ler /var/www/uploads via symlink public/uploads para o
+    # Next.js image optimizer funcionar (Next 15 le URLs /uploads/... do FS).
+    # aob-admin tambem tem de escrever (CKEditor download picker no backoffice).
+    sudo(ssh, "usermod -aG www-data aob-web")
+    sudo(ssh, "usermod -aG www-data aob-admin")
 
     print("\n[setup] Diretorios")
     for cmd in (
@@ -199,10 +207,17 @@ def setup(ssh: paramiko.SSHClient) -> None:
         "install -d -o aob-admin -g aob-admin -m 0755 /opt/aob/admin",
         "install -d -o aob-web   -g aob-web   -m 0755 /opt/aob/aobarcelos",
         "install -d -o aob-web   -g aob-web   -m 0755 /opt/aob/bva-portugal",
-        "install -d -o aob-api   -g www-data  -m 0750 /var/www/uploads",
+        # 2770 = setgid + group rwx. setgid faz novos subdirs herdarem grupo
+        # www-data (para aob-web ler via symlink public/uploads); group write
+        # permite ao aob-admin (CKEditor picker) e ao aob-api criar ficheiros
+        # no mesmo tree.
+        "install -d -o aob-api   -g www-data  -m 2770 /var/www/uploads",
         "install -d -o root      -g root      -m 0755 /etc/aob",
     ):
         sudo(ssh, cmd)
+    # Reaplica setgid + group + mode em subdirs/ficheiros ja existentes (idempotente).
+    sudo(ssh, "find /var/www/uploads -type d -exec chgrp www-data {} + -exec chmod 2770 {} +")
+    sudo(ssh, "find /var/www/uploads -type f -exec chmod 0660 {} +")
 
     print("\n[setup] PostgreSQL — role aobapp + BD aob_prod")
     # Em PG 13, CREATE ROLE dentro de DO $$ precisa de EXECUTE.
@@ -327,6 +342,13 @@ def deploy_frontend(ssh: paramiko.SSHClient, name: str, local_dir: Path,
             upload_file(ssh, fpath, f"{remote_dir}/{fname}")
 
     sudo(ssh, f"chown -R aob-web:aob-web {remote_dir}")
+    # public/uploads -> /var/www/uploads. Sem isto, o Next.js image optimizer
+    # devolve 400 "received null" para URLs relativos /uploads/... porque
+    # tenta le-los do FS local em public/ (nao via HTTP). Requer aob-web
+    # no grupo www-data (feito no setup).
+    sudo(ssh, f"mkdir -p {remote_dir}/public && "
+              f"ln -sfn /var/www/uploads {remote_dir}/public/uploads && "
+              f"chown -h aob-web:aob-web {remote_dir}/public/uploads")
     sudo(ssh, f"systemctl restart {service} && systemctl status --no-pager {service} | head -6")
     print(f"[{name}] Concluido.")
 
@@ -372,6 +394,60 @@ def deploy_infra(ssh: paramiko.SSHClient) -> None:
     print("[infra] Concluido.")
 
 
+def deploy_uploads(ssh: paramiko.SSHClient) -> None:
+    """Sincroniza /uploads/ local (Uploads:RootPath) para /var/www/uploads/ no VPS.
+
+    Correr sempre a seguir a `AOB.Migrator` (que grava ficheiros no filesystem
+    local mas nao chega ao VPS de outra forma). Idempotente. Usa --keep-newer-files
+    na extraccao — nunca sobrescreve ficheiros mais recentes criados no VPS
+    pelo backoffice de admin.
+    """
+    import json
+    cfg = REPO_ROOT / "backend" / "src" / "AOB.Api" / "appsettings.Development.json"
+    try:
+        local_root = Path(json.loads(cfg.read_text(encoding="utf-8"))["Uploads"]["RootPath"])
+    except (FileNotFoundError, KeyError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"Nao foi possivel ler Uploads:RootPath de {cfg}: {e}")
+
+    if not local_root.exists():
+        raise FileNotFoundError(f"Uploads root local nao existe: {local_root}")
+
+    files = list(local_root.rglob("*"))
+    n_files = sum(1 for f in files if f.is_file())
+    size_mb = sum(f.stat().st_size for f in files if f.is_file()) / 1_048_576
+    print(f"\n[uploads] {local_root} -> /var/www/uploads/ ({n_files} ficheiros, {size_mb:.1f} MB)")
+
+    # Empacota em memoria e envia via SFTP para /tmp/, depois sudo cp -a.
+    # Nao pode fazer upload directo para /var/www/uploads/ porque o SSH user
+    # (debian) nao tem write access la.
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for item in _walk(local_root):
+            rel = item.relative_to(local_root)
+            tar.add(item, arcname=str(rel).replace("\\", "/"))
+    buf.seek(0)
+    tar_size_mb = buf.getbuffer().nbytes / 1_048_576
+    print(f"    upload tar.gz {tar_size_mb:.1f} MB")
+
+    stage = "/tmp/aob_uploads_stage"
+    sudo(ssh, f"rm -rf {stage} && mkdir -p {stage} && chown {VPS_USER}:{VPS_USER} {stage}")
+    sftp_bytes(ssh, buf.getvalue(), f"{stage}.tar.gz")
+    sudo(ssh, f"tar xzf {stage}.tar.gz -C {stage} && rm -f {stage}.tar.gz")
+
+    # --keep-newer-files nao existe em `cp`. Usamos tar novamente: cria tar
+    # em {stage} e extrai em /var/www/uploads/ com --keep-newer-files. Assim
+    # ficheiros mais recentes no VPS (ex.: criados pelo admin backoffice)
+    # sao preservados.
+    sudo(ssh, f"cd {stage} && tar cf - . | tar xf - -C /var/www/uploads/ --keep-newer-files 2>/dev/null || true")
+    # Ownership + setgid propaga o grupo www-data para novos subdirs.
+    # Mode 2770 permite ao aob-admin (CKEditor picker) escrever no tree.
+    sudo(ssh, "chown -R aob-api:www-data /var/www/uploads/")
+    sudo(ssh, "find /var/www/uploads -type d -exec chmod 2770 {} +")
+    sudo(ssh, "find /var/www/uploads -type f -exec chmod 0660 {} +")
+    sudo(ssh, f"rm -rf {stage}")
+    print("[uploads] Concluido.")
+
+
 def start_services(ssh: paramiko.SSHClient) -> None:
     """Para Apache2, arranca Nginx e todos os servicos AOB."""
     print("\n[services] Parar Apache2")
@@ -404,11 +480,12 @@ TARGETS: dict = {
     "bva":        lambda ssh: deploy_frontend(
         ssh, "bva-portugal", FRONTENDS / "bva-portugal",
         "/opt/aob/bva-portugal", "aob-bva-portugal"),
+    "uploads":    deploy_uploads,
     "infra":      deploy_infra,
     "services":   start_services,
 }
 
-ALL_ORDER = ["setup", "db", "infra", "api", "admin", "aobarcelos", "bva", "services"]
+ALL_ORDER = ["setup", "db", "infra", "api", "admin", "uploads", "aobarcelos", "bva", "services"]
 
 
 def main() -> None:

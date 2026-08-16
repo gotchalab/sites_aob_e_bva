@@ -88,13 +88,24 @@ for u in aob-api aob-admin aob-web; do
         useradd -r -M -s /usr/sbin/nologin "$u"
     fi
 done
+# aob-web tem de ler /var/www/uploads via symlink public/uploads para o
+# Next.js image optimizer funcionar (Next 15 le URLs /uploads/... do FS).
+# aob-admin tambem tem de escrever (uploads via CKEditor picker no backoffice).
+usermod -aG www-data aob-web
+usermod -aG www-data aob-admin
 
 log "8. Estrutura de diretorios"
 install -d -o aob-api   -g aob-api   -m 0755 /opt/aob/api
 install -d -o aob-admin -g aob-admin -m 0755 /opt/aob/admin
 install -d -o aob-web   -g aob-web   -m 0755 /opt/aob/aobarcelos
 install -d -o aob-web   -g aob-web   -m 0755 /opt/aob/bva-portugal
-install -d -o aob-api   -g www-data  -m 0750 /var/www/uploads
+install -d -o aob-api   -g www-data  -m 2770 /var/www/uploads
+# 2770 = setgid + group rwx. setgid faz novos subdirs herdarem grupo www-data
+# (para aob-web ler via symlink public/uploads no Next); group write permite
+# ao aob-admin (backoffice CKEditor) e ao aob-api (API) criar ficheiros no
+# mesmo tree. Reaplica em subdirs existentes.
+find /var/www/uploads -type d -exec chgrp www-data {} + -exec chmod 2770 {} +
+find /var/www/uploads -type f -exec chmod 0660 {} +
 install -d -o root      -g root      -m 0755 /etc/aob
 install -d -o root      -g root      -m 0755 /var/log/aob
 

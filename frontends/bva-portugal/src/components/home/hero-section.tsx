@@ -57,7 +57,7 @@ export function HeroSection({
           {featured && (
             <Link
               href={`/artigos/${featured.slug}`}
-              className="group relative block overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-ink-900/10 transition hover:-translate-y-1 hover:shadow-2xl hover:ring-brand-500/30"
+              className="group relative hidden overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-ink-900/10 transition hover:-translate-y-1 hover:shadow-2xl hover:ring-brand-500/30 md:block"
             >
               {featured.coverImagePath ? (
                 <>

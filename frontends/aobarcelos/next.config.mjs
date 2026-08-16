@@ -17,9 +17,12 @@ const nextConfig = {
     ],
   },
   async rewrites() {
-    if (process.env.NODE_ENV === "production") return [];
+    // Necessario em prod tambem: o Next.js image optimizer, para URLs
+    // relativos como /uploads/x.jpg, faz fetch interno ao proprio servidor
+    // (127.0.0.1:3000), que nao sabe servir /uploads/ — so o backend sabe.
+    const dest = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5135";
     return [
-      { source: "/uploads/:path*", destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5135"}/uploads/:path*` },
+      { source: "/uploads/:path*", destination: `${dest}/uploads/:path*` },
     ];
   },
 };
