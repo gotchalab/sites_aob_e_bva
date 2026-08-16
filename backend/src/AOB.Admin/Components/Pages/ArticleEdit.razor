@@ -198,7 +198,7 @@ else
         var utc = dt.Value.Kind == DateTimeKind.Unspecified
             ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc)
             : dt.Value.ToUniversalTime();
-        return utc.ToLocalTime();
+        return LisbonTime.FromUtc(utc);
     }
 
     private void OnTitleChanged()
@@ -257,7 +257,7 @@ else
         try
         {
             Model.IsPublished = IntendedPublish;
-            Model.PublishedAt = PublishedAtLocal?.ToUniversalTime();
+            Model.PublishedAt = PublishedAtLocal.HasValue ? LisbonTime.ToUtc(PublishedAtLocal.Value) : null;
             await Content.SaveArticle(Model);
             PublishedAtLocal = ToLocalNullable(Model.PublishedAt);
             Message = IntendedPublish ? "Publicado." : "Rascunho guardado.";

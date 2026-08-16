@@ -6,28 +6,60 @@ const CKE_VERSION = "41.4.2";
 const CKE_URL = `https://cdn.ckeditor.com/ckeditor5/${CKE_VERSION}/super-build/ckeditor.js`;
 const instances = new Map();
 
-function loadCkeditor() {
-    if (window.CKEDITOR && window.CKEDITOR.ClassicEditor) return Promise.resolve();
-    if (window.__ckeditorLoading) return window.__ckeditorLoading;
+// CKEditor 5 (webpack style-loader) injecta <style> tags dinamicos no <head>.
+// A Blazor enhanced navigation compara <head> do servidor com o DOM actual e
+// REMOVE tudo o que nao esta na resposta — apagando esses estilos e deixando o
+// editor sem CSS (toolbar aparece com botoes gigantes uns por baixo dos outros).
+// Solucao: marcar cada <style> do CKEditor com data-permanent, atributo que a
+// enhanced navigation respeita e nunca remove.
+// - Fazemos sweep imediato apos o load do script (para os estilos ja injectados).
+// - Instalamos um MutationObserver no <head> que marca automaticamente qualquer
+//   <style> novo (o super-build injecta styles lazy conforme os plugins arrancam
+//   dentro de ClassicEditor.create()).
+function isCkStyle(el) {
+    if (!el || el.tagName !== "STYLE") return false;
+    // Heuristica robusta: styles do CKEditor contem selectores .ck-* ou :root com --ck-*.
+    const txt = el.textContent || "";
+    return txt.includes(".ck-") || txt.includes("--ck-") || txt.includes("[data-ck");
+}
+function markPermanent(el) {
+    if (el && !el.hasAttribute("data-permanent")) el.setAttribute("data-permanent", "");
+}
+function sweepAndMarkCkStyles() {
+    document.head.querySelectorAll("style").forEach(st => {
+        if (isCkStyle(st)) markPermanent(st);
+    });
+}
+function ensureHeadObserver() {
+    if (window.__ckeditorHeadObserver) return;
+    const obs = new MutationObserver(muts => {
+        for (const m of muts) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType === 1 && node.tagName === "STYLE" && isCkStyle(node)) {
+                    markPermanent(node);
+                }
+            }
+        }
+    });
+    obs.observe(document.head, { childList: true });
+    window.__ckeditorHeadObserver = obs;
+}
 
-    // Snapshot existing head <style> elements so we can identify what CKEditor adds.
-    const stylesBefore = new Set(document.head.querySelectorAll("style"));
+function loadCkeditor() {
+    ensureHeadObserver();
+    if (window.CKEDITOR && window.CKEDITOR.ClassicEditor) {
+        // Ja carregado numa navegacao anterior — apenas garante que os estilos
+        // remanescentes no <head> ficam marcados para nao serem stripped no proximo
+        // enhanced-nav.
+        sweepAndMarkCkStyles();
+        return Promise.resolve();
+    }
+    if (window.__ckeditorLoading) return window.__ckeditorLoading;
 
     window.__ckeditorLoading = new Promise((resolve, reject) => {
         const s = document.createElement("script");
         s.src = CKE_URL;
-        s.onload = () => {
-            // CKEditor 5 super-build (style-loader) injects <style> tags into <head>.
-            // Blazor enhanced navigation strips dynamic head elements on every navigation,
-            // removing the styles without re-injecting them (window.CKEDITOR already exists).
-            // Fix: move those <style> tags to <body>, which Blazor never patches.
-            document.head.querySelectorAll("style").forEach(st => {
-                if (!stylesBefore.has(st)) {
-                    document.body.insertBefore(st, document.body.firstChild);
-                }
-            });
-            resolve();
-        };
+        s.onload = () => { sweepAndMarkCkStyles(); resolve(); };
         s.onerror = () => reject(new Error("Failed to load CKEditor super-build from " + CKE_URL));
         document.head.appendChild(s);
     });
@@ -322,6 +354,9 @@ export async function attach(elementId, initialHtml, dotNetRef, uploadUrl) {
     });
     instances.set(elementId, editor);
 
+    // Sweep final: apanha quaisquer estilos injectados pelos plugins durante
+    // create() que o MutationObserver possa nao ter processado em tempo util.
+    sweepAndMarkCkStyles();
     attachDownloadButton(editor, uploadUrl);
 }
 

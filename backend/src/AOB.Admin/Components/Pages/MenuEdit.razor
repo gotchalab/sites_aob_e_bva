@@ -270,7 +270,7 @@ else
             await Menus.SaveAsync(Model);
             Nav.NavigateTo("/menus");
         }
-        catch (Exception ex) { ErrorMsg = ex.Message; }
+        catch (Exception ex) { ErrorMsg = FriendlyErrors.Describe(ex); }
     }
 
     private async Task OnDelete()
@@ -281,6 +281,6 @@ else
             await Menus.DeleteAsync(Model.Id);
             Nav.NavigateTo("/menus");
         }
-        catch (Exception ex) { ErrorMsg = ex.Message; }
+        catch (Exception ex) { ErrorMsg = FriendlyErrors.Describe(ex); }
     }
 }

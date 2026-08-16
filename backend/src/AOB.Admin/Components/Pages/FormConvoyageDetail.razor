@@ -28,7 +28,7 @@ else
                 <span class="badge @_statusCls ms-2" style="font-size:0.6em;vertical-align:middle;">@_statusLabel</span>
             </h1>
             <div class="text-muted small">
-                Recebido em @_form.SubmittedAt.ToLocalTime().ToString("dd/MM/yyyy 'às' HH:mm")
+                Recebido em @LisbonTime.FromUtc(_form.SubmittedAt).ToString("dd/MM/yyyy 'às' HH:mm")
                 · Convoyage @_data.ConvoyageYear
             </div>
         </div>
@@ -352,7 +352,7 @@ else
             @if (_form.HandledAt.HasValue)
             {
                 <div class="mt-3 text-muted small">
-                    Processado em @_form.HandledAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                    Processado em @LisbonTime.FromUtc(_form.HandledAt.Value).ToString("dd/MM/yyyy HH:mm")
                 </div>
             }
         </div>

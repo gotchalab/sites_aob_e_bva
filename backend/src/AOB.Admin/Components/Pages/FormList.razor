@@ -66,7 +66,7 @@ else
                 <tr>
                     <td class="text-muted small">#@f.Id</td>
                     <td><span class="badge bg-info">@f.FormType</span></td>
-                    <td class="small">@f.SubmittedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="small">@LisbonTime.FromUtc(f.SubmittedAt).ToString("yyyy-MM-dd HH:mm")</td>
                     <td>
                         @{
                             var (badge, cls) = f.Status switch

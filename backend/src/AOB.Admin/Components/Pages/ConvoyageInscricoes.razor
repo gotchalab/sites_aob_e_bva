@@ -126,7 +126,7 @@ else
             {
                 <tr>
                     <td class="small text-muted">#@f.Id</td>
-                    <td class="small">@f.SubmittedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="small">@LisbonTime.FromUtc(f.SubmittedAt).ToString("yyyy-MM-dd HH:mm")</td>
                     <td>
                         <div class="fw-semibold">@f.Nome</div>
                         <div class="text-muted small">@f.Email</div>

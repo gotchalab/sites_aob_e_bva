@@ -67,7 +67,7 @@ else
                     </td>
                     <td>@p.Ano</td>
                     <td class="small">Ø @p.Diametro mm · @p.Quantidade un</td>
-                    <td class="small">@p.DataPedido.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                    <td class="small">@LisbonTime.FromUtc(p.DataPedido).ToString("yyyy-MM-dd")</td>
                     <td>
                         @{
                             var (label, cls) = p.Estado switch

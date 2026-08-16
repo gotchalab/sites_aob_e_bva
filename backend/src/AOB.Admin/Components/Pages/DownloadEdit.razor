@@ -165,7 +165,7 @@ else
             ErrorMsg = null;
             if (IsNew) Nav.NavigateTo($"/downloads/{Model.Id}");
         }
-        catch (Exception ex) { ErrorMsg = ex.Message; }
+        catch (Exception ex) { ErrorMsg = FriendlyErrors.Describe(ex); }
     }
 
     private async Task OnDelete()
@@ -194,6 +194,6 @@ else
                 Uploads.DeleteStored(previousPath);
             Message = $"Ficheiro carregado ({res.FileSize} bytes)";
         }
-        catch (Exception ex) { ErrorMsg = ex.Message; }
+        catch (Exception ex) { ErrorMsg = FriendlyErrors.Describe(ex); }
     }
 }

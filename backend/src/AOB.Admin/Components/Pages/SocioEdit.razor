@@ -249,7 +249,7 @@ else
             ErrorMsg = null;
             if (IsNew) Nav.NavigateTo($"/socios/{Model.Id}");
         }
-        catch (Exception ex) { ErrorMsg = ex.Message; }
+        catch (Exception ex) { ErrorMsg = FriendlyErrors.Describe(ex); }
     }
 
     private async Task OnDelete()
@@ -260,7 +260,7 @@ else
             await Socios.DeleteAsync(Model.Id);
             Nav.NavigateTo("/socios");
         }
-        catch (Exception ex) { ErrorMsg = ex.Message; }
+        catch (Exception ex) { ErrorMsg = FriendlyErrors.Describe(ex); }
     }
 
     private async Task OnCreateUser()
@@ -280,7 +280,7 @@ else
             SocioId = Model.Id,
             Ano = NewQuotaAno,
             Valor = NewQuotaValor,
-            DataPagamento = NewQuotaData?.ToUniversalTime(),
+            DataPagamento = NewQuotaData.HasValue ? LisbonTime.ToUtc(NewQuotaData.Value) : null,
         };
         try
         {
@@ -289,7 +289,7 @@ else
             Message = $"Quota {q.Ano} registada.";
             NewQuotaAno++;
         }
-        catch (Exception ex) { ErrorMsg = ex.Message; }
+        catch (Exception ex) { ErrorMsg = FriendlyErrors.Describe(ex); }
     }
 
     private async Task OnDeleteQuota(int id)
