@@ -39,11 +39,17 @@ public static class ConvoyageEndpoints
     {
         var year = await db.ConvoyageYears
             .Include(y => y.CollectionPoints.OrderBy(p => p.SortOrder))
+            .Include(y => y.RegulamentoDownload)
             .Where(y => y.Site.Slug == siteSlug && y.IsActive)
             .AsNoTracking()
             .FirstOrDefaultAsync(ct);
 
         if (year is null) return TypedResults.NotFound();
+
+        // Regulamento so exposto se o download existir E estiver publicado.
+        var reg = year.RegulamentoDownload;
+        var regUrl  = reg?.IsPublished == true ? reg.StoragePath : null;
+        var regName = reg?.IsPublished == true ? reg.FileName    : null;
 
         return TypedResults.Ok(new ConvoyageActiveYearDto(
             year.Id,
@@ -52,7 +58,9 @@ public static class ConvoyageEndpoints
             year.CollectionPoints
                 .Select(p => new ConvoyageCollectionPointDto(p.Id, p.Name, p.Location))
                 .ToList(),
-            year.RegistrationClosesAt));
+            year.RegistrationClosesAt,
+            regUrl,
+            regName));
     }
 
     // ── Admin ─────────────────────────────────────────────────────────────────

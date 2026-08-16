@@ -36,6 +36,11 @@ public class ConvoyageYearConfiguration : IEntityTypeConfiguration<ConvoyageYear
             .WithMany()
             .HasForeignKey(x => x.SiteId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        b.HasOne(x => x.RegulamentoDownload)
+            .WithMany()
+            .HasForeignKey(x => x.RegulamentoDownloadId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 

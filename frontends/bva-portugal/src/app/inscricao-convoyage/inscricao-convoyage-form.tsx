@@ -2048,7 +2048,20 @@ export function InscricaoConvoyageForm({
       <section className={sectionCls}>
         <h2 className={sectionTitleCls}>6. Declaração</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-700">
-          Declaro que os dados acima são correctos e que aceito o regulamento da convoyage BVA Masters.
+          Declaro que os dados acima são correctos e que aceito o{" "}
+          {activeYear.regulamentoUrl ? (
+            <a
+              href={activeYear.regulamentoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-600 underline decoration-1 underline-offset-2 hover:text-brand-700"
+            >
+              regulamento da convoyage BVA Masters
+            </a>
+          ) : (
+            <span>regulamento da convoyage BVA Masters</span>
+          )}
+          .
         </p>
         <div className="mt-4">
           <label className="inline-flex cursor-pointer items-start gap-3">
@@ -2063,7 +2076,21 @@ export function InscricaoConvoyageForm({
               className="mt-1 h-4 w-4 accent-brand-500"
             />
             <span className="font-medium text-ink-900">
-              Li e aceito o regulamento da convoyage *
+              Li e aceito o{" "}
+              {activeYear.regulamentoUrl ? (
+                <a
+                  href={activeYear.regulamentoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-600 underline decoration-1 underline-offset-2 hover:text-brand-700"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  regulamento da convoyage
+                </a>
+              ) : (
+                "regulamento da convoyage"
+              )}{" "}
+              *
             </span>
           </label>
           {err("aceitouRegulamento")}

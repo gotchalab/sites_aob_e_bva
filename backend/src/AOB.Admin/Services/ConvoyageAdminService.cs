@@ -12,6 +12,8 @@ public class ConvoyageAdminService(AppDbContext db)
         int NumCargasAlvo, int CapacidadePorCarga, int MinPorCarga,
         string TransportadorasJson,
         DateTime? RegistrationClosesAt,
+        int? RegulamentoDownloadId,
+        string? RegulamentoTitle,
         PricingConfig Pricing);
 
     public record PricingConfig(
@@ -32,6 +34,8 @@ public class ConvoyageAdminService(AppDbContext db)
                 Points = y.CollectionPoints.OrderBy(p => p.SortOrder).ToList(),
                 y.NumCargasAlvo, y.CapacidadePorCarga, y.MinPorCarga, y.TransportadorasJson,
                 y.RegistrationClosesAt,
+                y.RegulamentoDownloadId,
+                RegulamentoTitle = y.RegulamentoDownload != null ? y.RegulamentoDownload.Title : null,
                 y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
                 y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
                 y.TarifaAdquirenteSocio, y.TarifaAdquirenteNaoSocio,
@@ -45,6 +49,7 @@ public class ConvoyageAdminService(AppDbContext db)
             y.TotalInscricoes, y.Points,
             y.NumCargasAlvo, y.CapacidadePorCarga, y.MinPorCarga, y.TransportadorasJson ?? "{}",
             y.RegistrationClosesAt,
+            y.RegulamentoDownloadId, y.RegulamentoTitle,
             new PricingConfig(
                 y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
                 y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
@@ -82,6 +87,26 @@ public class ConvoyageAdminService(AppDbContext db)
         var y = await db.ConvoyageYears.FirstOrDefaultAsync(x => x.Id == yearId);
         if (y is null) return "Ano não encontrado.";
         y.RegistrationClosesAt = closesAtUtc;
+        await db.SaveChangesAsync();
+        return null;
+    }
+
+    /// Actualiza (ou limpa) o Download que serve de regulamento deste ano.
+    /// Valida que o download existe, pertence ao mesmo site e esta publicado —
+    /// evita apontar para um ficheiro que o publico nao pode aceder.
+    public async Task<string?> UpdateRegulamentoAsync(int yearId, int? downloadId)
+    {
+        var y = await db.ConvoyageYears.FirstOrDefaultAsync(x => x.Id == yearId);
+        if (y is null) return "Ano não encontrado.";
+        if (downloadId.HasValue)
+        {
+            var dl = await db.Downloads.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == downloadId.Value);
+            if (dl is null) return $"Download #{downloadId} não existe.";
+            if (dl.SiteId != y.SiteId) return "O download tem de pertencer ao mesmo site do ano.";
+            if (!dl.IsPublished) return "O download tem de estar publicado antes de ser usado como regulamento.";
+        }
+        y.RegulamentoDownloadId = downloadId;
         await db.SaveChangesAsync();
         return null;
     }

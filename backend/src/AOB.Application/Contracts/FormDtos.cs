@@ -163,4 +163,9 @@ public record ConvoyageActiveYearDto(
     int Year,
     string? Description,
     List<ConvoyageCollectionPointDto> CollectionPoints,
-    DateTime? RegistrationClosesAt);
+    DateTime? RegistrationClosesAt,
+    // URL publica do PDF/documento regulamento (Download.StoragePath). Null se
+    // nao houver regulamento configurado no ano — o frontend mostra o checkbox
+    // sem link nesse caso.
+    string? RegulamentoUrl,
+    string? RegulamentoFileName);

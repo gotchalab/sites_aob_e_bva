@@ -246,7 +246,7 @@ else
                         @if (y.RegistrationClosesAt.HasValue)
                         {
                             var now = DateTime.UtcNow;
-                            var local = y.RegistrationClosesAt.Value.ToLocalTime();
+                            var local = LisbonTime.FromUtc(y.RegistrationClosesAt.Value);
                             if (y.RegistrationClosesAt.Value <= now)
                             {
                                 <div class="small text-danger">
@@ -270,6 +270,54 @@ else
                 @if (_closesFeedback.TryGetValue(y.Id, out var cmsg))
                 {
                     <div class="small mt-1 @(_closesIsError.Contains(y.Id) ? "text-danger" : "text-success")">@cmsg</div>
+                }
+
+                <hr class="my-4" />
+
+                <h6 class="small text-uppercase text-muted fw-semibold mb-2 tracking-wider">
+                    Regulamento
+                </h6>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">ID do download</label>
+                        <input type="number" class="form-control form-control-sm" min="1"
+                               value="@GetReg(y.Id, y.RegulamentoDownloadId)"
+                               @oninput="e => SetReg(y.Id, e.Value?.ToString() ?? string.Empty)"
+                               placeholder="ex.: 221" />
+                    </div>
+                    <div class="col-md-auto">
+                        <button class="btn btn-sm btn-primary"
+                                @onclick="() => SaveRegAsync(y.Id)"
+                                disabled="@_saving">
+                            Guardar
+                        </button>
+                        @if (y.RegulamentoDownloadId.HasValue)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary ms-1"
+                                    @onclick="() => ClearRegAsync(y.Id)"
+                                    disabled="@_saving"
+                                    title="Remover regulamento">
+                                Limpar
+                            </button>
+                        }
+                    </div>
+                    <div class="col-md">
+                        @if (!string.IsNullOrEmpty(y.RegulamentoTitle))
+                        {
+                            <div class="small text-success">
+                                Ligado a <b>@y.RegulamentoTitle</b> (id @y.RegulamentoDownloadId)
+                                — <a href="/downloads/@y.RegulamentoDownloadId" class="link-secondary">editar download</a>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="small text-muted">Sem regulamento associado. O checkbox no formulário público aparece sem link.</div>
+                        }
+                    </div>
+                </div>
+                @if (_regFeedback.TryGetValue(y.Id, out var rmsg))
+                {
+                    <div class="small mt-1 @(_regIsError.Contains(y.Id) ? "text-danger" : "text-success")">@rmsg</div>
                 }
 
                 <hr class="my-4" />
@@ -526,7 +574,7 @@ else
     {
         if (_closesAtEdits.TryGetValue(yearId, out var edited)) return edited;
         return current.HasValue
-            ? current.Value.ToLocalTime().ToString("yyyy-MM-ddTHH:mm")
+            ? LisbonTime.FromUtc(current.Value).ToString("yyyy-MM-ddTHH:mm")
             : "";
     }
 
@@ -547,7 +595,7 @@ else
                 _closesIsError.Add(yearId);
                 return;
             }
-            utc = local.ToUniversalTime();
+            utc = LisbonTime.ToUtc(local);
         }
 
         _saving = true;
@@ -579,6 +627,68 @@ else
         }
         _closesFeedback[yearId] = "Data limite removida.";
         _closesAtEdits.Remove(yearId);
+        await ReloadAsync();
+    }
+
+    // ── Regulamento ───────────────────────────────────────────────────────────
+    private readonly Dictionary<int, string> _regEdits = new();
+    private readonly Dictionary<int, string> _regFeedback = new();
+    private readonly HashSet<int> _regIsError = new();
+
+    private string GetReg(int yearId, int? current)
+    {
+        if (_regEdits.TryGetValue(yearId, out var edited)) return edited;
+        return current?.ToString() ?? "";
+    }
+
+    private void SetReg(int yearId, string value) => _regEdits[yearId] = value;
+
+    private async Task SaveRegAsync(int yearId)
+    {
+        _regFeedback.Remove(yearId);
+        _regIsError.Remove(yearId);
+
+        int? id = null;
+        if (_regEdits.TryGetValue(yearId, out var raw) && !string.IsNullOrWhiteSpace(raw))
+        {
+            if (!int.TryParse(raw.Trim(), out var parsed) || parsed <= 0)
+            {
+                _regFeedback[yearId] = "ID inválido — introduz o número inteiro do download.";
+                _regIsError.Add(yearId);
+                return;
+            }
+            id = parsed;
+        }
+
+        _saving = true;
+        var err = await Convoyage.UpdateRegulamentoAsync(yearId, id);
+        _saving = false;
+        if (err is not null)
+        {
+            _regFeedback[yearId] = err;
+            _regIsError.Add(yearId);
+            return;
+        }
+        _regFeedback[yearId] = id.HasValue ? "Regulamento associado." : "Regulamento removido.";
+        _regEdits.Remove(yearId);
+        await ReloadAsync();
+    }
+
+    private async Task ClearRegAsync(int yearId)
+    {
+        _regFeedback.Remove(yearId);
+        _regIsError.Remove(yearId);
+        _saving = true;
+        var err = await Convoyage.UpdateRegulamentoAsync(yearId, null);
+        _saving = false;
+        if (err is not null)
+        {
+            _regFeedback[yearId] = err;
+            _regIsError.Add(yearId);
+            return;
+        }
+        _regFeedback[yearId] = "Regulamento removido.";
+        _regEdits.Remove(yearId);
         await ReloadAsync();
     }
 

@@ -232,6 +232,10 @@ export type ConvoyageActiveYearDto = {
   description: string | null;
   collectionPoints: ConvoyageCollectionPointDto[];
   registrationClosesAt: string | null;
+  // URL publica do regulamento (Download.StoragePath). Null se nao houver
+  // regulamento associado ao ano — checkbox aparece sem link.
+  regulamentoUrl: string | null;
+  regulamentoFileName: string | null;
 };
 
 export type Species =

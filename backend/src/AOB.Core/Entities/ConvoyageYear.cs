@@ -15,6 +15,12 @@ public class ConvoyageYear
     // o formulário público bloqueia novas submissões.
     public DateTime? RegistrationClosesAt { get; set; }
 
+    // Id do Download que serve de regulamento deste ano. O API expoe o path
+    // publico em ConvoyageActiveYearDto.RegulamentoUrl para o form publico
+    // linkar no checkbox "Li e aceito o regulamento".
+    public int? RegulamentoDownloadId { get; set; }
+    public Download? RegulamentoDownload { get; set; }
+
     // Planeamento de transporte (F2)
     public int NumCargasAlvo { get; set; } = 23;
     public int CapacidadePorCarga { get; set; } = 20;
