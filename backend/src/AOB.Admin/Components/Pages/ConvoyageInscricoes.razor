@@ -109,11 +109,12 @@ else
         </div>
     }
 
+    <div class="table-responsive">
     <table class="table table-hover align-middle">
         <thead>
             <tr>
                 <th role="button" class="user-select-none" @onclick='() => SortBy("id")'>#@(SortIcon("id"))</th>
-                <th role="button" class="user-select-none" @onclick='() => SortBy("date")'>Data de inscrição @(SortIcon("date"))</th>
+                <th role="button" class="user-select-none" @onclick='() => SortBy("date")'>Data @(SortIcon("date"))</th>
                 <th role="button" class="user-select-none" @onclick='() => SortBy("nome")'>Criador @(SortIcon("nome"))</th>
                 <th role="button" class="user-select-none" @onclick='() => SortBy("local")'>Local recolha @(SortIcon("local"))</th>
                 <th role="button" class="user-select-none text-end" @onclick='() => SortBy("aves")'>Aves @(SortIcon("aves"))</th>
@@ -125,8 +126,8 @@ else
             @foreach (var f in Items)
             {
                 <tr>
-                    <td class="small text-muted">#@f.Id</td>
-                    <td class="small">@LisbonTime.FromUtc(f.SubmittedAt).ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="small text-muted text-nowrap">#@f.Id</td>
+                    <td class="small text-nowrap">@LisbonTime.FromUtc(f.SubmittedAt).ToString("yyyy-MM-dd HH:mm")</td>
                     <td>
                         <div class="fw-semibold">@f.Nome</div>
                         <div class="text-muted small">@f.Email</div>
@@ -162,6 +163,7 @@ else
             }
         </tbody>
     </table>
+    </div>
 
     @if (TotalPages > 1)
     {
@@ -315,8 +317,8 @@ else
 
     private MarkupString SortIcon(string column)
     {
-        if (SortColumn != column) return new MarkupString(" <span class=\"text-muted small\">↕</span>");
-        return new MarkupString(SortDesc ? " <span class=\"small\">▼</span>" : " <span class=\"small\">▲</span>");
+        if (SortColumn != column) return new MarkupString(" <i class=\"bi bi-chevron-expand text-muted small\"></i>");
+        return new MarkupString(SortDesc ? " <i class=\"bi bi-caret-down-fill small\"></i>" : " <i class=\"bi bi-caret-up-fill small\"></i>");
     }
 
     private record Row(int Id, DateTime SubmittedAt, FormStatus Status, string Nome, string Email, string LocalRecolha, int TotalAves, bool HasPdf);

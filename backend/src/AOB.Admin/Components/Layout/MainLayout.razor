@@ -1,22 +1,32 @@
 @inherits LayoutComponentBase
 
-<div class="admin-page d-flex">
-    <aside class="admin-sidebar bg-dark text-white flex-shrink-0" style="width: 240px; min-height: 100vh;">
+<div class="admin-page">
+    <input type="checkbox" id="admin-sidebar-toggle" class="admin-sidebar-checkbox" />
+    <aside class="admin-sidebar bg-dark text-white">
         <NavMenu />
     </aside>
-    <main class="flex-grow-1" style="min-width: 0;">
-        <header class="admin-topbar border-bottom bg-white px-4 py-2 d-flex justify-content-between align-items-center">
-            <div class="text-muted small">Backoffice AOB</div>
+    <label for="admin-sidebar-toggle" class="admin-backdrop" aria-hidden="true"></label>
+    <main class="admin-main">
+        <header class="admin-topbar border-bottom bg-white d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2 min-w-0">
+                <label for="admin-sidebar-toggle"
+                       class="btn btn-sm btn-outline-secondary admin-sidebar-toggle-btn mb-0"
+                       aria-label="Abrir menu"
+                       role="button">
+                    <i class="bi bi-list"></i>
+                </label>
+                <div class="text-muted small text-truncate">Backoffice AOB</div>
+            </div>
             <AuthorizeView>
                 <Authorized>
-                    <form method="post" action="/auth/logout" class="d-inline">
-                        <span class="me-3 small">@context.User.Identity?.Name</span>
+                    <form method="post" action="/auth/logout" class="d-inline d-flex align-items-center gap-2 min-w-0 mb-0">
+                        <span class="small text-truncate admin-user-name">@context.User.Identity?.Name</span>
                         <button type="submit" class="btn btn-sm btn-outline-secondary">Sair</button>
                     </form>
                 </Authorized>
             </AuthorizeView>
         </header>
-        <div class="p-4">
+        <div class="admin-content">
             @Body
         </div>
     </main>

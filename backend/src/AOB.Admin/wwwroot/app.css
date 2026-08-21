@@ -64,3 +64,59 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* Headers de tabelas nunca quebram — combinado com .table-responsive
+   evita labels partidos como "Data\nde\ninscrição" ou setas de sort em
+   linha nova. Se a tabela extravasar, faz scroll horizontal. */
+.table thead th {
+    white-space: nowrap;
+}
+
+/* ── Mobile-first tweaks (aplicam a < 768px) ───────────────────────────── */
+@media (max-width: 767.98px) {
+    html {
+        font-size: 15px;
+    }
+
+    h1, .h1 { font-size: 1.6rem; }
+    h2, .h2 { font-size: 1.35rem; }
+    h3, .h3 { font-size: 1.2rem; }
+    h4, .h4 { font-size: 1.1rem; }
+
+    /* Cards/headers com muitos botões: permite quebrar linhas */
+    .card-header.d-flex {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        row-gap: 0.5rem;
+    }
+
+    /* Botões de ação em tabelas/headers: garantir alcance de dedo */
+    .btn-sm {
+        padding: 0.3rem 0.55rem;
+        min-height: 2rem;
+    }
+
+    /* Tabelas dentro de .table-responsive ficam mais compactas */
+    .table > :not(caption) > * > * {
+        padding: 0.4rem 0.5rem;
+    }
+
+    /* Cards: reduz padding do body */
+    .card-body {
+        padding: 1rem 0.85rem;
+    }
+
+    /* Reduz padding lateral de container principal do admin */
+    .row.g-2 > [class*="col-"] {
+        margin-bottom: 0.25rem;
+    }
+}
+
+/* Alvo mínimo touch em ecrãs pequenos (não afetar .btn-sm/form-control-sm no desktop) */
+@media (max-width: 767.98px) {
+    .btn:not(.btn-sm):not(.btn-lg),
+    .form-control:not(.form-control-sm):not(.form-control-lg),
+    .form-select:not(.form-select-sm):not(.form-select-lg) {
+        min-height: 40px;
+    }
+}

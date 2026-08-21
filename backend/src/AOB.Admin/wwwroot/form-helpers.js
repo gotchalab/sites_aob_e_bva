@@ -8,3 +8,17 @@ window.aobFormHelpers = {
     }
   }
 };
+
+// Fecha a sidebar mobile ao clicar num link do menu (a nav é offcanvas
+// controlada por checkbox #admin-sidebar-toggle — este listener limpa o
+// estado após navegação SPA-like do Blazor).
+(function () {
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t) return;
+    var link = t.closest && t.closest('.admin-nav a');
+    if (!link) return;
+    var cb = document.getElementById('admin-sidebar-toggle');
+    if (cb && cb.checked) cb.checked = false;
+  }, true);
+})();
