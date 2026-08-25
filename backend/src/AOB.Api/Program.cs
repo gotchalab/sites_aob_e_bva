@@ -57,6 +57,9 @@ try
             ? "dev-secret-key-please-change-in-prod-min-32chars-long!!"
             : throw new InvalidOperationException("Jwt:SigningKey obrigatorio em producao");
     }
+    // Persistir também na IConfiguration para código que lê via config["Jwt:SigningKey"]
+    // directamente (ex.: FormEndpoints.GetPdfTokenSecret para tokens de PDF público).
+    builder.Configuration["Jwt:SigningKey"] = jwtOpts.SigningKey;
     builder.Services.Configure<JwtOptions>(o =>
     {
         o.Issuer = jwtOpts.Issuer;
@@ -176,7 +179,10 @@ try
     }
 
     app.MapPublic().RequireRateLimiting("public");
-    app.MapForms().RequireRateLimiting("forms");
+    // Nota: a policy de rate limit é aplicada por endpoint dentro do MapForms
+    // — os submits usam "forms" (restritivo) e os downloads/preview usam
+    // "public" (120/min, idempotentes).
+    app.MapForms();
     app.MapConvoyage();
     app.MapNomenclature();
     app.MapAuth();

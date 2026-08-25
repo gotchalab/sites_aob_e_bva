@@ -328,6 +328,10 @@ namespace AOB.Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Campeonato")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("CapacidadePorCarga")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -342,6 +346,10 @@ namespace AOB.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("MatriculaTraces")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<int>("MinPorCarga")
                         .ValueGeneratedOnAdd()

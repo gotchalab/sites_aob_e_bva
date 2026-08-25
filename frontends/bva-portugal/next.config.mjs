@@ -23,6 +23,9 @@ const nextConfig = {
     const dest = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5135";
     return [
       { source: "/uploads/:path*", destination: `${dest}/uploads/:path*` },
+      // Em dev sem nginx, /api/* precisa de proxy para o backend. Em prod o
+      // nginx apanha /api/ antes do Next, portanto este rewrite fica inerte.
+      { source: "/api/:path*", destination: `${dest}/api/:path*` },
     ];
   },
 };

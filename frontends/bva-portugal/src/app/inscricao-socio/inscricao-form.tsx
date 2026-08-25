@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { SignaturePad } from "./signature-pad";
+import { SignaturePad, type SignaturePadHandle } from "@/components/signature/signature-pad";
+import { SignatureFullscreenModal } from "@/components/signature/signature-fullscreen-modal";
 
 const IBAN = "PT50 0010 0000 3704 9640 0014 1";
 const TITULAR = "Associação Ornitológica de Barcelos";
@@ -47,7 +48,9 @@ export function InscricaoForm({
   const router = useRouter();
   const [fotoFile, setFotoFile] = useState<File | undefined>();
   const [fotoPreview, setFotoPreview] = useState<string | undefined>();
-  const [assinatura, setAssinatura] = useState<string | undefined>();
+  const signaturePadRef = useRef<SignaturePadHandle>(null);
+  const [signatureEmpty, setSignatureEmpty] = useState(true);
+  const [signatureFullscreen, setSignatureFullscreen] = useState(false);
   const [comprovativoFile, setComprovativoFile] = useState<File | undefined>();
   const [tipoSocio, setTipoSocio] = useState<"apoiante" | "criador" | "">("");
   const [stamFonpValue, setStamFonpValue] = useState("");
@@ -131,11 +134,13 @@ export function InscricaoForm({
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!assinatura) {
+    const assinaturaEmpty = signaturePadRef.current?.isEmpty() ?? true;
+    if (assinaturaEmpty) {
       setFieldErrors(prev => ({ ...prev, assinatura: "Campo obrigatório" }));
       document.getElementById("assinatura-anchor")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
+    const assinatura = signaturePadRef.current?.toDataUrl() ?? "";
     if (!comprovativoFile) {
       setFieldErrors(prev => ({ ...prev, comprovativo: "Campo obrigatório" }));
       document.getElementById("comprovativo-anchor")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -427,15 +432,63 @@ export function InscricaoForm({
         </div>
         <div id="assinatura-anchor" className="mt-5">
           <span className={labelCls}>Assinatura *</span>
-          <div className={`mt-1 rounded-lg ${fieldErrors["assinatura"] ? "ring-2 ring-red-400" : ""}`}>
+          <p className="mt-1 text-xs text-ink-500">
+            Assine no espaço abaixo com o dedo (mobile) ou com o rato.
+          </p>
+          <div className="mt-2">
             <SignaturePad
-              value={assinatura}
-              onChange={(v) => { setAssinatura(v); if (v) clearField("assinatura"); }}
-              height={180}
+              ref={signaturePadRef}
+              error={!!fieldErrors["assinatura"]}
+              onEmptyChange={(empty) => {
+                setSignatureEmpty(empty);
+                if (!empty) clearField("assinatura");
+              }}
             />
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setSignatureFullscreen(true)}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ink-900/15 bg-white px-4 py-2 text-sm font-medium text-ink-800 transition hover:border-brand-500 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+              </svg>
+              Ampliar para assinar
+            </button>
+            <button
+              type="button"
+              disabled={signatureEmpty}
+              onClick={() => {
+                signaturePadRef.current?.clear();
+                setSignatureEmpty(true);
+              }}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ink-900/15 bg-white px-4 py-2 text-sm font-medium text-ink-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-400/30 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-900/15 disabled:hover:bg-white disabled:hover:text-ink-700"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18" />
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              </svg>
+              Limpar assinatura
+            </button>
           </div>
           {err("assinatura")}
         </div>
+        <SignatureFullscreenModal
+          open={signatureFullscreen}
+          initialVector={signatureEmpty ? null : signaturePadRef.current?.getVectorData() ?? null}
+          onCancel={() => setSignatureFullscreen(false)}
+          onConfirm={(v) => {
+            signaturePadRef.current?.setVectorData(v);
+            setSignatureEmpty(false);
+            clearField("assinatura");
+            setSignatureFullscreen(false);
+          }}
+        />
       </section>
 
       {/* PAGAMENTO */}

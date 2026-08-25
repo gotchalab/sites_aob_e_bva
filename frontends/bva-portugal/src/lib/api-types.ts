@@ -167,6 +167,7 @@ export type FormSubmissionResponse = {
   error?: string | null;
   submissionId?: number | null;
   downloadToken?: string | null;
+  tracesAvailable?: boolean;
 };
 
 export type AveConvoyageDto = {
@@ -211,6 +212,11 @@ export type InscricaoConvoyageRequest = {
   telefone?: string;
   pais: string;
   numeroStam?: string;
+  morada?: string;
+  codigoPostal?: string;
+  localidade?: string;
+  assinaturaPngBase64?: string;
+  declaraArt59?: boolean;
   localRecolhaId: number;
   aceitouRegulamento: boolean;
   socioBvaStatus: SocioBvaStatus;
@@ -240,7 +246,8 @@ export type ConvoyageActiveYearDto = {
 
 export type Species =
   | "Roseicollis" | "Personatus" | "Fischeri" | "Nigrigenis"
-  | "Lilianae"    | "Canus"      | "Taranta"  | "Pullarius";
+  | "Lilianae"    | "Canus"      | "Taranta"  | "Pullarius"
+  | "Coelestis";
 
 export type EntryType = "Individual" | "Team" | "Study";
 

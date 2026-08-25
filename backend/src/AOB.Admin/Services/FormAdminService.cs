@@ -9,7 +9,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace AOB.Admin.Services;
 
-public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvironment env)
+public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvironment env, EmailSender email)
 {
     public Task<List<FormSubmission>> ListAsync(
         int siteId, FormStatus? status, FormType? type,
@@ -155,7 +155,70 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
         bool SocioBva, string SocioBvaStatus,
         List<ConvoyageAveEdit> Aves,
         List<ConvoyageAveVendaEdit> AvesVenda,
-        List<ConvoyageAveTransporteEdit> AvesTransporte);
+        List<ConvoyageAveTransporteEdit> AvesTransporte,
+        // Campos usados na Declaração TRACES (adicionados posteriormente — nullable
+        // para submissões antigas onde o formulário ainda não os pedia).
+        string? Morada = null,
+        string? CodigoPostal = null,
+        string? Localidade = null,
+        string? AssinaturaPath = null,
+        bool DeclaraArt59 = false);
+
+    // Actualiza (ou cria) a assinatura de uma inscrição de convoyage a partir
+    // de um dataURL PNG. Escreve o PNG em disco (mesmo caminho relativo do
+    // submit) e regista AssinaturaPath no DataJson. Devolve erro se o formato
+    // for inválido ou o ficheiro não puder ser escrito.
+    public async Task<string?> UpdateConvoyageSignatureAsync(int id, string dataUrl)
+    {
+        if (string.IsNullOrWhiteSpace(dataUrl)) return "Assinatura vazia.";
+        const string prefix = "data:image/png;base64,";
+        if (!dataUrl.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return "Formato de assinatura inválido (esperado PNG dataURL).";
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(dataUrl[prefix.Length..]); }
+        catch (FormatException) { return "Assinatura inválida (base64 mal formado)."; }
+        if (bytes.Length < 200 || bytes.Length > 512 * 1024)
+            return "Assinatura fora do tamanho aceite (200 B – 512 KB).";
+
+        var f = await db.FormSubmissions
+            .Include(x => x.Site)
+            .FirstOrDefaultAsync(x => x.Id == id);
+        if (f is null) return "Inscrição não encontrada.";
+        if (f.FormType != FormType.InscricaoConvoyage) return "Inscrição não é de convoyage.";
+
+        var storageRoot = ResolveStorageRoot();
+        var subDate = f.SubmittedAt == default ? DateTime.UtcNow : f.SubmittedAt;
+        var relDir = Path.Combine(f.Site.Slug, subDate.ToString("yyyy"), subDate.ToString("MM"));
+        var absDir = Path.Combine(storageRoot, relDir);
+        Directory.CreateDirectory(absDir);
+        var fileName = $"assinatura-{f.Id}.png";
+        var abs = Path.GetFullPath(Path.Combine(absDir, fileName));
+        if (!abs.StartsWith(storageRoot, StringComparison.OrdinalIgnoreCase)) return "Caminho inválido.";
+        try { await File.WriteAllBytesAsync(abs, bytes); }
+        catch (Exception ex) { return $"Falha a gravar assinatura: {ex.Message}"; }
+
+        var relPath = Path.Combine(relDir, fileName).Replace('\\', '/');
+
+        // Actualiza o DataJson mantendo tudo o resto. Se o campo não existir
+        // (submissão antiga), acrescenta-o.
+        try
+        {
+            using var doc = JsonDocument.Parse(f.DataJson);
+            var dict = new Dictionary<string, object?>();
+            foreach (var p in doc.RootElement.EnumerateObject())
+                dict[p.Name] = JsonSerializer.Deserialize<object?>(p.Value.GetRawText());
+            dict["AssinaturaPath"] = relPath;
+            f.DataJson = JsonSerializer.Serialize(dict);
+        }
+        catch
+        {
+            // Fallback: se DataJson estiver corrompido, guarda um objecto mínimo.
+            f.DataJson = JsonSerializer.Serialize(new { AssinaturaPath = relPath });
+        }
+
+        await db.SaveChangesAsync();
+        return null;
+    }
 
     public async Task<ConvoyageEditModel?> GetConvoyageEditAsync(int id)
     {
@@ -164,7 +227,7 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
         return ParseEdit(f.DataJson);
     }
 
-    public async Task<string?> UpdateConvoyageAsync(int id, ConvoyageEditModel model)
+    public async Task<string?> UpdateConvoyageAsync(int id, ConvoyageEditModel model, bool resendEmails = false)
     {
         var f = await db.FormSubmissions
             .Include(x => x.BirdEntries)
@@ -201,11 +264,13 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
         }
 
         var existing = ParseEdit(f.DataJson) ?? new ConvoyageEditModel(
-            "", "", null, "", null, "", false, "NaoSocio", new(), new(), new());
+            "", "", null, "", null, "", false, "NaoSocio", new(), new(), new(),
+            Morada: null, CodigoPostal: null, Localidade: null, AssinaturaPath: null, DeclaraArt59: false);
 
         // Preservar campos que não editamos aqui.
         int convoyageYear = 0;
         string? pdfPath = null;
+        string? assinaturaPath = null;
         bool aceitouRegulamento = true;
         try
         {
@@ -215,6 +280,8 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
                 convoyageYear = y.GetInt32();
             if (r.TryGetProperty("PdfPath", out var p) && p.ValueKind == JsonValueKind.String)
                 pdfPath = p.GetString();
+            if (r.TryGetProperty("AssinaturaPath", out var ap) && ap.ValueKind == JsonValueKind.String)
+                assinaturaPath = ap.GetString();
             if (r.TryGetProperty("AceitouRegulamento", out var ar) &&
                 (ar.ValueKind == JsonValueKind.True || ar.ValueKind == JsonValueKind.False))
                 aceitouRegulamento = ar.GetBoolean();
@@ -343,6 +410,11 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
             Telefone = model.Telefone,
             Pais = model.Pais,
             NumeroStam = model.NumeroStam,
+            Morada = model.Morada,
+            CodigoPostal = model.CodigoPostal,
+            Localidade = model.Localidade,
+            AssinaturaPath = assinaturaPath,
+            DeclaraArt59 = model.DeclaraArt59,
             AceitouRegulamento = aceitouRegulamento,
             SocioBva = model.SocioBva,
             SocioBvaStatus = model.SocioBvaStatus,
@@ -416,7 +488,78 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
         }
 
         await db.SaveChangesAsync();
+
+        if (resendEmails)
+        {
+            // Regenerar TRACES (se o ano tem Campeonato + Matrícula TRACES configurados
+            // e existe assinatura persistida — mesma regra do submit público).
+            byte[]? tracesBytes = null;
+            try
+            {
+                var traces = await TracesPdfBuilder.BuildAsync(db, env, config, f.Id, site.Slug);
+                tracesBytes = traces?.Bytes;
+            }
+            catch { /* TRACES é opcional; falhar não deve bloquear o reenvio. */ }
+
+            var pdfAttachment = new EmailSender.EmailAttachment(
+                FileName: SafeFileName($"convoyage-{model.NomeCompleto}.pdf"),
+                Content: pdfBytes,
+                ContentType: "application/pdf");
+            var attachments = new List<EmailSender.EmailAttachment> { pdfAttachment };
+            if (tracesBytes is not null)
+            {
+                attachments.Add(new EmailSender.EmailAttachment(
+                    FileName: SafeFileName($"TRACES-{model.NomeCompleto}.pdf"),
+                    Content: tracesBytes,
+                    ContentType: "application/pdf"));
+            }
+            var attachmentsArray = attachments.ToArray();
+
+            var yearForEmail = convYear?.Year ?? convoyageYear;
+
+            if (!string.IsNullOrWhiteSpace(site.ContactEmail))
+            {
+                try
+                {
+                    await email.SendAsync(
+                        site.ContactEmail,
+                        $"[{site.Name}] Inscrição convoyage actualizada — {model.NomeCompleto}",
+                        ConvoyageEmailRenderer.RenderAssociacao(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail),
+                        attachmentsArray,
+                        fromOverride: site.ContactEmail);
+                }
+                catch (Exception ex)
+                {
+                    return $"Alterações guardadas, mas falhou o envio do email à associação: {ex.Message}";
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(model.Email))
+            {
+                try
+                {
+                    await email.SendAsync(
+                        model.Email,
+                        $"[{site.Name}] Inscrição convoyage actualizada",
+                        ConvoyageEmailRenderer.RenderCriador(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail),
+                        attachmentsArray,
+                        fromOverride: site.ContactEmail);
+                }
+                catch (Exception ex)
+                {
+                    return $"Alterações guardadas, mas falhou o envio do email ao criador: {ex.Message}";
+                }
+            }
+        }
+
         return null;
+    }
+
+    private static string SafeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var clean = new string(name.Select(c => invalid.Contains(c) ? '-' : c).ToArray());
+        return clean.Length > 100 ? clean[..100] : clean;
     }
 
     private static ConvoyageEditModel? ParseEdit(string json)
@@ -481,7 +624,12 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
                 S("NomeCompleto") ?? "", S("Email") ?? "", S("Telefone"), S("Pais") ?? "",
                 S("NumeroStam"), S("LocalRecolha") ?? "",
                 B("SocioBva"), S("SocioBvaStatus") ?? "NaoSocio",
-                aves, venda, transporte);
+                aves, venda, transporte,
+                Morada: S("Morada"),
+                CodigoPostal: S("CodigoPostal"),
+                Localidade: S("Localidade"),
+                AssinaturaPath: S("AssinaturaPath"),
+                DeclaraArt59: B("DeclaraArt59"));
         }
         catch { return null; }
     }

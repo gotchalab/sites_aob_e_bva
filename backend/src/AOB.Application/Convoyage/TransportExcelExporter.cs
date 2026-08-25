@@ -1,3 +1,4 @@
+using AOB.Core.Entities;
 using ClosedXML.Excel;
 
 namespace AOB.Application.Convoyage;
@@ -387,19 +388,10 @@ public static class TransportExcelExporter
     // para o rótulo científico usado no formulário: "Nigrigenis" → "A. nigrigenis".
     private static string EspecieLabel(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return "";
-        var v = raw.Trim();
-        return v switch
-        {
-            "Roseicollis" => "A. roseicollis",
-            "Personatus"  => "A. personatus",
-            "Fischeri"    => "A. fischeri",
-            "Nigrigenis"  => "A. nigrigenis",
-            "Lilianae"    => "A. lilianae",
-            "Canus"       => "A. canus",
-            "Taranta"     => "A. taranta",
-            "Pullarius"   => "A. pullarius",
-            _ => v,
-        };
+        var v = (raw ?? "").Trim();
+        if (string.IsNullOrEmpty(v)) return "";
+        return Enum.TryParse<SpeciesCode>(v, ignoreCase: true, out var s)
+            ? SpeciesGenus.Short(s)
+            : v;
     }
 }

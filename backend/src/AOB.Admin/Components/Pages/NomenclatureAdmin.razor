@@ -3,6 +3,7 @@
 @inject NomenclatureAdminService Nomenclature
 @inject ConvoyageAdminService Convoyage
 @inject ContentService Content
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <PageTitle>Nomenclatura · AOB</PageTitle>
@@ -49,6 +50,14 @@
             </div>
         </div>
     }
+    @if (SelectedYearId > 0)
+    {
+        <div class="col-md-auto d-flex align-items-end ms-auto">
+            <button class="btn btn-primary" @onclick="() => _newGroupOpen = !_newGroupOpen">
+                @(_newGroupOpen ? "Cancelar" : "+ Novo grupo")
+            </button>
+        </div>
+    }
 </div>
 
 @if (_error is not null)
@@ -58,6 +67,54 @@
 @if (_info is not null)
 {
     <div class="alert alert-success py-2 small">@_info</div>
+}
+
+@if (SelectedYearId > 0 && _newGroupOpen)
+{
+    <div class="card mb-3 border-primary shadow-sm">
+        <div class="card-header bg-primary text-white fw-semibold">Novo grupo de nomenclatura</div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Prefixo (3 dígitos) *</label>
+                    <input class="form-control" maxlength="3" placeholder="ex: 018"
+                           @bind="_newGroupPrefix" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Nome *</label>
+                    <input class="form-control" placeholder="ex: Turquoise"
+                           @bind="_newGroupName" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Espécie *</label>
+                    <select class="form-select" @bind="_newGroupSpecies">
+                        @foreach (var v in Enum.GetValues<SpeciesCode>())
+                        {
+                            <option value="@v">@v</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1">Tipo *</label>
+                    <select class="form-select" @bind="_newGroupType">
+                        @foreach (var v in Enum.GetValues<EntryTypeCode>())
+                        {
+                            <option value="@v">@v</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small text-muted mb-1">Ordem</label>
+                    <input type="number" class="form-control" @bind="_newGroupOrder" />
+                </div>
+                <div class="col-md-auto d-flex align-items-end">
+                    <button class="btn btn-primary" @onclick="AddGroupAsync" disabled="@_saving">
+                        Criar grupo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 }
 
 @if (SelectedYearId == 0)
@@ -71,9 +128,8 @@ else if (Groups is null)
 else if (Groups.Count == 0)
 {
     <div class="card p-4 text-center text-muted">
-        Este ano ainda não tem nomenclatura. Podes clonar de outro ano usando o botão acima,
-        ou corre o comando <code>dotnet run --project src/AOB.Migrator seed-nomenclature-2026</code> para
-        popular a lista 2026.
+        Este ano ainda não tem nomenclatura. Podes criar um grupo novo, clonar de outro ano,
+        ou correr o comando <code>dotnet run --project src/AOB.Migrator seed-nomenclature-2026</code>.
     </div>
 }
 else
@@ -82,17 +138,49 @@ else
         @foreach (var g in Groups)
         {
             var collapseId = $"grp{g.Id}";
+            var editing = _editingGroupId == g.Id;
             <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button"
+                <h2 class="accordion-header d-flex align-items-center">
+                    <button class="accordion-button collapsed flex-grow-1" type="button"
                             data-bs-toggle="collapse" data-bs-target="#@collapseId"
                             @onclick="() => LoadClassesAsync(g.Id)">
                         <span class="me-2 fw-bold">@g.CodePrefix</span>
-                        <span class="me-2">@g.DisplayName</span>
+                        @if (editing)
+                        {
+                            <input class="form-control form-control-sm me-2" style="max-width:220px"
+                                   @bind="_editGroupName" @onclick:stopPropagation="true"
+                                   @onclick:preventDefault="true" />
+                            <input type="number" class="form-control form-control-sm me-2" style="max-width:80px"
+                                   @bind="_editGroupOrder" @onclick:stopPropagation="true"
+                                   @onclick:preventDefault="true" />
+                        }
+                        else
+                        {
+                            <span class="me-2">@g.DisplayName</span>
+                        }
                         <span class="badge bg-light text-dark me-2">@g.Species</span>
                         <span class="badge bg-light text-dark me-2">@g.EntryType</span>
                         <span class="text-muted small ms-auto me-3">@g.ClassCount classes</span>
                     </button>
+                    <div class="btn-group ms-2 me-2" role="group">
+                        @if (editing)
+                        {
+                            <button class="btn btn-sm btn-primary" @onclick="() => SaveGroupEditAsync(g.Id)"
+                                    disabled="@_saving">Guardar</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="CancelGroupEdit">Cancelar</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartGroupEdit(g)"
+                                    title="Editar grupo">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteGroupAsync(g)"
+                                    title="Eliminar grupo">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        }
+                    </div>
                 </h2>
                 <div id="@collapseId" class="accordion-collapse collapse" data-bs-parent="#groupsAccordion">
                     <div class="accordion-body">
@@ -106,35 +194,65 @@ else
                                 <table class="table table-sm table-hover align-middle">
                                     <thead class="table-light">
                                         <tr>
-                                            <th style="width:110px">Code</th>
+                                            <th style="width:130px">Code</th>
                                             <th>Mutation</th>
-                                            <th style="width:80px">Order</th>
+                                            <th style="width:80px">Ordem</th>
                                             <th style="width:70px">Activa</th>
-                                            <th style="width:70px"></th>
+                                            <th style="width:220px" class="text-end">Acções</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @foreach (var c in classes)
                                         {
+                                            var isEditingClass = _editingClassId == c.Id;
                                             <tr>
-                                                <td><code>@c.Code</code></td>
-                                                <td>@c.Mutation</td>
-                                                <td>@c.SortOrder</td>
-                                                <td>@(c.IsActive ? "sim" : "não")</td>
-                                                <td class="text-end">
-                                                    <button class="btn btn-sm btn-outline-secondary"
-                                                            @onclick="() => ToggleClassAsync(c)">
-                                                        @(c.IsActive ? "Desactivar" : "Activar")
-                                                    </button>
-                                                </td>
+                                                @if (isEditingClass)
+                                                {
+                                                    <td><input class="form-control form-control-sm" @bind="_editClassCode" /></td>
+                                                    <td><input class="form-control form-control-sm" @bind="_editClassMut" /></td>
+                                                    <td><input type="number" class="form-control form-control-sm" @bind="_editClassOrder" /></td>
+                                                    <td>
+                                                        <input type="checkbox" class="form-check-input" @bind="_editClassActive" />
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <button class="btn btn-sm btn-primary me-1"
+                                                                @onclick="() => SaveClassEditAsync(g.Id)"
+                                                                disabled="@_saving">Guardar</button>
+                                                        <button class="btn btn-sm btn-outline-secondary"
+                                                                @onclick="CancelClassEdit">Cancelar</button>
+                                                    </td>
+                                                }
+                                                else
+                                                {
+                                                    <td><code>@c.Code</code></td>
+                                                    <td>@c.Mutation</td>
+                                                    <td>@c.SortOrder</td>
+                                                    <td>@(c.IsActive ? "sim" : "não")</td>
+                                                    <td class="text-end">
+                                                        <button class="btn btn-sm btn-outline-secondary me-1"
+                                                                @onclick="() => ToggleClassAsync(c)">
+                                                            @(c.IsActive ? "Desactivar" : "Activar")
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-secondary me-1"
+                                                                @onclick="() => StartClassEdit(c)"
+                                                                title="Editar">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger"
+                                                                @onclick="() => DeleteClassAsync(g.Id, c)"
+                                                                title="Eliminar">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                }
                                             </tr>
                                         }
                                     </tbody>
                                 </table>
                             </div>
 
-                            @* Formulário de adicionar classe manual — para inclusões avulso *@
-                            <details class="mt-3">
+                            @* Formulário de adicionar classe manual *@
+                            <details class="mt-3" open="@(classes.Count == 0)">
                                 <summary class="text-muted small">+ Adicionar classe manualmente</summary>
                                 <div class="row g-2 mt-2">
                                     <div class="col-md-2">
@@ -179,6 +297,28 @@ else
 
     private string? _error;
     private string? _info;
+    private bool _saving;
+
+    // ── Estado do formulário "novo grupo" ─────────────────────────────────────
+    private bool _newGroupOpen;
+    private string _newGroupPrefix = "";
+    private string _newGroupName = "";
+    private SpeciesCode _newGroupSpecies = SpeciesCode.Roseicollis;
+    private EntryTypeCode _newGroupType = EntryTypeCode.Individual;
+    private int _newGroupOrder = 999;
+
+    // ── Estado de edição de grupo ──────────────────────────────────────────────
+    private int? _editingGroupId;
+    private string _editGroupName = "";
+    private int _editGroupOrder;
+
+    // ── Estado de edição de classe ─────────────────────────────────────────────
+    private int? _editingClassId;
+    private string _editClassCode = "";
+    private string _editClassMut = "";
+    private int _editClassOrder;
+    private bool _editClassActive;
+    private string? _editClassNotes;
 
     protected override async Task OnInitializedAsync()
     {
@@ -200,6 +340,9 @@ else
     {
         _error = null; _info = null;
         _classesByGroup.Clear();
+        _newGroupOpen = false;
+        _editingGroupId = null;
+        _editingClassId = null;
         Groups = SelectedYearId > 0 ? await Nomenclature.ListGroupsAsync(SelectedYearId) : null;
     }
 
@@ -220,13 +363,73 @@ else
         await LoadGroupsAsync();
     }
 
+    // ── Grupos: criar / editar / eliminar ────────────────────────────────────
+    private async Task AddGroupAsync()
+    {
+        _error = null; _info = null;
+        if (string.IsNullOrWhiteSpace(_newGroupPrefix) || _newGroupPrefix.Trim().Length != 3)
+        {
+            _error = "Prefixo tem de ter 3 caracteres.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_newGroupName))
+        {
+            _error = "Nome obrigatório.";
+            return;
+        }
+        _saving = true;
+        var (_, err) = await Nomenclature.CreateGroupAsync(
+            SelectedYearId, _newGroupPrefix.Trim(), _newGroupName.Trim(),
+            _newGroupSpecies, _newGroupType, _newGroupOrder);
+        _saving = false;
+        if (err is not null) { _error = err; return; }
+        _info = "Grupo criado.";
+        _newGroupPrefix = ""; _newGroupName = ""; _newGroupOrder = 999;
+        _newGroupOpen = false;
+        Groups = await Nomenclature.ListGroupsAsync(SelectedYearId);
+    }
+
+    private void StartGroupEdit(NomenclatureAdminService.GroupSummary g)
+    {
+        _editingGroupId = g.Id;
+        _editGroupName = g.DisplayName;
+        _editGroupOrder = g.SortOrder;
+    }
+
+    private void CancelGroupEdit() => _editingGroupId = null;
+
+    private async Task SaveGroupEditAsync(int groupId)
+    {
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_editGroupName)) { _error = "Nome obrigatório."; return; }
+        _saving = true;
+        await Nomenclature.UpdateGroupAsync(groupId, _editGroupName.Trim(), _editGroupOrder);
+        _saving = false;
+        _editingGroupId = null;
+        Groups = await Nomenclature.ListGroupsAsync(SelectedYearId);
+    }
+
+    private async Task DeleteGroupAsync(NomenclatureAdminService.GroupSummary g)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar grupo '{g.CodePrefix} {g.DisplayName}' com {g.ClassCount} classes? Esta acção não pode ser desfeita.");
+        if (!ok) return;
+        _error = null;
+        _saving = true;
+        var (success, err) = await Nomenclature.DeleteGroupAsync(g.Id);
+        _saving = false;
+        if (!success) { _error = err; return; }
+        _classesByGroup.Remove(g.Id);
+        Groups = await Nomenclature.ListGroupsAsync(SelectedYearId);
+    }
+
+    // ── Classes: adicionar / editar / eliminar / toggle ──────────────────────
     private async Task ToggleClassAsync(NomenclatureAdminService.ClassRow c)
     {
         _error = null;
         var (ok, err) = await Nomenclature.UpdateClassAsync(
             c.Id, c.Code, c.Mutation, c.SortOrder, !c.IsActive, c.Notes);
         if (!ok) { _error = err; return; }
-        // refresh: forget the cached rows for the parent group
         var g = Groups?.FirstOrDefault(x =>
             _classesByGroup.TryGetValue(x.Id, out var list) && list?.Any(cc => cc.Id == c.Id) == true);
         if (g is not null)
@@ -234,6 +437,48 @@ else
             _classesByGroup.Remove(g.Id);
             await LoadClassesAsync(g.Id);
         }
+    }
+
+    private void StartClassEdit(NomenclatureAdminService.ClassRow c)
+    {
+        _editingClassId = c.Id;
+        _editClassCode = c.Code;
+        _editClassMut = c.Mutation;
+        _editClassOrder = c.SortOrder;
+        _editClassActive = c.IsActive;
+        _editClassNotes = c.Notes;
+    }
+
+    private void CancelClassEdit() => _editingClassId = null;
+
+    private async Task SaveClassEditAsync(int groupId)
+    {
+        if (_editingClassId is null) return;
+        _error = null;
+        _saving = true;
+        var (ok, err) = await Nomenclature.UpdateClassAsync(
+            _editingClassId.Value, _editClassCode, _editClassMut,
+            _editClassOrder, _editClassActive, _editClassNotes);
+        _saving = false;
+        if (!ok) { _error = err; return; }
+        _editingClassId = null;
+        _classesByGroup.Remove(groupId);
+        await LoadClassesAsync(groupId);
+    }
+
+    private async Task DeleteClassAsync(int groupId, NomenclatureAdminService.ClassRow c)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar classe '{c.Code} — {c.Mutation}'?");
+        if (!ok) return;
+        _error = null;
+        _saving = true;
+        var (success, err) = await Nomenclature.DeleteClassAsync(c.Id);
+        _saving = false;
+        if (!success) { _error = err; return; }
+        _classesByGroup.Remove(groupId);
+        await LoadClassesAsync(groupId);
+        Groups = await Nomenclature.ListGroupsAsync(SelectedYearId);
     }
 
     private async Task AddClassAsync(NomenclatureAdminService.GroupSummary g)
@@ -244,7 +489,9 @@ else
         if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(mut)) return;
         var maxOrder = _classesByGroup.TryGetValue(g.Id, out var list) && list is not null
             ? list.Select(c => c.SortOrder).DefaultIfEmpty(0).Max() : 0;
+        _saving = true;
         var (_, err) = await Nomenclature.CreateClassAsync(g.Id, code, mut, maxOrder + 1, null);
+        _saving = false;
         if (err is not null) { _error = err; return; }
         _newClassCode.Remove(g.Id);
         _newClassMut.Remove(g.Id);

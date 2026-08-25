@@ -1,0 +1,1474 @@
+                                                         Nomenclature BVA Masters 2026
+
+GROUP AGAPORNIS ROSEICOLLIS GREEN
+           A Color
+
+        001/01 green
+
+GROUP AGAPORNIS ROSEICOLLIS GREENSERIES
+           A Color
+
+        002/01 D green, DD green
+        002/02 orange face green, orange face D green, orange face DD green
+        002/03 pale headed green, pale headed D green, pale headed DD green
+        002/04 opaline green, opaline D green, opaline DD green
+        002/05 orange face opaline green, orange face opaline D green, orange face opaline DD green
+        002/06 pale headed opaline green, pale headed opaline D green, pale headed opaline DD green
+
+GROUP AGAPORNIS ROSEICOLLIS BLUE
+           A Color
+
+        003/01 blue, D blue, DD blue
+        003/02 violet
+        003/03 opaline blue, opaline D blue, opaline DD blue
+        003/04 opaline violet
+
+GROUP AGAPORNIS ROSEICOLLIS AQUA
+           A Color
+
+        004/01 aqua, D aqua, DD aqua
+        004/02 violet factored aqua
+        004/03 opaline aqua, opaline D aqua, opaline DD aqua
+        004/04 opaline violet factored aqua
+
+GROUP AGAPORNIS ROSEICOLLIS TURQUOISE
+           A Color
+
+        005/01 turquoise, D turquoise, DD turquoise
+        005/02 violet turquoise
+        005/03 opaline turquoise, opaline D turquoise, opaline DD turquoise
+        005/04 opaline violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS MARBLED
+           A Color
+
+        006/01 marbled green, marbled D green, marbled DD green
+        006/02 orange face marbled green, orange face marbled D green, orange face marbled DD green
+        006/03 pale headed marbled green, pale headed marbled D green, pale headed marbled DD green
+        006/04 marbled blue, marbled D blue, marbled DD blue
+        006/05 marbled aqua, marbled D aqua, marbled DD aqua
+        006/06 marbled turquoise, marbled D turquoise, marbled DD turquoise
+        006/07 marbled violet
+        006/08 marbled violet factored aqua
+        006/09 marbled violet turquoise
+        006/10 opaline marbled green, opaline marbled D green, opaline marbled DD green
+        006/11 orange face opaline marbled green, orange face opaline marbled D green, orange face opaline marbled DD green
+        006/12 pale headed opaline marbled green, pale headed opaline marbled D green, pale headed opaline marbled DD green
+        006/13 opaline marbled blue, opaline marbled D blue, opaline marbled DD blue
+        006/14 opaline marbled aqua, opaline marbled D aqua, opaline marbled DD aqua
+        006/15 opaline marbled turquoise, opaline marbled D turquoise, opaline marbled DD turquoise
+        006/16 opaline marbled violet
+        006/17 opaline marbled violet factored aqua
+        006/18 opaline marbled violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS DILUTE
+           A Color
+
+        007/01 dilute green, dilute D green, dilute DD green
+        007/02 orange face dilute green, orange face dilute D green, orange face dilute DD green
+        007/03 pale headed dilute green, pale headed dilute D green, pale headed dilute DD green
+        007/04 dilute blue, dilute D blue, dilute DD blue
+        007/05 dilute aqua, dilute D aqua, dilute DD aqua
+        007/06 dilute turquoise, dilute D turquoise, dilute DD turquoise
+        007/07 dilute violet
+        007/08 dilute violet factored aqua
+        007/09 dilute violet turquoise
+        007/10 opaline dilute green, opaline dilute D green, opaline dilute DD green
+        007/11 orange face opaline dilute green, orange face opaline dilute D green, orange face opaline dilute DD green
+        007/12 pale headed opaline dilute green, pale headed opaline dilute D green, pale headed opaline dilute DD green
+        007/13 opaline dilute blue, opaline dilute D blue, opaline dilute DD blue
+        007/14 opaline dilute aqua, opaline dilute D aqua, opaline dilute DD aqua
+        007/15 opaline dilute turquoise, opaline dilute D turquoise, opaline dilute DD turquoise
+        007/16 opaline dilute violet
+        007/17 opaline dilute violet factored aqua
+        007/18 opaline dilute violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS BRONZE FALLOW
+           A Color
+
+        008/01 bronze fallow green, bronze fallow D green, bronze fallow DD green
+        008/02 orange face bronze fallow green, orange face bronze fallow D green, orange face bronze fallow DD green
+        008/03 pale headed bronze fallow green, pale headed bronze fallow D green, pale headed bronze fallow DD green
+        008/04 bronze fallow blue, bronze fallow D blue, bronze fallow DD blue
+        008/05 bronze fallow aqua, bronze fallow D aqua, bronze fallow DD aqua
+        008/06 bronze fallow turquoise, bronze fallow D turquoise, bronze fallow DD turquoise
+        008/07 bronze fallow violet
+        008/08 bronze fallow violet factored aqua
+        008/09 bronze fallow violet turquoise
+        008/10 opaline bronze fallow green, opaline bronze fallow D green, opaline bronze fallow DD green
+        008/11 orange face opaline bronze fallow green, orange face opaline bronze fallow D green, orange face opaline bronze fallow DD green
+        008/12 pale headed opaline bronze fallow green, pale headed opaline bronze fallow D green, pale headed opaline bronze fallow DD green
+        008/13 opaline bronze fallow blue, opaline bronze fallow D blue, opaline bronze fallow DD blue
+        008/14 opaline bronze fallow aqua, opaline bronze fallow D aqua, opaline bronze fallow DD aqua
+        008/15 opaline bronze fallow turquoise, opaline bronze fallow D turquoise, opaline bronze fallow DD turquoise
+        008/16 opaline bronze fallow violet
+        008/17 opaline bronze fallow violet factored aqua
+        008/18 opaline bronze fallow violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS PALE FALLOW
+           A Color
+
+        009/01 pale fallow green, pale fallow D green, pale fallow DD green
+        009/02 orange face pale fallow green, orange face pale fallow D green, orange face pale fallow DD green
+        009/03 pale headed pale fallow green, pale headed pale fallow D green, pale headed pale fallow DD green
+        009/04 pale fallow blue, pale fallow D blue, pale fallow DD blue
+        009/05 pale fallow aqua, pale fallow D aqua, pale fallow DD aqua
+        009/06 pale fallow turquoise, pale fallow D turquoise, pale fallow DD turquoise
+        009/07 pale fallow violet
+        009/08 pale fallow violet factored aqua
+        009/09 pale fallow violet turquoise
+        009/10 opaline pale fallow green, opaline pale fallow D green, opaline pale fallow DD green
+        009/11 orange face opaline pale fallow green, orange face opaline pale fallow D green, orange face opaline pale fallow DD green
+        009/12 pale headed opaline pale fallow green, pale headed opaline pale fallow D green, pale headed opaline pale fallow DD green
+        009/13 opaline pale fallow blue, opaline pale fallow D blue, opaline pale fallow DD blue
+        009/14 opaline pale fallow aqua, opaline pale fallow D aqua, opaline pale fallow DD aqua
+        009/15 opaline pale fallow turquoise, opaline pale fallow D turquoise, opaline pale fallow DD turquoise
+009/16  opaline pale fallow violet
+009/17  opaline pale fallow violet factored aqua
+009/18  opaline pale fallow violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS SL INO
+           A Color
+
+        010/01 SL ino green (lutino)
+        010/02 orange face ino green (orange face lutino)
+        010/03 pale headed ino green (pale headed lutino)
+        010/04 SL ino blue
+        010/05 SL ino aqua
+        010/06 SL ino turquoise
+        010/07 opaline-ino green
+        010/08 orange face opaline-ino green
+        010/09 pale headed opaline-ino green
+        010/10 opaline-ino blue
+        010/11 opaline-ino aqua
+        010/12 opaline-ino turquoise
+        010/13 cinnamon-ino green, cinnamon-ino D green, cinnamon-ino DD green
+        010/14 cinnamon-ino blue, cinnamon-ino D blue, cinnamon-ino DD blue
+        010/15 cinnamon-ino aqua, cinnamon-ino D aqua, cinnamon-ino DD aqua
+        010/16 cinnamon-ino turquoise, cinnamon-ino D turquoise, cinnamon-ino DD turquoise
+        010/17 orange face cinnamon-ino green, orange face cinnamon-ino D green, orange face cinnamon-ino DD green
+        010/18 pale headed cinnamon-ino green, pale headed cinnamon-ino D green, pale headed cinnamon-ino DD green
+        010/19 cinnamon-ino violet
+        010/20 cinnamon-ino violet factored aqua
+        010/21 cinnamon-ino violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS CINNAMON
+           A Color
+
+        011/01 cinnamon green, cinnamon D green, cinnamon DD green
+        011/02 orange face cinnamon green, orange face cinnamon D green, orange face cinnamon DD green
+        011/03 pale headed cinnamon green, pale headed cinnamon D green, pale headed cinnamon DD green
+        011/04 cinnamon blue, cinnamon D blue, cinnamon DD blue
+        011/05 cinnamon aqua, cinnamon D aqua, cinnamon DD aqua
+        011/06 cinnamon turquoise, cinnamon D turquoise, cinnamon DD turquoise
+        011/07 cinnamon violet
+        011/08 cinnamon violet factored aqua
+        011/09 cinnamon violet turquoise
+        011/10 opaline-cinnamon green, opaline-cinnamon D green, opaline-cinnamon DD green
+        011/11 orange face opaline-cinnamon green, orange face opaline-cinnamon D green, orange face opaline-cinnamon DD green
+        011/12 pale headed opaline-cinnamon green, pale headed opaline-cinnamon D green, pale headed opaline-cinnamon DD green
+        011/13 opaline-cinnamon blue, opaline-cinnamon D blue, opaline-cinnamon DD blue
+        011/14 opaline-cinnamon aqua, opaline-cinnamon D aqua, opaline-cinnamon DD aqua
+        011/15 opaline-cinnamon turquoise, opaline-cinnamon D turquoise, opaline-cinnamon DD turquoise
+        011/16 opaline-cinnamon violet
+        011/17 opaline-cinnamon violet factored aqua
+        011/18 opaline-cinnamon violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS PALLID
+           A Color
+
+       012/01 pallid green, pallid D green, pallid DD green
+       012/02 orange face pallid green, orange face pallid D green, orange face pallid DD green
+       012/03 pale headed pallid green, pale headed pallid D green, pale headed pallid DD green
+       012/04 pallid blue, pallid D blue, pallid DD blue
+       012/05 pallid aqua, pallid D aqua, pallid DD aqua
+       012/06 pallid turquoise, pallid D turquoise, pallid DD turquoise
+       012/07 pallid violet
+       012/08 pallid violet factored aqua
+       012/09 pallid violet turquoise
+       012/10 opaline-pallid green, opaline-pallid D green, opaline-pallid DD green
+       012/11 orange face opaline-pallid green, orange face opaline-pallid D green, orange face opaline-pallid DD green
+       012/12 pale headed opaline-pallid green, pale headed opaline-pallid D green, pale headed opaline-pallid DD green
+       012/13 opaline-pallid blue, opaline-pallid D blue, opaline-pallid DD blue
+       012/14 opaline-pallid aqua, opaline-pallid D aqua, opaline-pallid DD aqua
+       012/15 opaline-pallid turquoise, opaline-pallid D turquoise, opaline-pallid DD turquoise
+       012/16 opaline-pallid violet
+       012/17 opaline-pallid violet factored aqua
+       012/18 opaline-pallid violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS PALE
+           A Color
+
+       013/01 pale green, pale D green, pale DD green
+       013/02 orange face pale green, orange face pale D green, orange face pale DD green
+       013/03 pale headed pale green, pale headed pale D green, pale headed pale DD green
+       013/04 pale blue, pale D blue, pale DD blue
+       013/05 pale aqua, pale D aqua, pale DD aqua
+       013/06 pale turquoise, pale D turquoise, pale DD turquoise
+       013/07 pale violet
+       013/08 pale violet factored aqua
+       013/09 pale violet turquoise
+       013/10 opaline-pale green, opaline-pale D green, opaline-pale DD green
+       013/11 orange face opaline-pale green, orange face opaline-pale D green, orange face opaline-pale DD green
+       013/12 pale headed opaline-pale green, pale headed opaline-pale D green, pale headed opaline-pale DD green
+       013/13 opaline-pale blue, opaline-pale D blue, opaline-pale DD blue
+       013/14 opaline-pale aqua, opaline-pale D aqua, opaline-pale DD aqua
+       013/15 opaline-pale turquoise, opaline-pale D turquoise, opaline-pale DD turquoise
+       013/16 opaline-pale violet
+       013/17 opaline-pale violet factored aqua
+       013/18 opaline-pale violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS DOMINANT PIED
+
+A       Color
+
+014/01 dominant pied green, dominant pied D green, dominant pied DD green
+
+014/02 orange face dominant pied green, orange face dominant pied D green, orange face dominant pied DD green
+
+014/03 pale headed dominant pied green, pale headed dominant pied D green, pale headed dominant pied DD green
+
+014/04 dominant pied blue, dominant pied D blue, dominant pied DD blue
+
+014/05 dominant pied aqua, dominant pied D aqua, dominant pied DD aqua
+
+014/06 dominant pied turquoise, dominant pied D turquoise, dominant pied DD turquoise
+
+014/07 dominant pied violet
+
+014/08 dominant pied violet factored aqua
+
+014/09 dominant pied violet turquoise
+
+014/10 opaline dominant pied green, opaline dominant pied D green, opaline dominant pied DD green
+
+014/11 orange face opaline dominant pied green, orange face opaline dominant pied D green, orange face opaline dominant pied DD green
+
+014/12 pale headed opaline dominant pied green, pale headed opaline dominant pied D green, pale headed opaline dominant pied DD green
+
+014/13 opaline dominant pied blue, opaline dominant pied D blue, opaline dominant pied DD blue
+
+014/14 opaline dominant pied aqua, opaline dominant pied D aqua, opaline dominant pied DD aqua
+
+014/15 opaline dominant pied turquoise, opaline dominant pied D turquoise, opaline dominant pied DD turquoise
+
+014/16 opaline dominant pied violet
+
+014/17 opaline dominant pied violet factored aqua
+
+014/18 opaline dominant pied violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS RECESSIVE PIED
+
+A       Color
+
+015/01 recessive pied green, recessive pied D green, recessive pied DD green
+
+015/02 orange face recessive pied green, orange face recessive pied D green, orange face recessive pied DD green
+
+015/03 pale headed recessive pied green, pale headed recessive pied D green, pale headed recessive pied DD green
+015/04  recessive pied blue, recessive pied D blue, recessive pied DD blue
+015/05  recessive pied aqua, recessive pied D aqua, recessive pied DD aqua
+015/06  recessive pied turquoise, recessive pied D turquoise, recessive pied DD turquoise
+015/07  recessive pied violet
+015/08  recessive pied violet factored aqua
+015/09  recessive pied violet turquoise
+015/10  opaline recessive pied green, opaline recessive pied D green, opaline recessive pied DD green
+015/11  orange face opaline recessive pied green, orange face opaline recessive pied D green, orange face opaline recessive pied DD green
+015/12  pale headed opaline recessive pied green, pale headed opaline recessive pied D green, pale headed opaline recessive pied DD green
+015/13  opaline recessive pied blue, opaline recessive pied D blue, opaline recessive pied DD blue
+015/14  opaline recessive pied aqua, opaline recessive pied D aqua, opaline recessive pied DD aqua
+015/15  opaline recessive pied turquoise, opaline recessive pied D turquoise, opaline recessive pied DD turquoise
+015/16  opaline recessive pied violet
+015/17  opaline recessive pied violet factored aqua
+015/18  opaline recessive pied violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS DM jade
+
+A       Color
+
+016/01 DM jade green, DM jade D green, DM jade DD green
+
+016/02 orange face DM jade green, orange face DM jade D green, orange face DM jade DD green
+
+016/03 pale headed DM jade green, pale headed DM jade D green, pale headed DM jade DD green
+
+016/04 DM jade blue, DM jade D blue, DM jade DD blue
+
+016/05 DM jade aqua, DM jade D aqua, DM jade DD aqua
+
+016/06 DM jade turquoise, DM jade D turquoise, DM jade DD turquoise
+
+016/07 DM jade violet
+
+016/08 DM jade violet factored aqua
+
+016/09 DM jade violet turquoise
+
+016/10 opaline DM jade green, opaline DM jade D green, opaline DM jade DD green
+
+016/11 orange face opaline DM jade green, orange face opaline DM jade D green, orange face opaline DM jade DD green
+
+016/12 pale headed opaline DM jade green, pale headed opaline DM jade D green, pale headed opaline DM jade DD green
+
+016/13 opaline DM jade blue, opaline DM jade D blue, opaline DM jade DD blue
+
+016/14 opaline DM jade aqua, opaline DM jade D aqua, opaline DM jade DD aqua
+
+016/15 opaline DM jade turquoise, opaline DM jade D turquoise, opaline DM jade DD turquoise
+
+016/16 opaline DM jade violet
+
+016/17 opaline DM jade violet factored aqua
+
+016/18 opaline DM jade violet turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS MISTY
+
+A       Color
+
+017/01 DF misty green
+
+017/02 DF misty blue
+
+017/03 DF misty aqua
+
+017/04 DF misty turquoise
+
+GROUP AGAPORNIS ROSEICOLLIS CRESTED
+
+A       Color
+
+018/01 crested in combination with birds in group 1 till group 17
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE GREEN
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A           A         A               Color
+
+050/01  100/01         150/01        200/01 green
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE GREENSERIES
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A           A         A               Color
+
+051/01  101/01         151/01        201/01 D green, DD green
+
+NYA     101/02         NYA           NYA orange face green, orange face D green, orange face DD green
+
+051/03  101/03         151/03        201/03 slaty green
+
+NYA     101/04         NYA           NYA orange face slaty green
+
+051/05 101/05          NYA           NYA opaline green, opaline D green, opaline DD green
+
+NYA     101/06         NYA           NYA orange face opaline green, orange face opaline D green, orange face opaline DD green
+
+051/07 101/07          NYA           NYA opaline slaty green
+
+NYA     101/08         NYA           NYA orange face opaline slaty green
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE BLUE
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A           A         A               Color
+
+052/01  102/01         152/01        202/01 blue, D blue, DD blue
+
+052/02  102/02         152/02        202/02 violet
+
+052/03  102/03         152/03        202/03 slaty blue
+
+052/04 102/04          NYA           NYA opaline blue, opaline D blue, opaline DD blue
+
+052/05 102/05          NYA           NYA opaline violet
+
+052/06 102/06          NYA           NYA opaline slaty blue
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE Blue1Blue2
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A           A         A               Color
+
+053/01  103/01         153/01        203/01 Blue1Blue2, D Blue1Blue2, DD Blue1Blue2
+
+053/02  103/02         153/02        203/02 violet Blue1Blue2
+
+053/03  103/03         153/03        203/03 slaty Blue1Blue2
+
+053/04 103/04          NYA           NYA opaline Blue1Blue2, opaline D Blue1Blue2, opaline DD Blue1Blue2
+
+053/05 103/05          NYA           NYA opaline violet Blue1Blue2
+
+053/06 103/06          NYA           NYA opaline slaty Blue1Blue2
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE AQUA
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A           A         A               Color
+
+NYA     104/01         NYA           NYA aqua, D aqua, DD aqua
+
+NYA     104/02         NYA           NYA violet factored D aqua
+
+NYA     104/03         NYA           NYA slaty aqua
+
+NYA     104/04         NYA           NYA opaline aqua, opaline D aqua, opaline DD aqua
+
+NYA     104/05         NYA           NYA opaline violet factored D aqua
+
+NYA     104/06         NYA           NYA opaline slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE PASTEL
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A           A         A               Color
+
+055/01  105/01         155/01        205/01 pastel green, pastel D green, pastel DD green
+
+NYA     105/02         NYA           NYA orange face pastel green, orange face pastel D green, orange face pastel DD green
+
+055/03  105/03         155/03        205/03 pastel blue, pastel D blue, pastel DD blue
+
+055/04  105/04         155/04        205/04 pastel Blue1Blue2, pastel D Blue1Blue2, pastel DD Blue1Blue2
+
+NYA     105/05         NYA           NYA pastel aqua, pastel D aqua, pastel DD aqua
+
+055/06  105/06         155/06        205/06 pastel violet
+
+055/07  105/07         155/07        205/07 pastel violet Blue1Blue2
+
+NYA     105/08         NYA           NYA pastel violet factored D aqua
+
+055/09  105/09         155/09        205/09 pastel slaty green
+
+NYA     105/10         NYA           NYA orange face pastel slaty green
+
+055/11  105/11         155/11        205/11 pastel slaty blue
+
+055/12  105/12         155/12        205/12 pastel slaty Blue1Blue2
+
+NYA     105/13         NYA           NYA pastel slaty aqua
+
+NYA     105/14         NYA           NYA opaline pastel green, opaline pastel D green, opaline pastel DD green
+
+NYA     105/15         NYA           NYA orange face opaline pastel green, orange face opaline pastel D green, orange face opaline pastel DD green
+
+NYA     105/16         NYA           NYA opaline pastel blue, opaline pastel D blue, opaline pastel DD blue
+
+NYA     105/17         NYA           NYA opaline pastel Blue1Blue2, opaline pastel D Blue1Blue2, opaline pastel DD Blue1Blue2
+
+NYA     105/18         NYA           NYA opaline pastel aqua, opaline pastel D aqua, opaline pastel DD aqua
+
+NYA     105/19         NYA           NYA opaline pastel violet
+NYA     105/20  NYA     NYA opaline pastel violet Blue1Blue2
+                        NYA opaline pastel violet factored D aqua
+NYA     105/21  NYA     NYA opaline pastel slaty green
+                        NYA orange face opaline pastel slaty green
+NYA     105/22  NYA     NYA opaline pastel slaty blue
+                        NYA opaline pastel slaty Blue1Blue2
+NYA     105/23  NYA     NYA opaline pastel slaty aqua
+
+NYA     105/24  NYA
+
+NYA     105/25  NYA
+
+NYA     105/26  NYA
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE DOMINANT EDGED
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+056/01  106/01  156/01  206/01 SF edged green, SF edged D green, SF edged DD green
+
+NYA     106/02  NYA     NYA orange face SF edged green, orange face SF edged D green, orange face SF edged DD green
+
+056/03  106/03  156/03  206/03 SF edged blue, SF edged D blue, SF edged DD blue
+
+056/04  106/04  156/04  206/04 SF edged Blue1Blue2, SF edged D Blue1Blue2, SF edged DD Blue1Blue2
+
+NYA     106/05  NYA     NYA Sf edged aqua, SF edged D aqua, SF edged DD aqua
+
+056/06  106/06  156/06  206/06 SF edged violet
+
+056/07  106/07  156/07  206/07 SF edged violet Blue1Blue2
+
+NYA     106/08  NYA     NYA SF edged violet factored D aqua
+
+056/09  106/09  156/09  206/09 SF edged slaty green
+
+NYA     106/10  NYA     NYA orange face SF edged slaty green
+
+056/11  106/11  156/11  206/11 SF edged slaty blue
+
+056/12  106/12  156/12  206/12 SF edged slaty Blue1Blue2
+
+NYA     106/13  NYA     NYA SF edged slaty aqua
+
+056/14  106/14  156/14  206/14 DF edged green, DF edged D green, DF edged DD green
+
+NYA     106/15  NYA     NYA orange face DF edged green, orange face DF edged D green, orange face DF edged DD green
+
+056/16  106/16  156/16  206/16 DF edged blue, DF edged D blue, DF edged DD blue
+
+056/17  106/17  156/17  206/17 DF edged Blue1Blue2, DF edged D Blue1Blue2, DF edged DD Blue1Blue2
+
+NYA     106/18  NYA     NYA DF edged aqua, DF edged D aqua, DF edged DD aqua
+
+056/19  106/19  156/19  206/19 DF edged violet
+
+056/20  106/20  156/20  206/20 DF edged violet Blue1Blue2
+
+NYA     106/21  NYA     NYA DF edged violet factored D aqua
+
+056/22  106/22  156/22  206/22 DF edged slaty green
+
+NYA     106/23  NYA     NYA orange face DF edged slaty green
+
+056/24  106/24  156/24  206/24 DF edged slaty blue
+
+056/25  106/25  156/25  206/25 DF edged slaty Blue1Blue2
+
+NYA     106/26  NYA     NYA DF edged slaty aqua
+
+NYA     106/27  NYA     NYA opaline SF edged green, opaline SF edged D green, opaline SF edged DD green
+
+NYA     106/28  NYA     NYA orange face opaline SF edged green, orange face opaline SF edged D green, opaline orange face SF edged DD green
+
+NYA     106/29  NYA     NYA opaline SF edged blue, opaline SF edged D blue, opaline SF edged DD blue
+
+NYA     106/30  NYA     NYA opaline SF edged Blue1Blue2, opaline SF edged D Blue1Blue2, opaline SF edged DD Blue1Blue2
+
+NYA     106/31  NYA     NYA opaline SF edged aqua, opaline SF edged D aqua, opaline SF edged DD aqua
+
+NYA     106/32  NYA     NYA opaline SF edged violet
+
+NYA     106/33  NYA     NYA opaline SF edged violet Blue1Blue2
+
+NYA     106/34  NYA     NYA opaline SF edged violet factored D aqua
+
+NYA     106/35  NYA     NYA opaline SF edged slaty green
+
+NYA     106/36  NYA     NYA orange face opaline SF edged slaty green
+
+NYA     106/37  NYA     NYA opaline SF edged slaty blue
+
+NYA     106/38  NYA     NYA opaline SF edged slaty Blue1Blue2
+
+NYA     106/39  NYA     NYA opaline SF edged slaty aqua
+
+NYA     106/40  NYA     NYA opaline DF edged green, opaline DF edged D green, opaline DF edged DD green
+
+NYA     106/41  NYA     NYA orange face opaline DF edged green, orange face opaline DF edged D green, orange face opaline DF edged DD green
+
+NYA     106/42  NYA     NYA opaline DF edged blue, opaline DF edged D blue, opaline DF edged DD blue
+
+NYA     106/43  NYA     NYA opaline DF edged Blue1Blue2, opaline DF edged D Blue1Blue2, opaline DF edged DD Blue1Blue2
+
+NYA     106/44  NYA     NYA opaline DF edged aqua, opaline DF edged D aqua, opaline DF edged DD aqua
+
+NYA     106/45  NYA     NYA opaline DF edged violet
+
+NYA     106/46  NYA     NYA opaline DF edged violet Blue1Blue2
+
+NYA     106/47  NYA     NYA opaline DF edged violet factored D aqua
+
+NYA     106/48  NYA     NYA opaline DF edged slaty green
+
+NYA     106/49  NYA     NYA orange face opaline DF edged slaty green
+
+NYA     106/50  NYA     NYA opaline DF edged slaty blue
+
+NYA     106/51  NYA     NYA opaline DF edged slaty Blue1Blue2
+
+NYA     106/52  NYA     NYA opaline DF edged slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE DOMINANT PIED
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+057/01  107/01  157/01  207/01 dominant pied green, dominant pied D green, dominant pied DD green
+
+NYA     107/02  NYA     NYA orange face dominant pied green, orange face dominant pied D green, orange face dominant pied DD green
+
+057/03  107/03  157/03  207/03 dominant pied blue, dominant pied D blue, dominant pied DD blue
+
+057/04  107/04  157/04  207/04 dominant pied Blue1Blue2, dominant pied D Blue1Blue2, dominant pied DD Blue1Blue2
+
+NYA     107/05  NYA     NYA dominant pied aqua, dominant pied D aqua, dominant pied DD aqua
+
+057/06  107/06  157/06  207/06 dominant pied violet
+
+057/07  107/07  157/07  207/07 dominant pied violet Blue1Blue2
+
+NYA     107/08  NYA     NYA dominant pied violet factored D aqua
+
+057/09  107/09  157/09  207/09 dominant pied slaty green
+
+NYA     107/10  NYA     NYA orange face dominant pied slaty green
+
+057/11  107/11  157/11  207/11 dominant pied slaty blue
+
+057/12  107/12  157/12  207/12 dominant pied slaty Blue1Blue2
+
+NYA     107/13  NYA     NYA dominant pied slaty aqua
+
+NYA     107/14  NYA     NYA opaline dominant pied green, opaline dominant pied D green, opaline dominant pied DD green
+
+NYA     107/15  NYA     NYA orange face opaline dominant pied green, orange face opaline dominant pied D green, orange face opaline dominant pied DD green
+
+NYA     107/16  NYA     NYA opaline dominant pied blue, opaline dominant pied D blue, opaline dominant pied DD blue
+
+NYA     107/17  NYA     NYA opaline dominant pied Blue1Blue2, opaline dominant pied D Blue1Blue2, opaline dominant pied DD Blue1Blue2
+
+NYA     107/18  NYA     NYA opaline dominant pied aqua, opaline dominant pied D aqua, opaline dominant pied DD aqua
+
+NYA     107/19  NYA     NYA opaline dominant pied violet
+
+NYA     107/20  NYA     NYA opaline dominant pied violet Blue1Blue2
+
+NYA     107/21  NYA     NYA opaline dominant pied violet D aqua
+
+NYA     107/22  NYA     NYA opaline dominant pied slaty green
+
+NYA     107/23  NYA     NYA orange face opaline dominant pied slaty green
+
+NYA     107/24  NYA     NYA opaline dominant pied slaty blue
+
+NYA     107/25  NYA     NYA opaline dominant pied slaty Blue1Blue2
+
+NYA     107/26  NYA     NYA opaline dominant pied slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE RECESSIVE PIED
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+058/01  108/01  158/01  208/01 recessive pied green, recessive pied D green, recessive pied DD green
+
+NYA     108/02  NYA     NYA orange face recessive pied green, orange face recessive pied D green, orange face recessive pied DD green
+
+058/03  108/03  158/03  208/03 recessive pied blue, recessive pied D blue, recessive pied DD blue
+
+058/04  108/04  158/04  208/04 recessive pied Blue1Blue2, recessive pied D Blue1Blue2, recessive pied DD Blue1Blue2
+
+NYA     108/05  NYA     NYA recessive pied aqua, recessive pied D aqua, recessive pied DD aqua
+
+058/06  108/06  158/06  208/06 recessive pied violet
+
+058/07  108/07  158/07  208/07 recessive pied violet Blue1Blue2
+
+NYA     108/08  NYA     NYA recessive pied violet factored D aqua
+
+058/09  108/09  158/09  208/09 recessive pied slaty green
+
+NYA     108/10  NYA     NYA orange face recessive pied slaty green
+
+058/11  108/11  158/11  208/11 recessive pied slaty blue
+
+058/12  108/12  158/12  208/12 recessive pied slaty Blue1Blue2
+
+NYA     108/13  NYA     NYA recessive pied slaty aqua
+
+NYA     108/14  NYA     NYA opaline recessive pied green, opaline recessive pied D green, opaline recessive pied DD green
+
+NYA     108/15  NYA     NYA orange face opaline recessive pied green, orange face opaline recessive pied D green, orange face opaline recessive pied DD green
+
+NYA     108/16  NYA     NYA opaline recessive pied blue, opaline recessive pied D blue, opaline recessive pied DD blue
+
+NYA     108/17  NYA     NYA opaline recessive pied Blue1Blue2, opaline recessive pied D Blue1Blue2, opaline recessive pied DD Blue1Blue2
+
+NYA     108/18  NYA     NYA opaline recessive pied aqua, opaline recessive pied D aqua, opaline recessive pied DD aqua
+
+NYA     108/19  NYA     NYA opaline recessive pied violet
+NYA     108/20  NYA     NYA opaline recessive pied violet Blue1Blue2
+                        NYA opaline recessive pied violet factored D aqua
+NYA     108/21  NYA     NYA opaline recessive pied slaty green
+                        NYA orange face opaline recessive slaty green
+NYA     108/22  NYA     NYA opaline recessive pied slaty blue
+                        NYA opaline recessive pied slaty Blue1Blue2
+NYA     108/23  NYA     NYA opaline recessive pied slaty aqua
+
+NYA     108/24  NYA
+
+NYA     108/25  NYA
+
+NYA     108/26  NYA
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE DILUTE
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+059/01  109/01  159/01  209/01 dilute green, dilute D green, dilute DD green
+
+NYA     109/02  NYA     NYA orange face dilute green, orange face dilute D green, orange face dilute DD green
+
+059/03  109/03  159/03  209/03 dilute blue, dilute D blue, dilute DD blue
+
+059/04  109/04  159/04  209/04 dilute Blue1Blue2, dilute D Blue1Blue2, dilute DD Blue1Blue2
+
+NYA     109/05  NYA     NYA dilute aqua, dilute D aqua, dilute DD aqua
+
+059/06  109/06  159/06  209/06 dilute violet
+
+059/07  109/07  159/07  209/07 dilute violet Blue1Blue2
+
+NYA     109/08  NYA     NYA dilute violet factored D aqua
+
+059/09  109/09  159/09  209/09 dilute slaty green
+
+NYA     109/10  NYA     NYA orange face dilute slaty green
+
+059/11  109/11  159/11  209/11 dilute slaty blue
+
+059/12  109/12  159/12  209/12 dilute slaty Blue1Blue2
+
+NYA     109/13  NYA     NYA dilute slaty aqua
+
+NYA     109/14  NYA     NYA opaline dilute green, opaline dilute D green, opaline dilute DD green
+
+NYA     109/15  NYA     NYA orange face opaline dilute green, orange face opaline dilute D green, orange face opaline dilute DD green
+
+NYA     109/16  NYA     NYA opaline dilute blue, opaline dilute D blue, opaline dilute DD blue
+
+NYA     109/17  NYA     NYA opaline dilute Blue1Blue2, opaline dilute D Blue1Blue2, opaline dilute DD Blue1Blue2
+
+NYA     109/18  NYA     NYA opaline dilute aqua, opaline dilute D aqua, opaline dilute DD aqua
+
+NYA     109/19  NYA     NYA opaline dilute violet
+
+NYA     109/20  NYA     NYA opaline dilute violet Blue1Blue2
+
+NYA     109/21  NYA     NYA opaline ditute violet factored D aqua
+
+NYA     109/22  NYA     NYA opaline dilute slaty green
+
+NYA     109/23  NYA     NYA orange face opaline dilute slaty green
+
+NYA     109/24  NYA     NYA opaline dilute slaty blue
+
+NYA     109/25  NYA     NYA opaline dilute slaty Blue1Blue2
+
+NYA     109/26  NYA     NYA opaline dilute slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE MISTY
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+060/01  110/01  160/01  210/01 DF misty green
+
+NYA     110/02  NYA     NYA orange face DF misty green
+
+060/03  110/03  160/03  210/03 DF misty blue
+
+060/04  110/04  160/04  210/04 DF misty Blue1Blue2
+
+NYA     110/05  NYA     NYA DF misty aqua
+
+NYA     110/06  NYA     NYA opaline DF misty green
+
+NYA     110/07  NYA     NYA orange face opaline DF misty green
+
+NYA     110/08  NYA     NYA opaline DF misty blue
+
+NYA     110/09  NYA     NYA opaline DF misty Blue1Blue2
+
+NYA     110/10  NYA     NYA opaline DF misty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE EUWING
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+061/01  111/01  161/01  211/01 SF euwing green, SF euwing D green, SF euwing DD green
+
+NYA     111/02  NYA     NYA orange face SF euwing green, orange face SF euwing D green, orange face SF euwing DD green
+
+061/03  111/03  161/03  211/03 SF euwing blue, SF euwing D blue, SF euwing DD blue
+
+061/04  111/04  161/04  211/04 SF euwing Blue1Blue2, SF euwing D Blue1Blue2, SF euwing DD Blue1Blue2
+
+NYA     111/05  NYA     NYA SF euwing aqua, SF euwing D aqua, SF euwing DD aqua
+
+061/06  111/06  161/06  211/06 SF euwing violet
+
+061/07  111/07  161/07  211/07 SF euwing violet Blue1Blue2
+
+NYA     111/08  NYA     NYA SF euwing violet factored D aqua
+
+061/09  111/09  161/09  211/09 SF euwing slaty green
+
+NYA     111/10  NYA     NYA orange face SF euwing slaty green
+
+061/11  111/11  161/11  211/11 SF euwing slaty blue
+
+061/12  111/12  161/12  211/12 SF euwing slaty Blue1Blue2
+
+NYA     111/13  NYA     NYA SF euwing slaty aqua
+
+061/14  111/14  161/14  211/14 DF euwing green, DF euwing D green, DF euwing DD green
+
+NYA     111/15  NYA     NYA orange face DF euwing green, orange face DF euwing D green, orange face DF euwing DD green
+
+061/16  111/16  161/16  211/16 DF euwing blue, DF euwing D blue, DF euwing DD blue
+
+061/17  111/17  161/17  211/17 DF euwing Blue1Blue2, DF euwing D Blue1Blue2, DF euwing DD Blue1Blue2
+
+NYA     111/18  NYA     NYA DF euwing aqua, DF euwing D aqua, DF euwing DD aqua
+
+061/19  111/19  161/19  211/19 DF euwing violet
+
+061/20  111/20  161/20  211/20 DF euwing violet Blue1Blue2
+
+NYA     111/21  NYA     NYA DF euwing violet factored D aqua
+
+061/22  111/22  161/22  211/22 DF euwing slaty green
+
+NYA     111/23  NYA     NYA orange face DF euwing slaty green
+
+061/24  111/24  161/24  211/24 DF euwing slaty blue
+
+061/25  111/25  161/25  211/25 DF euwing slaty Blue1Blue2
+
+NYA     111/26  NYA     NYA DF euwing slaty aqua
+
+NYA     111/27  NYA     NYA opaline SF euwing green, opaline SF euwing D green, opaline SF euwing DD green
+
+NYA     111/28  NYA     NYA orange face opaline SF euwing green, orange face opaline SF euwing D green, orange face opaline SF euwing DD green
+
+NYA     111/29  NYA     NYA opaline SF euwing blue, opaline SF euwing D blue, opaline SF euwing DD blue
+
+NYA     111/30  NYA     NYA opaline SF euwing Blue1Blue2, opaline SF euwing D Blue1Blue2, opaline SF euwing DD Blue1Blue2
+
+NYA     111/31  NYA     NYA opaline SF euwing aqua, opaline SF euwing D aqua, opaline SF euwing DD aqua
+
+NYA     111/32  NYA     NYA opaline SF euwing violet
+
+NYA     111/33  NYA     NYA opaline SF euwing violet Blue1Blue2
+
+NYA     111/34  NYA     NYA opaline SF euwing violet factored D aqua
+
+NYA     111/35  NYA     NYA opaline SF euwing slaty green
+
+NYA     111/36  NYA     NYA orange face opaline SF euwing slaty green
+
+NYA     111/37  NYA     NYA opaline SF euwing slaty blue
+
+NYA     111/38  NYA     NYA opaline SF euwing slaty Blue1Blue2
+
+NYA     111/39  NYA     NYA opaline SF euwing slaty aqua
+
+NYA     111/40  NYA     NYA opaline DF euwing green, opaline DF euwing D green, opaline DF euwing DD green
+
+NYA     111/41  NYA     NYA orange face opaline DF euwing green, orange face opaline DF euwing D green, orange face opaline DF euwing DD green
+
+NYA     111/42  NYA     NYA opaline DF euwing blue, opaline DF euwing D blue, opaline DF euwing DD blue
+
+NYA     111/43  NYA     NYA opaline DF euwing Blue1Blue2, opaline DF euwing D Blue1Blue2, opaline DF euwing DD Blue1Blue2
+
+NYA     111/44  NYA     NYA opaline DF euwing aqua, opaline DF euwing D aqua, opaline DF euwing DD aqua
+
+NYA     111/45  NYA     NYA opaline DF euwing violet
+
+NYA     111/46  NYA     NYA opaline DF euwing violet Blue1Blue2
+
+NYA     111/47  NYA     NYA opaline DF euwing violet factored D aqua
+
+NYA     111/48  NYA     NYA opaline DF euwing slaty green
+
+NYA     111/49  NYA     NYA orange face opaline DF euwing slaty green
+
+NYA     111/50  NYA     NYA opaline DF euwing slaty blue
+
+NYA     111/51  NYA     NYA opaline DF euwing slaty Blue1Blue2
+
+NYA     111/52  NYA     NYA opaline DF euwing slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE BRONZE FALLOW
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+062/01  112/01  162/01  212/01 bronze fallow green, bronze fallow D green, bronze fallow DD green
+
+NYA     112/02  NYA     NYA orange face bronze fallow green, orange face bronze fallow D green, orange face bronze fallow DD green
+
+062/03  112/03  162/03  212/03 bronze fallow blue, bronze fallow D blue, bronze fallow DD blue
+
+062/04  112/04  162/04  212/04 bronze fallow Blue1Blue2, bronze fallow D Blue1Blue2, bronze fallow DD Blue1Blue2
+
+NYA     112/05  NYA     NYA bronze fallow aqua, bronze fallow D aqua, bronze fallow DD aqua
+
+062/06  112/06  162/06  212/06 bronze fallow violet
+062/07  112/07  162/07  212/07                       bronze fallow violet Blue1Blue2
+ NYA    112/08   NYA     NYA                         bronze fallow violet factored D aqua
+        112/09                                       bronze fallow slaty green
+062/09  112/10  162/09  212/09                       orange face bronze fallow slaty green
+ NYA    112/11   NYA     NYA                         bronze fallow slaty blue
+        112/12                                       bronze fallow slaty Blue1Blue2
+062/11  112/13  162/11  212/11                       bronze fallow slaty aqua
+062/12  112/14  162/12  212/12                       opaline bronze fallow green, opaline bronze fallow D green, opaline bronze fallow DD green
+        112/15                                       orange face opaline bronze fallow green, orange face opaline bronze fallow D green, orange face opaline bronze fallow DD green
+ NYA    112/16   NYA     NYA                         opaline bronze fallow blue, opaline bronze fallow D blue, opaline bronze fallow DD blue
+ NYA    112/17   NYA     NYA                         opaline bronze fallow Blue1Blue2, opaline bronze fallow D Blue1Blue2, opaline bronze fallow DD Blue1Blue2
+ NYA    112/18   NYA     NYA                         opaline bronze fallow aqua, opaline bronze fallow D aqua, opaline bronze fallow DD aqua
+ NYA    112/19   NYA     NYA                         opaline bronze fallow violet
+ NYA    112/20   NYA     NYA                         opaline bronze fallow violet Blue1Blue2
+ NYA    112/21   NYA     NYA                         opaline bronze fallow violet factored D aqua
+ NYA    112/22   NYA     NYA                         opaline bronze fallow slaty green
+ NYA    112/23   NYA     NYA                         orange face opaline bronze fallow slaty green
+ NYA    112/24   NYA     NYA                         opaline bronze fallow slaty blue
+ NYA    112/25   NYA     NYA                         opaline bronze fallow slaty Blue1Blue2
+ NYA    112/26   NYA     NYA                         opaline bronze fallow slaty aqua
+ NYA             NYA     NYA
+ NYA             NYA     NYA
+ NYA             NYA     NYA
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE PALE FALLOW
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+063/01  113/01  163/01  213/01 pale fallow green, pale fallow D green, pale fallow DD green
+
+NYA     113/02  NYA     NYA orange face pale fallow green, orange face pale fallow D green, orange face pale fallow DD green
+
+063/03  113/03  163/03  213/03 pale fallow blue, pale fallow D blue, pale fallow DD blue
+
+063/04  113/04  163/04  213/04 pale fallow Blue1Blue2, pale fallow D Blue1Blue2, pale fallow DD Blue1Blue2
+
+NYA     113/05  NYA     NYA pale fallow aqua, pale fallow D aqua, pale fallow DD aqua
+
+063/06  113/06  163/06  213/06 pale fallow violet
+
+063/07  113/07  163/07  213/07 pale fallow violet Blue1Blue2
+
+NYA     113/08  NYA     NYA pale fallow violet factored D aqua
+
+063/09  113/09  163/09  213/09 pale fallow slaty green
+
+NYA     113/10  NYA     NYA orange face pale fallow slaty green
+
+063/11  113/11  163/11  213/11 pale fallow slaty blue
+
+063/12  113/12  163/12  213/12 pale fallow slaty Blue1Blue2
+
+NYA     113/13  NYA     NYA pale fallow slaty aqua
+
+NYA     113/14  NYA     NYA opaline pale fallow green, opaline pale fallow D green, opaline pale fallow DD green
+
+NYA     113/15  NYA     NYA orange face opaline pale fallow green, orange face opaline pale fallow D green, orange face opaline pale fallow DD green
+
+NYA     113/16  NYA     NYA opaline pale fallow blue, opaline pale fallow D blue, opaline pale fallow DD blue
+
+NYA     113/17  NYA     NYA opaline pale fallow Blue1Blue2, opaline pale fallow D Blue1Blue2, opaline pale fallow DD Blue1Blue2
+
+NYA     113/18  NYA     NYA opaline pale fallow aqua, opaline pale fallow D aqua, opaline pale fallow DD aqua
+
+NYA     113/19  NYA     NYA opaline pale fallow violet
+
+NYA     113/20  NYA     NYA opaline pale fallow violet Blue1Blue2
+
+NYA     113/21  NYA     NYA opaline pale fallow violet factored D aqua
+
+NYA     113/22  NYA     NYA opaline pale fallow slaty green
+
+NYA     113/23  NYA     NYA orange face opaline pale fallow slaty green
+
+NYA     113/24  NYA     NYA opaline pale fallow slaty blue
+
+NYA     113/25  NYA     NYA opaline pale fallow slaty Blue1Blue2
+
+NYA     113/26  NYA     NYA opaline pale fallow slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE DUN FALLOW
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+064/01  114/01  164/01  214/01 dun fallow green, dun fallow D green, dun fallow DD green
+
+NYA     114/02  NYA     NYA orange face dun fallow green, orange face dun fallow D green, orange face dun fallow DD green
+
+064/03  114/03  164/03  214/03 dun fallow blue, dun fallow D blue, dun fallow DD blue
+
+064/04  114/04  164/04  214/04 dun fallow Blue1Blue2, dun fallow D Blue1Blue2, dun fallow DD Blue1Blue2
+
+NYA     114/05  NYA     NYA dun fallow aqua, dun fallow D aqua, dun fallow DD aqua
+
+064/06  114/06  164/06  214/06 dun fallow violet
+
+064/07  114/07  164/07  214/07 dun fallow violet Blue1Blue2
+
+NYA     114/08  NYA     NYA dun fallow violet factored D aqua
+
+064/09  114/09  164/09  214/09 dun fallow slaty green
+
+NYA     114/10  NYA     NYA orange face dun fallow slaty green
+
+064/11  114/11  164/11  214/11 dun fallow slaty blue
+
+064/12  114/12  164/12  214/12 dun fallow slaty Blue1Blue2
+
+NYA     114/13  NYA     NYA dun fallow slaty aqua
+
+NYA     114/14  NYA     NYA opaline dun fallow green, opaline dun fallow D green, opaline dun fallow DD green
+
+NYA     114/15  NYA     NYA orange face opaline dun fallow green, orange face opaline dun fallow D green, orange face opaline dun fallow DD green
+
+NYA     114/16  NYA     NYA opaline dun fallow blue, opaline dun fallow D blue, opaline dun fallow DD blue
+
+NYA     114/17  NYA     NYA opaline dun fallow Blue1Blue2, opaline dun fallow D Blue1Blue2, opaline dun fallow DD Blue1Blue2
+
+NYA     114/18  NYA     NYA opaline dun fallow aqua, opaline dun fallow D aqua, opaline dun fallow DD aqua
+
+NYA     114/19  NYA     NYA opaline dun fallow violet
+
+NYA     114/20  NYA     NYA opaline dun fallow violet Blue1Blue2
+
+NYA     114/21  NYA     NYA opaline dun fallow violet factored D aqua
+
+NYA     114/22  NYA     NYA opaline dun fallow slaty green
+
+NYA     114/23  NYA     NYA orange face opaline dun fallow slaty green
+
+NYA     114/24  NYA     NYA opaline dun fallow slaty blue
+
+NYA     114/25  NYA     NYA opaline dun fallow slaty Blue1Blue2
+
+NYA     114/26  NYA     NYA opaline dun fallow slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE PALE
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+065/01  115/01  165/01  215/01 pale green, pale D green, pale DD green
+
+NYA     115/02  NYA     NYA orange face pale green, orange face pale D green, orange face pale DD green
+
+065/03  115/03  165/03  215/03 pale blue, pale D blue, pale DD blue
+
+065/04  115/04  165/04  215/04 pale Blue1Blue2, pale D Blue1Blue2, pale DD Blue1Blue2
+
+NYA     115/05  NYA     NYA pale aqua, pale D aqua, pale DD aqua
+
+065/06  115/06  165/06  215/06 pale violet
+
+065/07  115/07  165/07  215/07 pale violet Blue1Blue2
+
+NYA     115/08  NYA     NYA pale violet factored D aqua
+
+065/09  115/09  165/09  215/09 pale slaty green
+
+NYA     115/10  NYA     NYA orange face pale slaty green
+
+065/11  115/11  165/11  215/11 pale slaty blue
+
+065/12  115/12  165/12  215/12 pale slaty Blue1Blue2
+
+NYA     115/13  NYA     NYA pale slaty aqua
+
+NYA     115/14  NYA     NYA opaline-pale green, opaline-pale D green, opaline-pale DD green
+
+NYA     115/15  NYA     NYA orange face opaline-pale green, orange face opaline-pale D green, orange face opaline-pale DD green
+
+NYA     115/16  NYA     NYA opaline-pale blue, opaline-pale D blue, opaline-pale DD blue
+
+NYA     115/17  NYA     NYA opaline-pale Blue1Blue2, opaline-pale D Blue1Blue2, opaline-pale DD Blue1Blue2
+
+NYA     115/18  NYA     NYA opaline-pale aqua, opaline-pale D aqua, opaline-pale DD aqua
+
+NYA     115/19  NYA     NYA opaline-pale violet
+
+NYA     115/20  NYA     NYA opaline-pale violet Blue1Blue2
+
+NYA     115/21  NYA     NYA opaline-pale violet factored D aqua
+
+NYA     115/22  NYA     NYA opaline-pale slaty green
+
+NYA     115/23  NYA     NYA orange face opaline-pale slaty green
+
+NYA     115/24  NYA     NYA opaline-pale slaty blue
+
+NYA     115/25  NYA     NYA opaline-pale slaty Blue1Blue2
+
+NYA     115/26  NYA     NYA opaline-pale slaty aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE DEC
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A       A       A       A                            Color
+
+066/01  116/01  166/01  216/01 dec green
+
+NYA     116/02  NYA     NYA orange face dec green
+
+066/03  116/03  166/03  216/03 dec blue
+066/04  116/04       166/04          216/04          dec Blue1Blue2
+ NYA    116/05        NYA             NYA            dec aqua
+ NYA    116/06        NYA             NYA            opaline dec green
+ NYA    116/07        NYA             NYA            orange face opaline dec green
+ NYA    116/08        NYA             NYA            opaline dec blue
+ NYA    116/09        NYA             NYA            opaline dec Blue1Blue2
+ NYA    116/10        NYA             NYA            opaline dec aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE NSL INO
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A             A       A               Color
+
+067/01  117/01       167/01          217/01 NSL ino green
+
+NYA     117/02               NYA     NYA orange face NSL ino green
+
+067/03  117/03       167/03          217/03 NSL ino blue
+
+067/04  117/04       167/04          217/04 NSL ino Blue1Blue2
+
+NYA     117/05               NYA     NYA NSL ino aqua
+
+NYA     117/06               NYA     NYA opaline NSL ino green
+
+NYA     117/07               NYA     NYA orange face opaline NSL ino green
+
+NYA     117/08               NYA     NYA opaline NSL ino blue
+
+NYA     117/09               NYA     NYA opaline NSL ino Blue1Blue2
+
+NYA     117/10               NYA     NYA opaline NSL ino aqua
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE SL DOMINANT GREYWING
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A             A       A               Color
+
+NYA     118/01               NYA     NYA SL SF greywing green, SL SF greywing D green, SL SF greywing DD green (male)
+
+NYA     118/02               NYA     NYA orange face SL SF greywing green, orange face SL SF greywing D green, orange face SL SF greywing DD green (male)
+
+NYA     118/03               NYA     NYA SL SF greywing blue, SL SF greywing D blue, SL SF greywing DD blue (male)
+
+NYA     118/04               NYA     NYA SL SF greywing Blue1Blue2, SL SF greywing D Blue1Blue2, SL SF greywing DD Blue1Blue2 (male)
+
+NYA     118/05               NYA     NYA SL SF greywing aqua, SL SF greywing D aqua, SL SF greywing DD aqua (male)
+
+NYA     118/06               NYA     NYA SL SF greywing violet (male)
+
+NYA     118/07               NYA     NYA SL SF greywing violet Blue1Blue2 (male)
+
+NYA     118/08               NYA     NYA SL SF greywing violet factored D aqua (male)
+
+NYA     118/09               NYA     NYA SL SF greywing slaty green (male)
+
+NYA     118/10               NYA     NYA orange face SL SF greywing slaty green (male)
+
+NYA     118/11               NYA     NYA SL SF greywing slaty blue (male)
+
+NYA     118/12               NYA     NYA SL SF greywing slaty Blue1Blue2 (male)
+
+NYA     118/13               NYA     NYA SL SF greywing slaty aqua (male)
+
+NYA     118/14               NYA     NYA SL SF greywing green, SL SF greywing D green, SL SF greywing DD green (female)
+                                                SL DF greywing green, SL DF greywing D green, SL DF greywing DD green (male)
+
+NYA     118/15               NYA     NYA orange face SL SF greywing green, orange face SL SF greywing D green, orange face SL SF greywing DD green (female)
+                                                orange face SL DF greywing green, orange face SL DF greywing D green, orange face SL DF greywing DD green (male)
+
+NYA     118/16               NYA     NYA SL SF greywing blue, SL SF greywing D blue, SL SF greywing DD blue (female)
+                                                SL DF greywing blue, SL DF greywing D blue, SL DF greywing DD blue (male)
+
+NYA     118/17               NYA     NYA SL SF greywing Blue1Blue2, SL SF greywing D Blue1Blue2, SL SF greywing DD Blue1Blue2 (female)
+                                                SL DF greywing Blue1Blue2, SL DF greywing D Blue1Blue2, SL DF greywing DD Blue1Blue2 (male)
+
+NYA     118/18               NYA     NYA SL SF greywing aqua, SL SF greywing D aqua, SL SF greywing DD aqua (female)
+                                                SL DF greywing aqua, SL DF greywing D aqua, SL DF greywing DD aqua (male)
+
+NYA     118/19               NYA     NYA SL SF greywing violet (female), SL DF greywing violet (male)
+
+NYA     118/20               NYA     NYA SL SF greywing violet Blue1Blue2 (female), SL DF greywing violet Blue1Blue2 (male)
+
+NYA     118/21               NYA     NYA SL SF greywing violet factored D aqua (female), SL DF greywing violet factored D aqua (male)
+
+NYA     118/22               NYA     NYA SL SF greywing slaty green (female), SL DF greywing slaty green (male)
+
+NYA     118/23               NYA     NYA orange face SL SF greywing slaty green (female), orange face SL DF greywing slaty green (male)
+
+NYA     118/24               NYA     NYA SL SF greywing slaty blue (female), SL DF greywing slaty blue (male)
+
+NYA     118/25               NYA     NYA SL SF greywing slaty Blue1Blue2 (female), SL DF greywing slaty Blue1Blue2 (male)
+
+NYA     118/26               NYA     NYA SL SF greywing slaty aqua (female), SL DF greywing aqua (male)
+
+NYA     118/27               NYA     NYA opaline SL SF greywing green, opaline SL SF greywing D green, opaline SL SF greywing DD green (male)
+
+NYA     118/28               NYA     NYA orange face opaline SL SF greywing green, orange face opaline SL SF greywing D green, orange face opaline SL SF greywing DD green (male)
+
+NYA     118/29               NYA     NYA opaline SL SF greywing blue, opaline SL SF greywing D blue, opaline SL SF greywing DD blue (male)
+
+NYA     118/30               NYA     NYA opaline SL SF greywing Blue1Blue2, opaline SL SF greywing D Blue1Blue2, opaline SL SF greywing DD Blue1Blue2 (male)
+
+NYA     118/31               NYA     NYA opaline SL SF greywing aqua, opaline SL SF greywing D aqua, opaline SL SF greywing DD aqua (male)
+
+NYA     118/32               NYA     NYA opaline SL SF greywing violet (male)
+
+NYA     118/33               NYA     NYA opaline SL SF greywing violet Blue1Blue2 (male)
+
+NYA     118/34               NYA     NYA opaline SL SF greywing violet factored D aqua (male)
+
+NYA     118/35               NYA     NYA opaline SL SF greywing slaty green (male)
+
+NYA     118/36               NYA     NYA orange face opaline SL SF greywing slaty green (male)
+
+NYA     118/37               NYA     NYA opaline SL SF greywing slaty blue (male)
+
+NYA     118/38               NYA     NYA opaline SL SF greywing slaty Blue1Blue2 (male)
+
+NYA     118/39               NYA     NYA opaline SL SF greywing slaty aqua (male)
+
+NYA     118/40               NYA     NYA opaline SL SF greywing green, opaline SL SF greywing D green, opaline SL SF greywing DD green (female)
+                                                opaline SL DF greywing green, opaline SL DF greywing D green, opaline SL DF greywing DD green (male)
+
+NYA     118/41               NYA     NYA orange face opaline SL SF greywing green, orange face opaline SL SF greywing D green, orange face opaline SL SF greywing DD green (female)
+                                                orange face opaline SL DF greywing green, orange face opaline SL DF greywing D green, orange face opaline SL DF greywing DD green (male)
+
+NYA     118/42               NYA     NYA opaline SL SF greywing blue, opaline SL SF greywing D blue, opaline SL SF greywing DD blue (female)
+                                                opaline SL DF greywing blue, opaline SL DF greywing D blue, opaline SL DF greywing DD blue (male)
+
+NYA     118/43               NYA     NYA opaline SL SF greywing Blue1Blue2, opaline SL SF greywing D Blue1Blue2, opaline SL SF greywing DD Blue1Blue2 (female)
+                                                opaline SL DF greywing Blue1Blue2, opaline SL DF greywing D Blue1Blue2, opaline SL DF greywing DD Blue1Blue2 (male)
+
+NYA     118/44               NYA     NYA opaline SL SF greywing aqua, opaline SL SF greywing D aqua, opaline SL SF greywing DD aqua (female)
+                                                opaline SL DF greywing aqua, opaline SL DF greywing D aqua, opaline SL DF greywing DD aqua (male)
+
+NYA     118/45               NYA     NYA opaline SL SF greywing violet (female), opaline SL DF greywing violet (male)
+
+NYA     118/46               NYA     NYA opaline SL SF greywing violet Blue1Blue2 (female), opaline SL DF greywing violet Blue1Blue2 (male)
+
+NYA     118/47               NYA     NYA opaline SL SF greywing violet factored D aqua (female), opaline SL DF greywing violet factored D aqua (male)
+
+NYA     118/48               NYA     NYA opaline SL SF greywing slaty green (female), opaline SL DF greywing slaty green (male)
+
+NYA     118/49               NYA     NYA orange face opaline SL SF greywing slaty green (female), orange face opaline SL DF greywing slaty green (male)
+
+NYA     118/50               NYA     NYA opaline SL SF greywing slaty blue (female), opaline SL DF greywing slaty blue (male)
+
+NYA     118/51               NYA     NYA opaline SL SF greywing slaty Blue1Blue2 (female), opaline SL DF greywing slaty Blue1Blue2 (male)
+
+NYA     118/52               NYA     NYA opaline SL SF greywing slaty aqua (female), opaline SL DF greywing slaty aqua (male)
+
+GROUP AGAPORNIS PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE RARE MUTATIONS
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+A              A             A       A               Color
+
+069/01 119/01 169/01 219/01 crested in combination with the birds in groups 50-67; 100-118; 150-167; 200-217
+
+NYA     119/02               NYA     NYA opaline crested in combination with birds in groups 100-118
+
+NYA     119/03               NYA     NYA DF dominant reduced in combination with the birds in groups 100-104
+
+NYA     119/04               NYA     NYA opaline DF dominant reduced in combination with the birds in groups 100-104
+
+GROUP AGAPORNIS CANUS GREEN
+
+A       Color
+
+250/01 male green
+
+250/02 female green
+
+GROUP AGAPORNIS TARANTA GREEN
+
+A       Color
+
+300/01 male green
+
+300/02 female green
+
+GROUP AGAPORNIS TARANTA GREENSERIES
+
+A       Color
+
+301/01 male D green, male DD green
+
+301/02 female D green, female DD green
+
+301/03 male DF misty green
+
+301/04 female DF misty green
+
+301/05 male bronze fallow green, bronze fallow D green, bronze fallow DD green
+
+301/06 female bronze fallow green, bronze fallow D green, bronze fallow DD green
+
+301/07 male pale fallow green, pale fallow D green, pale fallow DD green
+
+301/08 female pale fallow green, pale fallow D green, pale fallow DD green
+GROUP AGAPORNIS TARANTA TEALSERIES
+
+A    Color
+
+302/01 male teal, D teal, DD teal
+
+302/02 female teal, D teal, DD teal
+
+302/03 male DF misty teal
+
+302/04 female DF misty teal
+
+302/05 male bronze fallow teal, bronze fallow D teal, bronze fallow DD teal
+
+302/06 female bronze fallow teal, bronze fallow D teal, bronze fallow DD teal
+
+302/07 male pale fallow teal, pale fallow D teal, pale fallow DD teal
+
+302/08 female pale fallow teal, pale fallow D teal, pale fallow DD teal
+
+GROUP AGAPORNIS PULLARIUS GREEN
+
+A    Color
+
+350/01 male green
+
+350/02 female green
+
+STUDY GROUP, N CLASS (All new mutations. These birds do not compete for `Best in Show')
+           N Species
+
+        400/01 A. roseicollis
+        400/02 A. personatus
+        400/03 A. fischeri
+        400/04 A. nigrigenis
+        400/05 A. lilianae
+        400/06 A. canus
+        400/07 A. taranta
+        400/08 A. pullarius
+
+TEAMS, T CLASS A. ROSEICOLLIS GREEN
+            T Color
+
+        450/01 green
+
+TEAMS, T CLASS AGAPORNIS ROSEICOLLIS MUTATIONS
+            T Color
+
+        451/01 A. roseicollis greenseries (group 2)
+        451/02 A. roseicollis blue (group 3)
+        451/03 A. roseicollis aqua (group 4)
+        451/04 A. roseicollis turquoise (group 5)
+        451/05 A. roseicollis marbled (group 6)
+        451/06 A. roseicollis dilute (group 7)
+        451/07 A. roseicollis bronze fallow (group 8)
+        451/08 A. roseicollis pale fallow (group 9)
+        451/09 A. roseicollis SL ino (group 10)
+        451/10 A. roseicollis cinnamon (group 11)
+        451/11 A. roseicollis pallid (group 12)
+        451/12 A. roseicollis pale (group 13)
+        451/13 A. roseicollis dominant pied (group 14)
+        451/14 A. roseicollis recessive pied (group 15)
+        451/15 A. roseicollis DM jade (group 16)
+        451/16 A. roseicollis misty (group 17)
+        451/17 A. roseicollis crested (group 18)
+
+TEAMS, T CLASS A. PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­A. LILIANAE GREEN
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+T           T              T         T Color
+
+452/01 454/01 456/01 458/01 green
+
+TEAMS, T CLASS A. PERSONATUS - A. FISCHERI ­ A. NIGRIGENIS ­ A. LILIANAE MUTATIONS
+
+A. personatus A. fischeri A. nigrigenis A. lilianae
+
+T           T              T         T Color
+
+453/01 455/01 457/01 459/01 birds in greenseries
+
+453/02 455/02 457/02 459/02 blue
+
+453/03 455/03 457/03 459/03 Blue1Blue2
+
+NYA  455/04          NYA             NYA aqua
+
+453/04 455/05 457/04 459/04 birds in pastel
+
+453/05 455/06 457/05 459/05 birds in dominant edged
+
+453/06 455/07 457/06 459/06 birds in dominant pied
+
+453/07 455/08 457/07 459/07 birds in recessive pied
+
+453/08 455/09 457/08 459/08 birds in misty
+
+453/09 455/10 457/09 459/09 birds in dilute
+
+453/10 455/11 457/10 459/10 birds in euwing
+
+453/11 455/12 457/11 459/11 birds in bronze fallow
+
+453/12 455/13 457/12 459/12 birds in pale fallow
+
+453/13 455/14 457/13 459/13 birds in dun fallow
+
+453/14 455/15 457/14 459/14 birds in pale
+
+453/15 455/16 457/15 459/15 birds in dec
+
+453/16 455/17 457/16 459/16 birds in NSL ino
+
+NYA  455/18          NYA             NYA birds in SL dominant greywing
+
+453/18 455/19 457/18 459/18 birds in rare mutations
+
+TEAMS, T CLASS A. CANUS ­ A. TARANTA ­A. PULLARIUS GREEN
+
+Canus Taranta Pullarius
+
+T           T              T Color
+
+460/01 461/01 463/01 green
+
+TEAMS, T CLASS AGAPORNIS TARANTA MUTATIONS
+            T Color
+
+        462/01 birds in greenseries
+        462/02 birds in tealseries
+
+Violet: a violet is either a blue carrying one darkfactor and one or two violet factors.
+violet Blue1Blue2 and violet turquoise are carrying one dark factor and one or two violet factors.
+Violet factored aqua: aqua combined with one dark factor and one or two violet factors.
+Misty: misty birds are accepted exclusively in green, blue, turquoise or aqua and need to posses two misty factors. The combination of misty and
+dark factors is not accepted as an exhibition morph.
+Slaty: slaty birds have to posses maximum one dark factor and one or two slaty factors. No other combination is accepted as an exhibition morph
+Dec and pastel: only homozygote types are accepted
+Blue1Blue2: phenotypic turquoise in eyering species
+NYA = Not Yet Accepted
+

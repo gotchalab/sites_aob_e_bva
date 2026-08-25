@@ -48,7 +48,7 @@ export async function Footer() {
 
       <div className="border-t border-ink-700/60">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-sand-100/50 md:flex-row">
-          <div>© {new Date().getFullYear()} {site.name}. Todos os direitos reservados.</div>
+          <div suppressHydrationWarning>© {new Date().getFullYear()} {site.name}. Todos os direitos reservados.</div>
           <div>{site.domain}</div>
         </div>
       </div>

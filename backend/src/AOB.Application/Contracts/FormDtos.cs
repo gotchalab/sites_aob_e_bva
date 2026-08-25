@@ -52,7 +52,15 @@ public record InscricaoSocioRequest(
     string? Notas,
     string? TurnstileToken);
 
-public record FormSubmissionResponse(bool Ok, string? Error = null, int? SubmissionId = null, string? DownloadToken = null);
+public record FormSubmissionResponse(
+    bool Ok,
+    string? Error = null,
+    int? SubmissionId = null,
+    string? DownloadToken = null,
+    // True se o ano da inscrição já tinha Campeonato + Matrícula TRACES + a
+    // assinatura foi persistida — nesse caso o TRACES é oferecido na página
+    // de agradecimento em paralelo com o PDF de inscrição habitual.
+    bool TracesAvailable = false);
 
 public record AveConvoyageDto(
     string Serie,
@@ -116,7 +124,12 @@ public record InscricaoConvoyageRequest(
     List<AveConvoyageDto> Aves,
     List<AveVendaDto>? AvesVenda,
     List<AveTransporteDto>? AvesTransporte,
-    string? TurnstileToken)
+    string? TurnstileToken,
+    string? Morada = null,
+    string? CodigoPostal = null,
+    string? Localidade = null,
+    string? AssinaturaPngBase64 = null,
+    bool DeclaraArt59 = false)
 {
     public bool SocioBva => SocioBvaStatus != SocioBvaStatus.NaoSocio;
 }

@@ -1,5 +1,6 @@
 using AOB.Admin.Components;
 using AOB.Admin.Services;
+using AOB.Application.Forms;
 using AOB.Core.Entities;
 using AOB.Infrastructure;
 using AOB.Infrastructure.Persistence;
@@ -49,6 +50,7 @@ builder.Services.AddScoped<SiteAdminService>();
 builder.Services.AddScoped<ConvoyageAdminService>();
 builder.Services.AddScoped<NomenclatureAdminService>();
 builder.Services.AddScoped<TransportPlanAdminService>();
+builder.Services.AddScoped<EmailSender>();
 // Timeout definido AQUI porque HttpClient.Timeout so pode ser configurado antes
 // da primeira request; dentro do NotifyAsync lancava InvalidOperationException
 // apos a 1a chamada — as 3 revalidacoes por save (/, /artigos, /artigos/{slug})

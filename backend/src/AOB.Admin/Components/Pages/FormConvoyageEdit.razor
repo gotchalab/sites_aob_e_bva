@@ -81,10 +81,84 @@ else
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small text-muted mb-1">Nº STAM *</label>
+                    <label class="form-label small text-muted mb-1">Nº Criador Nacional (STAM) *</label>
                     <input id="fld-numeroStam" class="form-control @Inv("numeroStam")" value="@_model.NumeroStam"
+                           placeholder="ex.: PT302O"
                            @oninput="e => Update(m => m with { NumeroStam = StrOrNull(e) })" />
                     @FldMsg("numeroStam")
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small text-muted mb-1">Morada (para Declaração TRACES)</label>
+                    <input class="form-control" value="@_model.Morada"
+                           placeholder="Rua e número"
+                           @oninput="e => Update(m => m with { Morada = StrOrNull(e) })" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Código Postal</label>
+                    <input class="form-control" value="@_model.CodigoPostal"
+                           placeholder="0000-000" pattern="\d{4}-\d{3}"
+                           @oninput="e => Update(m => m with { CodigoPostal = StrOrNull(e) })" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small text-muted mb-1">Localidade</label>
+                    <input class="form-control" value="@_model.Localidade"
+                           @oninput="e => Update(m => m with { Localidade = StrOrNull(e) })" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small text-muted mb-1">Assinatura</label>
+                    @if (!_signatureEditing)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(_model.AssinaturaPath))
+                        {
+                            <div class="border rounded p-2 bg-light d-inline-block">
+                                <img src="@($"/formularios/{Id}/assinatura?v={_assinaturaCacheBust}")"
+                                     alt="Assinatura do criador"
+                                     style="max-width:360px; max-height:120px; display:block;" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="small text-muted">Sem assinatura registada.</div>
+                        }
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @onclick="StartSignatureEdit">
+                                <i class="bi bi-pencil"></i>
+                                @(string.IsNullOrWhiteSpace(_model.AssinaturaPath) ? "Adicionar assinatura" : "Editar assinatura")
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="border rounded bg-white shadow-sm" style="max-width:520px;">
+                            <canvas id="admin-signature-canvas"
+                                    style="width:100%; height:180px; display:block; touch-action:none; cursor:crosshair;"></canvas>
+                        </div>
+                        <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
+                            <button type="button" class="btn btn-sm btn-primary" @onclick="SaveSignatureAsync"
+                                    disabled="@_savingSignature">
+                                Guardar assinatura
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" @onclick="GenerateSignatureAsync"
+                                    title="Preenche o canvas com uma assinatura estilizada com o nome do criador. Clica de novo para variar.">
+                                <i class="bi bi-magic"></i> Gerar com o nome
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ClearSignatureCanvas">
+                                Limpar
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelSignatureEdit">
+                                Cancelar
+                            </button>
+                            @if (_signatureFeedback is not null)
+                            {
+                                <span class="small @(_signatureFeedbackError ? "text-danger" : "text-success")">@_signatureFeedback</span>
+                            }
+                        </div>
+                        <div class="small text-muted mt-1">
+                            Desenhe a assinatura no espaço acima. Ao guardar, esta substitui a anterior
+                            e passa a aparecer na Declaração TRACES.
+                        </div>
+                    }
                 </div>
                 <div class="col-12">
                     <label class="form-label small text-muted mb-1">Local de recolha</label>
@@ -540,18 +614,17 @@ else
         </div>
     </div>
 
-    <div class="d-flex gap-2 mb-5">
-        <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
-            @(_saving ? "A guardar..." : "Guardar alterações")
+    <div class="d-flex flex-wrap gap-2 mb-5">
+        <button class="btn btn-primary" @onclick="() => SaveAsync(resendEmails: false)" disabled="@_saving">
+            @(_saving && !_savingWithEmail ? "A guardar..." : "Guardar alterações")
+        </button>
+        <button class="btn btn-success" @onclick="() => SaveAsync(resendEmails: true)" disabled="@_saving"
+                title="Guarda e envia novo email (com PDF e TRACES actualizados) ao criador e à associação.">
+            <i class="bi bi-envelope-check"></i>
+            @(_savingWithEmail ? "A guardar e enviar..." : "Guardar e reenviar email")
         </button>
         <a class="btn btn-outline-secondary" href="@($"/formularios/{Id}")">Cancelar</a>
     </div>
-
-    <p class="text-muted small">
-        Nota: espécie, série e mutação usam a nomenclatura activa do ano da inscrição.
-        O tipo (Individual/Grupo Estudo/Team) é inferido do item selecionado, tal como no formulário público.
-        O PDF original não é regenerado — mantém-se como snapshot da submissão.
-    </p>
 }
 
 @code {
@@ -559,9 +632,97 @@ else
 
     private bool _loading = true;
     private bool _saving;
+    private bool _savingWithEmail;
     private bool _saved;
     private string? _error;
     private Dictionary<string, string> _fieldErrors = new();
+    // Cache-buster para a imagem da assinatura — muda depois de guardar para
+    // forçar refresh se algum dia se permitir substituir a assinatura.
+    private long _assinaturaCacheBust = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+    // ── Estado do editor de assinatura ─────────────────────────────────────────
+    private bool _signatureEditing;
+    private bool _savingSignature;
+    private string? _signatureFeedback;
+    private bool _signatureFeedbackError;
+    private const string SignatureCanvasId = "admin-signature-canvas";
+
+    private async Task StartSignatureEdit()
+    {
+        _signatureEditing = true;
+        _signatureFeedback = null;
+        StateHasChanged();
+        // Aguarda que o canvas seja renderizado antes de inicializar o pad.
+        await Task.Yield();
+        await JS.InvokeVoidAsync("SignatureEditor.init", SignatureCanvasId);
+    }
+
+    private async Task CancelSignatureEdit()
+    {
+        _signatureEditing = false;
+        _signatureFeedback = null;
+        await JS.InvokeVoidAsync("SignatureEditor.destroy", SignatureCanvasId);
+    }
+
+    private async Task ClearSignatureCanvas()
+    {
+        _signatureFeedback = null;
+        await JS.InvokeVoidAsync("SignatureEditor.clear", SignatureCanvasId);
+    }
+
+    private async Task GenerateSignatureAsync()
+    {
+        var nome = _model?.NomeCompleto?.Trim();
+        if (string.IsNullOrWhiteSpace(nome))
+        {
+            _signatureFeedback = "Preenche o nome do criador primeiro.";
+            _signatureFeedbackError = true;
+            return;
+        }
+        _signatureFeedback = null;
+        await JS.InvokeVoidAsync("SignatureEditor.generateFromName", SignatureCanvasId, nome);
+    }
+
+    private async Task SaveSignatureAsync()
+    {
+        _signatureFeedback = null;
+        _signatureFeedbackError = false;
+        _savingSignature = true;
+        try
+        {
+            var isEmpty = await JS.InvokeAsync<bool>("SignatureEditor.isEmpty", SignatureCanvasId);
+            if (isEmpty)
+            {
+                _signatureFeedback = "Assine antes de guardar.";
+                _signatureFeedbackError = true;
+                return;
+            }
+            var dataUrl = await JS.InvokeAsync<string>("SignatureEditor.exportCropped", SignatureCanvasId);
+            if (string.IsNullOrWhiteSpace(dataUrl))
+            {
+                _signatureFeedback = "Assinatura vazia.";
+                _signatureFeedbackError = true;
+                return;
+            }
+            var err = await Forms.UpdateConvoyageSignatureAsync(Id, dataUrl);
+            if (err is not null)
+            {
+                _signatureFeedback = err;
+                _signatureFeedbackError = true;
+                return;
+            }
+            _signatureFeedback = "Assinatura actualizada.";
+            _assinaturaCacheBust = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            // Recarrega o model para pegar o novo AssinaturaPath.
+            _model = await Forms.GetConvoyageEditAsync(Id);
+            await JS.InvokeVoidAsync("SignatureEditor.destroy", SignatureCanvasId);
+            _signatureEditing = false;
+        }
+        finally
+        {
+            _savingSignature = false;
+        }
+    }
 
     private bool HasErr(string key) => _fieldErrors.ContainsKey(key);
     private string Inv(string key) => _fieldErrors.ContainsKey(key) ? "is-invalid" : "";
@@ -1026,7 +1187,7 @@ else
         }
     }
 
-    private async Task SaveAsync()
+    private async Task SaveAsync(bool resendEmails)
     {
         if (_model is null) return;
         _error = null;
@@ -1042,6 +1203,7 @@ else
         }
 
         _saving = true;
+        _savingWithEmail = resendEmails;
         try
         {
             var aves = new List<FormAdminService.ConvoyageAveEdit>();
@@ -1090,7 +1252,7 @@ else
             }).ToList();
 
             var payload = _model with { Aves = aves, AvesVenda = avesVenda, AvesTransporte = avesTransporte };
-            _error = await Forms.UpdateConvoyageAsync(Id, payload);
+            _error = await Forms.UpdateConvoyageAsync(Id, payload, resendEmails);
             if (_error is null)
             {
                 Nav.NavigateTo("/convoyage/inscricoes");
@@ -1100,6 +1262,7 @@ else
         finally
         {
             _saving = false;
+            _savingWithEmail = false;
         }
     }
 

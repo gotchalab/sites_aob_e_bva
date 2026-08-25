@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using AOB.Core.Entities;
 using AOB.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Net.Http.Headers;
 
 namespace AOB.Admin.Services;
 
@@ -163,6 +165,190 @@ public static class AuthEndpoints
         .DisableAntiforgery()
         .RequireAuthorization();
 
+        app.MapGet("/formularios/{id:int}/assinatura", async (
+            int id,
+            AppDbContext db,
+            IConfiguration config,
+            IHostEnvironment env,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var form = await db.FormSubmissions.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == id, ct);
+            if (form is null || form.FormType != FormType.InscricaoConvoyage) return Results.NotFound();
+
+            string? rel = null;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(form.DataJson);
+                if (doc.RootElement.TryGetProperty("AssinaturaPath", out var v) &&
+                    v.ValueKind == System.Text.Json.JsonValueKind.String)
+                    rel = v.GetString();
+            }
+            catch { }
+            if (string.IsNullOrWhiteSpace(rel)) return Results.NotFound();
+
+            var storageRoot = config["Inscricoes:StorageRoot"];
+            if (string.IsNullOrWhiteSpace(storageRoot))
+                storageRoot = Path.Combine(env.ContentRootPath, "PrivateData", "inscricoes");
+            var rootFull = Path.GetFullPath(storageRoot);
+            var abs = Path.GetFullPath(Path.Combine(rootFull, rel));
+            if (!abs.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase)) return Results.Forbid();
+            if (!File.Exists(abs)) return Results.NotFound();
+
+            var bytes = await File.ReadAllBytesAsync(abs, ct);
+            http.Response.ContentType = "image/png";
+            http.Response.Headers.CacheControl = "no-store, must-revalidate";
+            await http.Response.Body.WriteAsync(bytes, ct);
+            return Results.Empty;
+        }).RequireAuthorization();
+
+        app.MapGet("/formularios/{id:int}/traces", async (
+            int id,
+            AppDbContext db,
+            IConfiguration config,
+            IHostEnvironment env,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var result = await AOB.Application.Forms.TracesPdfBuilder.BuildAsync(db, env, config, id, null, ct);
+            if (result is null) return Results.NotFound();
+            http.Response.Headers.ContentDisposition = ContentDispositionHeader("inline", result.FileName);
+            http.Response.ContentType = "application/pdf";
+            http.Response.Headers.CacheControl = "no-store, must-revalidate";
+            http.Response.Headers.Pragma = "no-cache";
+            await http.Response.Body.WriteAsync(result.Bytes, ct);
+            return Results.Empty;
+        }).RequireAuthorization();
+
+        // Bulk: ZIP com todas as Declarações TRACES do ano (opcionalmente filtradas
+        // por estado). Regenera cada PDF via TracesPdfBuilder para garantir que
+        // reflecte os dados actuais do ano + assinaturas persistidas.
+        app.MapGet("/convoyage/{yearId:int}/traces/zip", async (
+            int yearId,
+            [FromQuery] int? status,
+            AppDbContext db,
+            IConfiguration config,
+            IHostEnvironment env,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var year = await db.ConvoyageYears.AsNoTracking()
+                .Include(y => y.Site)
+                .FirstOrDefaultAsync(y => y.Id == yearId, ct);
+            if (year is null) return Results.NotFound();
+            if (string.IsNullOrWhiteSpace(year.Campeonato) || string.IsNullOrWhiteSpace(year.MatriculaTraces))
+                return Results.BadRequest("O ano ainda não tem Campeonato + Matrícula TRACES configurados.");
+
+            var q = db.FormSubmissions.AsNoTracking()
+                .Where(f => f.FormType == FormType.InscricaoConvoyage && f.ConvoyageYearId == yearId);
+            if (status.HasValue) q = q.Where(f => f.Status == (FormStatus)status.Value);
+            var ids = await q.OrderBy(f => f.Id).Select(f => f.Id).ToListAsync(ct);
+
+            using var mem = new MemoryStream();
+            using (var zip = new ZipArchive(mem, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var id in ids)
+                {
+                    AOB.Application.Forms.TracesPdfResult? r;
+                    try { r = await AOB.Application.Forms.TracesPdfBuilder.BuildAsync(db, env, config, id, null, ct); }
+                    catch { continue; }
+                    if (r is null) continue;
+
+                    var entryName = $"{id:D5} - {r.FileName}";
+                    var candidate = entryName;
+                    var n = 1;
+                    while (!used.Add(candidate))
+                    {
+                        n++;
+                        var stem = Path.GetFileNameWithoutExtension(entryName);
+                        var ext = Path.GetExtension(entryName);
+                        candidate = $"{stem} ({n}){ext}";
+                    }
+
+                    var entry = zip.CreateEntry(candidate, CompressionLevel.NoCompression);
+                    using var s = entry.Open();
+                    await s.WriteAsync(r.Bytes, ct);
+                }
+            }
+            mem.Position = 0;
+
+            var zipName = BuildTracesZipName(year, yearId);
+            http.Response.Headers.ContentDisposition = ContentDispositionHeader("attachment", zipName);
+            http.Response.ContentType = "application/zip";
+            http.Response.Headers.CacheControl = "no-store, must-revalidate";
+            await mem.CopyToAsync(http.Response.Body, ct);
+            return Results.Empty;
+        }).RequireAuthorization();
+
+        // Bulk: ZIP com todas as fichas de inscrição do ano (opcionalmente
+        // filtradas por estado). Cada PDF é regenerado on-the-fly no idioma
+        // pedido (PT/EN) e com ou sem a zona de custos, para permitir enviar
+        // aos parceiros sem revelar informação financeira.
+        app.MapGet("/convoyage/{yearId:int}/inscricoes/zip", async (
+            int yearId,
+            [FromQuery] int? status,
+            [FromQuery] string? lang,
+            [FromQuery] bool? includeCosts,
+            AppDbContext db,
+            IConfiguration config,
+            IHostEnvironment env,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var year = await db.ConvoyageYears.AsNoTracking()
+                .Include(y => y.Site)
+                .FirstOrDefaultAsync(y => y.Id == yearId, ct);
+            if (year is null) return Results.NotFound();
+
+            var pdfLang = string.Equals(lang, "en", StringComparison.OrdinalIgnoreCase)
+                ? AOB.Application.Forms.PdfLang.En
+                : AOB.Application.Forms.PdfLang.Pt;
+            var withCosts = includeCosts ?? true;
+
+            var q = db.FormSubmissions.AsNoTracking()
+                .Where(f => f.FormType == FormType.InscricaoConvoyage && f.ConvoyageYearId == yearId);
+            if (status.HasValue) q = q.Where(f => f.Status == (FormStatus)status.Value);
+            var ids = await q.OrderBy(f => f.Id).Select(f => f.Id).ToListAsync(ct);
+
+            using var mem = new MemoryStream();
+            using (var zip = new ZipArchive(mem, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var id in ids)
+                {
+                    AOB.Application.Forms.ConvoyageInscricaoPdfResult? r;
+                    try { r = await AOB.Application.Forms.ConvoyageInscricaoPdfBuilder.BuildAsync(db, env, config, id, pdfLang, withCosts, ct); }
+                    catch { continue; }
+                    if (r is null) continue;
+
+                    var entryName = $"{id:D5} - {r.FileName}";
+                    var candidate = entryName;
+                    var n = 1;
+                    while (!used.Add(candidate))
+                    {
+                        n++;
+                        var stem = Path.GetFileNameWithoutExtension(entryName);
+                        var ext = Path.GetExtension(entryName);
+                        candidate = $"{stem} ({n}){ext}";
+                    }
+
+                    var entry = zip.CreateEntry(candidate, CompressionLevel.NoCompression);
+                    using var s = entry.Open();
+                    await s.WriteAsync(r.Bytes, ct);
+                }
+            }
+            mem.Position = 0;
+
+            var zipName = BuildInscricoesZipName(year, yearId, pdfLang, withCosts);
+            http.Response.Headers.ContentDisposition = ContentDispositionHeader("attachment", zipName);
+            http.Response.ContentType = "application/zip";
+            http.Response.Headers.CacheControl = "no-store, must-revalidate";
+            await mem.CopyToAsync(http.Response.Body, ct);
+            return Results.Empty;
+        }).RequireAuthorization();
+
         app.MapGet("/formularios/{id:int}/pdf", async (
             int id,
             AppDbContext db,
@@ -196,7 +382,7 @@ public static class AuthEndpoints
 
             var bytes = await File.ReadAllBytesAsync(abs);
             var name = Path.GetFileName(abs);
-            http.Response.Headers.ContentDisposition = $"inline; filename=\"{name}\"";
+            http.Response.Headers.ContentDisposition = ContentDispositionHeader("inline", name);
             http.Response.ContentType = "application/pdf";
             // Sem cache: o PDF pode ser regenerado depois de edições, pelo que
             // o browser deve puxar sempre a versão actual em disco.
@@ -243,6 +429,56 @@ public static class AuthEndpoints
             candidate = $"{baseSlug}-{n}";
         }
         return candidate;
+    }
+
+    private static string BuildInscricoesZipName(
+        ConvoyageYear? year, int fallbackId,
+        AOB.Application.Forms.PdfLang lang, bool includeCosts)
+    {
+        var parts = new List<string> { "convoyage" };
+        if (year is not null)
+        {
+            var siteSlug = SlugFrom(year.Site?.Slug ?? year.Site?.Name ?? "");
+            if (!string.IsNullOrEmpty(siteSlug)) parts.Add(siteSlug);
+            parts.Add(year.Year.ToString());
+            var desc = SlugFrom(year.Description ?? "");
+            if (!string.IsNullOrEmpty(desc)) parts.Add(desc);
+        }
+        else
+        {
+            parts.Add(fallbackId.ToString());
+        }
+        parts.Add("inscricoes");
+        parts.Add(lang == AOB.Application.Forms.PdfLang.En ? "en" : "pt");
+        if (!includeCosts) parts.Add("sem-custos");
+        return string.Join("-", parts) + ".zip";
+    }
+
+    private static string BuildTracesZipName(ConvoyageYear? year, int fallbackId)
+    {
+        if (year is null) return $"convoyage-{fallbackId}-traces.zip";
+        var parts = new List<string> { "convoyage" };
+        var siteRaw = year.Site?.Slug ?? year.Site?.Name ?? "";
+        if (!string.IsNullOrWhiteSpace(siteRaw)) parts.Add(SlugFrom(siteRaw));
+        parts.Add(year.Year.ToString());
+        var descRaw = year.Description ?? "";
+        if (!string.IsNullOrWhiteSpace(descRaw)) parts.Add(SlugFrom(descRaw));
+        parts.Add("traces");
+        return string.Join("-", parts) + ".zip";
+    }
+
+    // Kestrel rejeita non-ASCII (ex.: "é" 0xE9) em headers. RFC 6266/5987 exige
+    // `filename` ASCII e `filename*=UTF-8''<pct-encoded>` para o nome real. O
+    // ContentDispositionHeaderValue faz o encoding correcto quando definimos
+    // FileNameStar; FileName leva um fallback ASCII para clientes antigos.
+    private static string ContentDispositionHeader(string disposition, string fileName)
+    {
+        var ascii = new string(fileName.Select(c => c < 128 ? c : '_').ToArray());
+        return new ContentDispositionHeaderValue(disposition)
+        {
+            FileName = ascii,
+            FileNameStar = fileName,
+        }.ToString();
     }
 
     private static string SlugFrom(string s)

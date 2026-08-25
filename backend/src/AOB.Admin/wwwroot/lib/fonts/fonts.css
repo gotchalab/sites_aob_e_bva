@@ -1,0 +1,40 @@
+/* Fonts handwriting bundled localmente para o gerador de assinatura do admin.
+   Licença: SIL Open Font License 1.1 — ver LICENSE.txt nesta pasta.
+*/
+@font-face {
+  font-family: "Caveat";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/lib/fonts/caveat-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Homemade Apple";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/lib/fonts/homemade-apple.woff2") format("woff2");
+}
+/* Kalam: handwriting natural com traços mais finos e limpos que Caveat/Homemade */
+@font-face {
+  font-family: "Kalam";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/lib/fonts/kalam-light.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Kalam";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/lib/fonts/kalam-regular.ttf") format("truetype");
+}
+/* Shadows Into Light: handwriting muito discreto, traço fino e uniforme */
+@font-face {
+  font-family: "Shadows Into Light";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/lib/fonts/shadows-into-light.ttf") format("truetype");
+}

@@ -7,6 +7,8 @@ using PdfSharp.Snippets.Font;
 
 namespace AOB.Application.Forms;
 
+public enum PdfLang { Pt, En }
+
 public static class InscricaoConvoyagePdfGenerator
 {
     static InscricaoConvoyagePdfGenerator()
@@ -15,10 +17,131 @@ public static class InscricaoConvoyagePdfGenerator
             GlobalFontSettings.FontResolver = new FailsafeFontResolver();
     }
 
-    public static byte[] Render(Site site, InscricaoConvoyageRequest r, int submissionId, string localRecolha, int year, byte[]? logoBytes = null)
+    // Traduções agrupadas num record para facilitar leitura e evitar
+    // dicionários com chaves soltas. Adicionar aqui novo campo obriga a
+    // definir os dois idiomas — o compilador impede esquecimentos.
+    private sealed record Loc(
+        string FormTitle, string RefLine, string PageLabel, string GeneratedFooter,
+        string CreatorData, string FullName, string Country, string Email, string Phone,
+        string BvaStatus, string BvaMember, string BvaPayWithReg, string BvaNonMember,
+        string StamNumber, string CollectionPoint, string CollectionPointNote,
+        string BirdsForContest, string SeriesNumber, string SpeciesMutation, string Ring, string Pos,
+        string TeamPrefix, string TotalContestBirds,
+        string BirdsForSale, string BirthDate, string Sex, string Price, string TotalSaleBirds,
+        string BirdsForTransport, string ArrivalPart1, string ArrivalPart2, string ArrivalPart3,
+        string SubjectToConfirmation, string Origin, string Species, string RecipientWhatsapp, string NotesPrefix,
+        string Buy, string Sell, string TotalTransportBirds,
+        string SexMale, string SexFemale, string SexUndef,
+        string CostsSummary, string ExpoRegistration, string PerBird, string CageRental,
+        string TransportLabel, string TransportSocio, string TransportNonSocio,
+        string AcquiredTransport, string BvaFee, string TotalToPay,
+        string PaymentLabel, string PaymentBody);
+
+    private static Loc L(PdfLang lang) => lang == PdfLang.En
+        ? new Loc(
+            FormTitle: "Registration Form — Convoyage {0}",
+            RefLine: "Submitted on {0} UTC  ·  Ref. #{1}",
+            PageLabel: "Page {0}",
+            GeneratedFooter: "Registration #{0} · {1} · Generated on {2} UTC",
+            CreatorData: "Breeder details",
+            FullName: "Full name", Country: "Country", Email: "Email", Phone: "Phone",
+            BvaStatus: "BVA status",
+            BvaMember: "BVA member (dues paid)",
+            BvaPayWithReg: "Paying BVA membership with this entry",
+            BvaNonMember: "Non-member",
+            StamNumber: "STAM number",
+            CollectionPoint: "Collection point",
+            CollectionPointNote: "Please contact the collection point manager to schedule bird drop-off.",
+            BirdsForContest: "Show birds",
+            SeriesNumber: "Series No.", SpeciesMutation: "Species and mutation", Ring: "Ring", Pos: "Pos.",
+            TeamPrefix: "Team (T) · Series {0} · {1}",
+            TotalContestBirds: "Total show birds: {0}",
+            BirdsForSale: "Birds for sale",
+            BirthDate: "Hatch date", Sex: "Sex", Price: "Price",
+            TotalSaleBirds: "Total birds for sale: {0}",
+            BirdsForTransport: "Transported birds (purchase / sale)",
+            ArrivalPart1: "Estimated arrival: ",
+            ArrivalPart2: "12:00 (Belgium time)",
+            ArrivalPart3: " — the recipient must be on-site to receive the birds.",
+            SubjectToConfirmation: "Subject to confirmation once registration closes.",
+            Origin: "Direction", Species: "Species",
+            RecipientWhatsapp: "Recipient · WhatsApp",
+            NotesPrefix: "Notes: ",
+            Buy: "Purchase", Sell: "Sale",
+            TotalTransportBirds: "Total transported birds: {0}",
+            SexMale: "M", SexFemale: "F", SexUndef: "?",
+            CostsSummary: "Cost summary",
+            ExpoRegistration: "Show entry",
+            PerBird: "Entry fee per bird · {0} × {1:0.00} €",
+            CageRental: "Cage rental · {0} × {1:0.00} €",
+            TransportLabel: "Transport {0} · {1} × {2:0.00} €",
+            TransportSocio: "(BVA member rate)",
+            TransportNonSocio: "(non-member rate)",
+            AcquiredTransport: "Transport of purchased / received birds {0} · {1} × {2:0.00} €",
+            BvaFee: "BVA Portugal membership",
+            TotalToPay: "TOTAL to pay",
+            PaymentLabel: "Payment: ",
+            PaymentBody: "must be made in cash for the exact amount, sealed in an envelope and handed over together with the birds.")
+        : new Loc(
+            FormTitle: "Ficha de Inscrição — Convoyage {0}",
+            RefLine: "Submetido em {0} UTC  ·  Ref. #{1}",
+            PageLabel: "Página {0}",
+            GeneratedFooter: "Inscrição #{0} · {1} · Gerado em {2} UTC",
+            CreatorData: "Dados do criador",
+            FullName: "Nome completo", Country: "País", Email: "Email", Phone: "Telefone",
+            BvaStatus: "Situação BVA",
+            BvaMember: "Sócio BVA (quotas pagas)",
+            BvaPayWithReg: "Vai pagar quota BVA com esta inscrição",
+            BvaNonMember: "Não sócio BVA",
+            StamNumber: "Nº STAM",
+            CollectionPoint: "Local de recolha",
+            CollectionPointNote: "Contacta o responsável do ponto de recolha para combinar a hora de entrega das aves.",
+            BirdsForContest: "Aves para concurso",
+            SeriesNumber: "Nº Série", SpeciesMutation: "Espécies e Mutação", Ring: "Anilha", Pos: "Pos.",
+            TeamPrefix: "Equipa (T) · Série {0} · {1}",
+            TotalContestBirds: "Total de aves para concurso: {0}",
+            BirdsForSale: "Aves para venda",
+            BirthDate: "Data Nasc.", Sex: "Sexo", Price: "Preço",
+            TotalSaleBirds: "Total de aves para venda: {0}",
+            BirdsForTransport: "Aves para transporte (compra/venda)",
+            ArrivalPart1: "Chegada às ",
+            ArrivalPart2: "12h (hora belga)",
+            ArrivalPart3: " — o destinatário tem de estar presente para receber as aves.",
+            SubjectToConfirmation: "Sujeito a confirmação após o fecho das inscrições.",
+            Origin: "Origem", Species: "Espécie",
+            RecipientWhatsapp: "Destinatário · WhatsApp",
+            NotesPrefix: "Notas: ",
+            Buy: "Compra", Sell: "Vende",
+            TotalTransportBirds: "Total de aves para transporte: {0}",
+            SexMale: "M", SexFemale: "F", SexUndef: "Ind.",
+            CostsSummary: "Resumo de custos",
+            ExpoRegistration: "Inscrição na exposição",
+            PerBird: "Inscrição por ave · {0} × {1:0.00} €",
+            CageRental: "Aluguer de gaiola · {0} × {1:0.00} €",
+            TransportLabel: "Transporte {0} · {1} × {2:0.00} €",
+            TransportSocio: "(sócio BVA)",
+            TransportNonSocio: "(não-sócio)",
+            AcquiredTransport: "Transporte de aves adquiridas/cedidas {0} · {1} × {2:0.00} €",
+            BvaFee: "Quota BVA Portugal",
+            TotalToPay: "TOTAL a pagar",
+            PaymentLabel: "Pagamento: ",
+            PaymentBody: "deve ser feito no valor certo, em dinheiro, num envelope fechado, e entregue juntamente com as aves.");
+
+    public static byte[] Render(
+        Site site,
+        InscricaoConvoyageRequest r,
+        int submissionId,
+        string localRecolha,
+        int year,
+        byte[]? logoBytes = null,
+        PdfLang lang = PdfLang.Pt,
+        bool includeCosts = true)
     {
+        var t = L(lang);
         var doc = new PdfDocument();
-        doc.Info.Title = $"Inscrição Convoyage BVA Masters — {r.NomeCompleto}";
+        doc.Info.Title = lang == PdfLang.En
+            ? $"Convoyage BVA Masters Registration — {r.NomeCompleto}"
+            : $"Inscrição Convoyage BVA Masters — {r.NomeCompleto}";
 
         var page = doc.AddPage();
         page.Size = PdfSharp.PageSize.A4;
@@ -88,9 +211,9 @@ public static class InscricaoConvoyagePdfGenerator
         }
 
         g.DrawString("BVA Masters", fontTitle, white, new XPoint(textStartX, 25));
-        g.DrawString($"Ficha de Inscrição — Convoyage {year}", fontSub, white, new XPoint(textStartX, 46));
+        g.DrawString(string.Format(t.FormTitle, year), fontSub, white, new XPoint(textStartX, 46));
 
-        var dateLine = $"Submetido em {DateTime.UtcNow:dd/MM/yyyy HH:mm} UTC  ·  Ref. #{submissionId}";
+        var dateLine = string.Format(t.RefLine, DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"), submissionId);
         var dateW = g.MeasureString(dateLine, fontSmall).Width;
         g.DrawString(dateLine, fontSmall, white, new XPoint(pageW - margin - dateW, 46));
 
@@ -106,9 +229,9 @@ public static class InscricaoConvoyagePdfGenerator
             var footerY = page.Height.Point - 18;
             g.DrawLine(borderPen, margin, footerY - 6, pageW - margin, footerY - 6);
             g.DrawString(
-                $"Inscrição #{submissionId} · {site.Name} · Gerado em {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC",
+                string.Format(t.GeneratedFooter, submissionId, site.Name, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm")),
                 footerFont, grey, new XPoint(margin, footerY));
-            var pageLabel = $"Página {pageNumber}";
+            var pageLabel = string.Format(t.PageLabel, pageNumber);
             var pw = g.MeasureString(pageLabel, footerFont).Width;
             g.DrawString(pageLabel, footerFont, grey, new XPoint(pageW - margin - pw, footerY));
         }
@@ -137,7 +260,7 @@ public static class InscricaoConvoyagePdfGenerator
         }
 
         // ── Dados do criador ─────────────────────────────────────────────────
-        DrawSectionTitle("Dados do criador");
+        DrawSectionTitle(t.CreatorData);
 
         var labelW  = 140.0;
         var colW    = (pageW - 2 * margin - labelW) / 1;
@@ -153,23 +276,22 @@ public static class InscricaoConvoyagePdfGenerator
             y += rowH;
         }
 
-        DrawRow("Nome completo",     r.NomeCompleto, shaded: true);
-        DrawRow("País",              r.Pais);
-        DrawRow("Email",             r.Email, shaded: true);
-        DrawRow("Telefone",          r.Telefone);
+        DrawRow(t.FullName,          r.NomeCompleto, shaded: true);
+        DrawRow(t.Country,            r.Pais);
+        DrawRow(t.Email,              r.Email, shaded: true);
+        DrawRow(t.Phone,              r.Telefone);
         var socioBvaLabel = r.SocioBvaStatus switch
         {
-            SocioBvaStatus.JaSocio          => "Sócio BVA (quotas pagas)",
-            SocioBvaStatus.PagaComInscricao => "Vai pagar quota BVA com esta inscrição",
-            _                                => "Não sócio BVA",
+            SocioBvaStatus.JaSocio          => t.BvaMember,
+            SocioBvaStatus.PagaComInscricao => t.BvaPayWithReg,
+            _                                => t.BvaNonMember,
         };
-        DrawRow("Situação BVA",     socioBvaLabel, shaded: true);
-        DrawRow("Nº STAM",          r.NumeroStam);
-        DrawRow("Local de recolha", localRecolha, shaded: true);
+        DrawRow(t.BvaStatus,         socioBvaLabel, shaded: true);
+        DrawRow(t.StamNumber,        r.NumeroStam);
+        DrawRow(t.CollectionPoint,   localRecolha, shaded: true);
 
-        const string recolhaNota = "Contacta o responsável do ponto de recolha para combinar a hora de entrega das aves.";
         g.DrawRectangle(borderPen, new XRect(margin, y - 11, pageW - 2 * margin, rowH));
-        g.DrawString(recolhaNota, fontItalic, amber, new XPoint(margin + labelW, y));
+        g.DrawString(t.CollectionPointNote, fontItalic, amber, new XPoint(margin + labelW, y));
         y += rowH;
 
         y += 10;
@@ -181,7 +303,7 @@ public static class InscricaoConvoyagePdfGenerator
         if (avesConcurso.Count > 0)
         {
             // ── Tabela de aves ───────────────────────────────────────────────────
-            DrawSectionTitle("Aves para concurso");
+            DrawSectionTitle(t.BirdsForContest);
 
             // Order: individuals first (in submission order), then teams grouped
             // by EquipaId with birds ordered A→D within each team.
@@ -208,9 +330,9 @@ public static class InscricaoConvoyagePdfGenerator
                 {
                     var xh = margin;
                     g.DrawRectangle(darkBlue, new XRect(xh, y - 11, tableW, 16));
-                    g.DrawString("Nº Série",           fontHeader, white, new XPoint(xh + 3, y)); xh += col0;
-                    g.DrawString("Espécies e Mutação", fontHeader, white, new XPoint(xh + 3, y)); xh += col1Indiv;
-                    g.DrawString("Anilha",             fontHeader, white, new XPoint(xh + 3, y));
+                    g.DrawString(t.SeriesNumber,       fontHeader, white, new XPoint(xh + 3, y)); xh += col0;
+                    g.DrawString(t.SpeciesMutation,    fontHeader, white, new XPoint(xh + 3, y)); xh += col1Indiv;
+                    g.DrawString(t.Ring,               fontHeader, white, new XPoint(xh + 3, y));
                     y += 16;
                 }
 
@@ -241,10 +363,10 @@ public static class InscricaoConvoyagePdfGenerator
                 {
                     var xh = margin;
                     g.DrawRectangle(darkBlue, new XRect(xh, y - 11, tableW, 16));
-                    g.DrawString("Nº Série",           fontHeader, white, new XPoint(xh + 3, y)); xh += col0;
-                    g.DrawString("Espécies e Mutação", fontHeader, white, new XPoint(xh + 3, y)); xh += col1Team;
-                    g.DrawString("Pos.",               fontHeader, white, new XPoint(xh + 3, y)); xh += col2Team;
-                    g.DrawString("Anilha",             fontHeader, white, new XPoint(xh + 3, y));
+                    g.DrawString(t.SeriesNumber,       fontHeader, white, new XPoint(xh + 3, y)); xh += col0;
+                    g.DrawString(t.SpeciesMutation,    fontHeader, white, new XPoint(xh + 3, y)); xh += col1Team;
+                    g.DrawString(t.Pos,                fontHeader, white, new XPoint(xh + 3, y)); xh += col2Team;
+                    g.DrawString(t.Ring,               fontHeader, white, new XPoint(xh + 3, y));
                     y += 16;
                 }
 
@@ -255,7 +377,7 @@ public static class InscricaoConvoyagePdfGenerator
                 foreach (var equipa in equipas)
                 {
                     var first = equipa[0];
-                    var titulo = $"Equipa (T) · Série {first.Serie} · {ComposeSpeciesMutation(first.Especie, first.EspecieMutacao)}";
+                    var titulo = string.Format(t.TeamPrefix, first.Serie, ComposeSpeciesMutation(first.Especie, first.EspecieMutacao));
                     var tituloLines = WrapToWidth(g, titulo, fontHeader, tableW - 8);
                     var titleH = RowPaddingV + tituloLines.Length * RowLineHeight;
 
@@ -298,14 +420,14 @@ public static class InscricaoConvoyagePdfGenerator
 
             // ── Total ─────────────────────────────────────────────────────────────
             EnsureRowSpace(22);
-            DrawTotalLine($"Total de aves para concurso: {avesConcurso.Count}");
+            DrawTotalLine(string.Format(t.TotalContestBirds, avesConcurso.Count));
         }
 
         // ── Tabela de aves para venda ────────────────────────────────────────
         if (r.AvesVenda is { Count: > 0 })
         {
             EnsureRowSpace(20 + 16 + 15);
-            DrawSectionTitle("Aves para venda");
+            DrawSectionTitle(t.BirdsForSale);
 
             // Colunas: Data Nasc. | Sexo | Espécie e Mutação | Preço | Anilha
             double vc0 = 65;                                  // Data Nasc.
@@ -319,11 +441,11 @@ public static class InscricaoConvoyagePdfGenerator
             {
                 var xh = margin;
                 g.DrawRectangle(darkBlue, new XRect(xh, y - 11, vTableW, 16));
-                g.DrawString("Data Nasc.",        fontHeader, white, new XPoint(xh + 3, y)); xh += vc0;
-                g.DrawString("Sexo",              fontHeader, white, new XPoint(xh + 3, y)); xh += vc1;
-                g.DrawString("Espécie e Mutação", fontHeader, white, new XPoint(xh + 3, y)); xh += vc2;
-                g.DrawString("Preço",             fontHeader, white, new XPoint(xh + 3, y)); xh += vc3;
-                g.DrawString("Anilha",            fontHeader, white, new XPoint(xh + 3, y));
+                g.DrawString(t.BirthDate,         fontHeader, white, new XPoint(xh + 3, y)); xh += vc0;
+                g.DrawString(t.Sex,               fontHeader, white, new XPoint(xh + 3, y)); xh += vc1;
+                g.DrawString(t.SpeciesMutation,   fontHeader, white, new XPoint(xh + 3, y)); xh += vc2;
+                g.DrawString(t.Price,             fontHeader, white, new XPoint(xh + 3, y)); xh += vc3;
+                g.DrawString(t.Ring,              fontHeader, white, new XPoint(xh + 3, y));
                 y += 16;
             }
 
@@ -341,7 +463,7 @@ public static class InscricaoConvoyagePdfGenerator
                     g.DrawRectangle(lightGrey, new XRect(margin, y - 11, vTableW, 15));
 
                 var data = string.IsNullOrWhiteSpace(av.DataNascimento) ? "—" : av.DataNascimento;
-                var sexo = av.Sexo switch { SexoAve.Macho => "M", SexoAve.Femea => "F", _ => "Ind." };
+                var sexo = av.Sexo switch { SexoAve.Macho => t.SexMale, SexoAve.Femea => t.SexFemale, _ => t.SexUndef };
                 var esp  = TruncateToWidth(g, ComposeSpeciesMutation(av.Especie, av.EspecieMutacao), fontReg, vc2 - 6);
                 var pre  = $"{av.Preco:0.00} €";
 
@@ -359,14 +481,14 @@ public static class InscricaoConvoyagePdfGenerator
             currentTableHeader = null;
             y += 8;
             EnsureRowSpace(22);
-            DrawTotalLine($"Total de aves para venda: {r.AvesVenda.Count}");
+            DrawTotalLine(string.Format(t.TotalSaleBirds, r.AvesVenda.Count));
         }
 
         // ── Tabela de aves para transporte (compra/venda) ────────────────────
         if (r.AvesTransporte is { Count: > 0 })
         {
             EnsureRowSpace(20 + 34 + 16 + 26);
-            DrawSectionTitle("Aves para transporte (compra/venda)");
+            DrawSectionTitle(t.BirdsForTransport);
             y -= 2;
 
             {
@@ -374,10 +496,10 @@ public static class InscricaoConvoyagePdfGenerator
                 var amberBar = new XSolidBrush(XColor.FromArgb(245, 166, 35));
                 var fNotice  = new XFont("Arial", 9,  XFontStyleEx.Regular);
                 var fNoticeB = new XFont("Arial", 9,  XFontStyleEx.Bold);
-                var line1a = "Chegada às ";
-                var line1b = "12h (hora belga)";
-                var line1c = " — o destinatário tem de estar presente para receber as aves.";
-                var line2  = "Sujeito a confirmação após o fecho das inscrições.";
+                var line1a = t.ArrivalPart1;
+                var line1b = t.ArrivalPart2;
+                var line1c = t.ArrivalPart3;
+                var line2  = t.SubjectToConfirmation;
                 var noticeW = pageW - 2 * margin;
                 var padX = 10.0;
                 var lineH = 13.0;
@@ -408,10 +530,10 @@ public static class InscricaoConvoyagePdfGenerator
             {
                 var xh = margin;
                 g.DrawRectangle(darkBlue, new XRect(xh, y - 11, tableW, 16));
-                g.DrawString("Origem",            fontHeader, white, new XPoint(xh + 3, y)); xh += tc0;
-                g.DrawString("Espécie",           fontHeader, white, new XPoint(xh + 3, y)); xh += tc1;
-                g.DrawString("Anilha",            fontHeader, white, new XPoint(xh + 3, y)); xh += tc2;
-                g.DrawString("Destinatário · WhatsApp", fontHeader, white, new XPoint(xh + 3, y));
+                g.DrawString(t.Origin,            fontHeader, white, new XPoint(xh + 3, y)); xh += tc0;
+                g.DrawString(t.Species,           fontHeader, white, new XPoint(xh + 3, y)); xh += tc1;
+                g.DrawString(t.Ring,              fontHeader, white, new XPoint(xh + 3, y)); xh += tc2;
+                g.DrawString(t.RecipientWhatsapp, fontHeader, white, new XPoint(xh + 3, y));
                 y += 16;
             }
 
@@ -438,8 +560,10 @@ public static class InscricaoConvoyagePdfGenerator
                 if (shade)
                     g.DrawRectangle(lightGrey, new XRect(margin, y - 11, tableW, rowHTransp));
 
-                var origem = av.Origem == OrigemAveTransporte.Compra ? "Compra" : "Vende";
-                var especieShort = SpeciesShort.TryGetValue(av.Especie ?? "", out var sh) ? sh : (av.Especie ?? "");
+                var origem = av.Origem == OrigemAveTransporte.Compra ? t.Buy : t.Sell;
+                var especieShort = Enum.TryParse<SpeciesCode>(av.Especie ?? "", ignoreCase: true, out var espCode)
+                    ? SpeciesGenus.Short(espCode)
+                    : (av.Especie ?? "");
                 var esp = TruncateToWidth(g, especieShort, fontReg, tc1 - 6);
 
                 g.DrawString(origem,           fontReg, ink, new XPoint(x + 3, y)); x += tc0;
@@ -448,7 +572,7 @@ public static class InscricaoConvoyagePdfGenerator
                 g.DrawString(destLine1T,       fontReg,  ink, new XPoint(x + 3, y));
                 g.DrawString(destLine2T,       fontSmall, ink, new XPoint(x + 3, y + 11));
                 if (hasNotes)
-                    g.DrawString("Notas: " + destLine3T, fontSmall, grey, new XPoint(x + 3, y + 22));
+                    g.DrawString(t.NotesPrefix + destLine3T, fontSmall, grey, new XPoint(x + 3, y + 22));
 
                 g.DrawRectangle(borderPen, new XRect(margin, y - 11, tableW, rowHTransp));
                 y += rowHTransp;
@@ -457,10 +581,11 @@ public static class InscricaoConvoyagePdfGenerator
             currentTableHeader = null;
             y += 8;
             EnsureRowSpace(22);
-            DrawTotalLine($"Total de aves para transporte: {r.AvesTransporte.Count}");
+            DrawTotalLine(string.Format(t.TotalTransportBirds, r.AvesTransporte.Count));
         }
 
         // ── Resumo de custos ─────────────────────────────────────────────────
+        if (includeCosts)
         {
             var numAvesConcurso = avesConcurso.Count;
             var numAvesVenda2 = r.AvesVenda?.Count ?? 0;
@@ -469,9 +594,10 @@ public static class InscricaoConvoyagePdfGenerator
             var c = ConvoyagePricing.Compute(numAvesConcurso, numAvesVenda2, numAvesTransporte2, r.SocioBvaStatus);
             var tarifa = ConvoyagePricing.TransportePorAve(r.SocioBva);
             var tarifaAdq = ConvoyagePricing.TransporteAdquiridaPorAve(r.SocioBva);
+            var socioLabel = r.SocioBva ? t.TransportSocio : t.TransportNonSocio;
 
             EnsureRowSpace(20 + rowH + 22);
-            DrawSectionTitle("Resumo de custos");
+            DrawSectionTitle(t.CostsSummary);
             y -= 2;
 
             void CostRow(string label, string value, bool shaded = false, bool bold = false)
@@ -493,7 +619,7 @@ public static class InscricaoConvoyagePdfGenerator
                 EnsureRowSpace(totalRowH);
                 g.DrawRectangle(darkBlue, new XRect(margin, y - 13, pageW - 2 * margin, totalRowH));
                 var fontTotal = new XFont("Arial", 11, XFontStyleEx.Bold);
-                g.DrawString("TOTAL a pagar", fontTotal, white, new XPoint(margin + 8, y + 1));
+                g.DrawString(t.TotalToPay, fontTotal, white, new XPoint(margin + 8, y + 1));
                 var vwidth = g.MeasureString(value, fontTotal).Width;
                 g.DrawString(value, fontTotal, white, new XPoint(pageW - margin - 8 - vwidth, y + 1));
                 y += totalRowH;
@@ -507,21 +633,21 @@ public static class InscricaoConvoyagePdfGenerator
             }
 
             if (c.fixa > 0)
-                CostRowAuto("Inscrição na exposição", $"{c.fixa:0.00} €");
+                CostRowAuto(t.ExpoRegistration, $"{c.fixa:0.00} €");
             if (numAvesConcurso > 0)
-                CostRowAuto($"Inscrição por ave · {numAvesConcurso} × {ConvoyagePricing.InscricaoPorAve:0.00} €",
+                CostRowAuto(string.Format(t.PerBird, numAvesConcurso, ConvoyagePricing.InscricaoPorAve),
                     $"{c.inscricoes:0.00} €");
             if (totalAvesConta > 0)
-                CostRowAuto($"Aluguer de gaiola · {totalAvesConta} × {ConvoyagePricing.GaiolaPorAve:0.00} €",
+                CostRowAuto(string.Format(t.CageRental, totalAvesConta, ConvoyagePricing.GaiolaPorAve),
                     $"{c.gaiolas:0.00} €");
             if (totalAvesConta > 0)
-                CostRowAuto($"Transporte {(r.SocioBva ? "(sócio BVA)" : "(não-sócio)")} · {totalAvesConta} × {tarifa:0.00} €",
+                CostRowAuto(string.Format(t.TransportLabel, socioLabel, totalAvesConta, tarifa),
                     $"{c.transporte:0.00} €");
             if (numAvesTransporte2 > 0)
-                CostRowAuto($"Transporte de aves adquiridas/cedidas {(r.SocioBva ? "(sócio BVA)" : "(não-sócio)")} · {numAvesTransporte2} × {tarifaAdq:0.00} €",
+                CostRowAuto(string.Format(t.AcquiredTransport, socioLabel, numAvesTransporte2, tarifaAdq),
                     $"{c.transporteAdquiridas:0.00} €");
             if (r.SocioBvaStatus == SocioBvaStatus.PagaComInscricao)
-                CostRowAuto("Quota BVA Portugal", $"{c.quota:0.00} €");
+                CostRowAuto(t.BvaFee, $"{c.quota:0.00} €");
 
             y += 4;
             TotalPagarRow($"{c.total:0.00} €");
@@ -530,6 +656,7 @@ public static class InscricaoConvoyagePdfGenerator
         }
 
         // ── Aviso de pagamento ───────────────────────────────────────────────
+        if (includeCosts)
         {
             var amberBg   = new XSolidBrush(XColor.FromArgb(255, 248, 225));
             var amberBar  = new XSolidBrush(XColor.FromArgb(245, 166, 35));
@@ -543,8 +670,8 @@ public static class InscricaoConvoyagePdfGenerator
             var noticeX = boxX + 4 + padX;
             var noticeMaxW = boxW - 4 - 2 * padX;
 
-            var label = "Pagamento: ";
-            var body  = "deve ser feito no valor certo, em dinheiro, num envelope fechado, e entregue juntamente com as aves.";
+            var label = t.PaymentLabel;
+            var body  = t.PaymentBody;
             var noticeLabelW = g.MeasureString(label, fontNoticeBold).Width;
             var firstLineMaxW = noticeMaxW - noticeLabelW;
 
@@ -594,24 +721,14 @@ public static class InscricaoConvoyagePdfGenerator
         }
     }
 
-    private static readonly Dictionary<string, string> SpeciesShort = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Roseicollis"] = "A. roseicollis",
-        ["Personatus"]  = "A. personatus",
-        ["Fischeri"]    = "A. fischeri",
-        ["Nigrigenis"]  = "A. nigrigenis",
-        ["Lilianae"]    = "A. lilianae",
-        ["Canus"]       = "A. canus",
-        ["Taranta"]     = "A. taranta",
-        ["Pullarius"]   = "A. pullarius",
-    };
-
     private static string ComposeSpeciesMutation(string? especie, string? mutacao)
     {
         var mut = (mutacao ?? "").Trim();
         var esp = (especie ?? "").Trim();
         if (string.IsNullOrEmpty(esp)) return mut;
-        var shortName = SpeciesShort.TryGetValue(esp, out var s) ? s : esp;
+        var shortName = Enum.TryParse<SpeciesCode>(esp, ignoreCase: true, out var code)
+            ? SpeciesGenus.Short(code)
+            : esp;
         // Avoid duplication when the mutation already starts with the species short name.
         if (mut.StartsWith(shortName, StringComparison.OrdinalIgnoreCase)) return mut;
         return string.IsNullOrEmpty(mut) ? shortName : $"{shortName} · {mut}";

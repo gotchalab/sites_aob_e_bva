@@ -21,6 +21,14 @@ public class ConvoyageYear
     public int? RegulamentoDownloadId { get; set; }
     public Download? RegulamentoDownload { get; set; }
 
+    // Campos usados exclusivamente na Declaração TRACES gerada por inscrição.
+    // Campeonato: nome do concurso destino (ex: "EUROPASHAU26 Karlsruhe").
+    // MatriculaTraces: número emitido pela autoridade sanitária para o
+    // transporte (ex: "DE082122025"). Se ambos forem null, o botão TRACES no
+    // admin fica desativado.
+    public string? Campeonato { get; set; }
+    public string? MatriculaTraces { get; set; }
+
     // Planeamento de transporte (F2)
     public int NumCargasAlvo { get; set; } = 23;
     public int CapacidadePorCarga { get; set; } = 20;

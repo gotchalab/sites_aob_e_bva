@@ -71,6 +71,20 @@ export const api = {
   submitContact: (body: ContactRequest) => post<FormSubmissionResponse>(`/forms/contact`, body),
   submitInscricaoSocio: (body: FormData) => postForm<FormSubmissionResponse>(`/forms/inscricao-socio`, body),
   submitInscricaoConvoyage: (body: InscricaoConvoyageRequest) => post<FormSubmissionResponse>(`/forms/inscricao-convoyage`, body),
+  // Preview do TRACES antes do submit — devolve o PDF em blob para abrir num
+  // separador. Não persiste nem envia emails; a assinatura é opcional.
+  previewTracesConvoyage: async (body: InscricaoConvoyageRequest): Promise<Blob> => {
+    const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}/forms/inscricao-convoyage/preview-traces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/pdf" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(msg || `Preview falhou (${res.status})`);
+    }
+    return res.blob();
+  },
   // Sem cache — o admin pode fechar/reabrir inscrições ou trocar ano ativo a
   // qualquer momento e a página pública tem de reflectir isso imediatamente.
   convoyageActiveYear: () => tryGet<ConvoyageActiveYearDto>(`/convoyage/active-year`, 0),

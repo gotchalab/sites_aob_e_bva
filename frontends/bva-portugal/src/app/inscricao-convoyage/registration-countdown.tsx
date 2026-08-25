@@ -29,7 +29,7 @@ function compute(closes: number): Remaining {
 
 export function RegistrationCountdown({ closesAtIso, onClosed }: Props) {
   const closesAt = new Date(closesAtIso).getTime();
-  const [remaining, setRemaining] = useState<Remaining>(() => compute(closesAt));
+  const [remaining, setRemaining] = useState<Remaining | null>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -48,6 +48,7 @@ export function RegistrationCountdown({ closesAtIso, onClosed }: Props) {
     timeStyle: "short",
   }).format(closesDate);
 
+  if (remaining === null) return null;
   if (remaining.totalMs <= 0) return null;
 
   const urgent = remaining.totalMs <= 24 * 3600 * 1000;

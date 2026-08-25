@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type {
   ConvoyageActiveYearDto,
   EntryType,
+  InscricaoConvoyageRequest,
   NomenclatureVersionDto,
   SocioBvaStatus,
   Species,
@@ -17,6 +18,8 @@ import {
   type MutationGroup,
   type NomenclatureItem,
 } from "@/lib/nomenclatura-api";
+import { SignaturePad, type SignaturePadHandle } from "@/components/signature/signature-pad";
+import { SignatureFullscreenModal } from "@/components/signature/signature-fullscreen-modal";
 
 const TURNSTILE_SITEKEY = process.env.NEXT_PUBLIC_TURNSTILE_SITEKEY;
 
@@ -987,6 +990,15 @@ export function InscricaoConvoyageForm({
   const transportBirdsCount = transportGroups.reduce((n, g) => n + g.birds.length, 0);
   const [socioBvaStatus, setSocioBvaStatus] = useState<SocioBvaStatus | "">("");
   const socioBva = socioBvaStatus !== "NaoSocio";
+  const signaturePadRef = useRef<SignaturePadHandle>(null);
+  const [signatureEmpty, setSignatureEmpty] = useState(true);
+  const [signatureFullscreen, setSignatureFullscreen] = useState(false);
+  const [notice, setNotice] = useState<{ kind: "warn" | "error"; title: string; body?: string } | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string>();
@@ -1369,6 +1381,114 @@ export function InscricaoConvoyageForm({
   const err = (name: string) =>
     fieldErrors[name] ? <p className={errCls}>{fieldErrors[name]}</p> : null;
 
+  // Constrói o payload que serve tanto para o submit real como para o preview
+  // do TRACES. Aceita um parâmetro para incluir/excluir a assinatura (o preview
+  // pode ser pedido antes de assinar).
+  function buildConvoyagePayload(includeSignature: boolean) {
+    const formEl = document.querySelector("form") as HTMLFormElement | null;
+    if (!formEl) throw new Error("Formulário não encontrado.");
+    const raw = new FormData(formEl);
+    return {
+      nomeCompleto: String(raw.get("nomeCompleto") ?? "").trim(),
+      email: String(raw.get("email") ?? "").trim(),
+      telefone: String(raw.get("telefone") ?? "").trim(),
+      pais: String(raw.get("pais") ?? "").trim(),
+      numeroStam: String(raw.get("numeroStam") ?? "").trim(),
+      morada: String(raw.get("morada") ?? "").trim(),
+      codigoPostal: String(raw.get("codigoPostal") ?? "").trim(),
+      localidade: String(raw.get("localidade") ?? "").trim(),
+      assinaturaPngBase64: includeSignature ? (signaturePadRef.current?.toDataUrl() ?? "") : "",
+      localRecolhaId: parseInt(String(raw.get("localRecolhaId") ?? ""), 10) || 0,
+      aceitouRegulamento: true,
+      declaraArt59: true,
+      socioBvaStatus: (socioBvaStatus || "NaoSocio") as SocioBvaStatus,
+      aves: [
+        ...birds.map((b) => ({
+          serie: b.code,
+          especieMutacao: b.mutation,
+          especie: b.species,
+          tipoClasse: b.type,
+          anilha: b.anilha.trim(),
+        })),
+        ...teams.flatMap((t) => {
+          const equipaId =
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          return t.anilhas.map((anilha, i) => ({
+            serie: t.code,
+            especieMutacao: t.mutation,
+            especie: t.species,
+            tipoClasse: "Team" as EntryType,
+            anilha: anilha.trim(),
+            equipaId,
+            posicaoEquipa: TEAM_POSICOES[i],
+          }));
+        }),
+      ],
+      avesVenda: saleBirds.map((b) => ({
+        especie: b.species,
+        tipoClasse: b.type || undefined,
+        especieMutacao: b.freeSpecies ? b.freeSpeciesText.trim() : b.mutation,
+        especieLivre: b.freeSpecies,
+        dataNascimento: b.dataNascimento,
+        sexo: (b.sexo || "Indefinido") as "Macho" | "Femea" | "Indefinido",
+        preco: parseFloat(b.preco) || 0,
+        anilha: b.anilha.trim(),
+      })),
+      avesTransporte: transportGroups.flatMap((g) => {
+        const destNome = g.origem === "Compra" ? String(raw.get("nomeCompleto") ?? "").trim() : g.destinatarioNome.trim();
+        const destWa = g.origem === "Compra" ? String(raw.get("telefone") ?? "").trim() : g.destinatarioWhatsapp.trim();
+        return g.birds.map((b) => ({
+          especie: b.species,
+          origem: (g.origem || "Vende") as "Compra" | "Vende",
+          anilha: b.anilha.trim(),
+          destinatarioNome: destNome,
+          destinatarioWhatsapp: destWa,
+        }));
+      }),
+    } as InscricaoConvoyageRequest;
+  }
+
+  async function onPreviewTraces() {
+    // Validação mínima: nome, morada, CP, localidade, STAM, aves
+    const p = buildConvoyagePayload(true);
+    const missing: string[] = [];
+    if (!p.nomeCompleto) missing.push("Nome");
+    if (!p.numeroStam) missing.push("Nº Criador Nacional (STAM)");
+    if (!p.morada) missing.push("Morada");
+    if (!p.codigoPostal) missing.push("Código Postal");
+    if (!p.localidade) missing.push("Localidade");
+    if ((p.aves?.length ?? 0) === 0) missing.push("pelo menos 1 ave de concurso");
+    if (missing.length > 0) {
+      setNotice({
+        kind: "warn",
+        title: "Faltam dados para previsualizar",
+        body: "Preencha primeiro: " + missing.join(", ") + ".",
+      });
+      return;
+    }
+    try {
+      const blob = await api.previewTracesConvoyage(p);
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (!w) {
+        setNotice({
+          kind: "warn",
+          title: "Popup bloqueado",
+          body: "O browser bloqueou a nova janela. Permita popups para este site e tente de novo.",
+        });
+      }
+    } catch (err) {
+      setNotice({
+        kind: "error",
+        title: "Não foi possível gerar a previsualização",
+        body: err instanceof Error ? err.message : undefined,
+      });
+    }
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -1386,9 +1506,19 @@ export function InscricaoConvoyageForm({
     if (!telefone) newFieldErrors["telefone"] = "Campo obrigatório";
     const numeroStam = String(raw.get("numeroStam") ?? "").trim();
     if (!numeroStam) newFieldErrors["numeroStam"] = "Campo obrigatório";
+    const morada = String(raw.get("morada") ?? "").trim();
+    const codigoPostal = String(raw.get("codigoPostal") ?? "").trim();
+    const localidade = String(raw.get("localidade") ?? "").trim();
+    if (!morada) newFieldErrors["morada"] = "Campo obrigatório";
+    if (!codigoPostal) newFieldErrors["codigoPostal"] = "Campo obrigatório";
+    else if (!/^\d{4}-\d{3}$/.test(codigoPostal)) newFieldErrors["codigoPostal"] = "Formato 0000-000";
+    if (!localidade) newFieldErrors["localidade"] = "Campo obrigatório";
     if (isNaN(localRecolhaId)) newFieldErrors["localRecolhaId"] = "Selecione um local de recolha";
     if (!socioBvaStatus) newFieldErrors["socioBvaStatus"] = "Escolha uma das opções";
     if (!raw.get("aceitouRegulamento")) newFieldErrors["aceitouRegulamento"] = "Campo obrigatório";
+    if (!raw.get("declaraArt59")) newFieldErrors["declaraArt59"] = "Campo obrigatório";
+    const assinaturaEmpty = signaturePadRef.current?.isEmpty() ?? true;
+    if (assinaturaEmpty) newFieldErrors["assinatura"] = "Assinatura obrigatória";
     if (birds.length === 0 && teams.length === 0 && saleBirds.length === 0 && transportBirdsCount === 0)
       newFieldErrors["numAves"] = "Indique pelo menos 1 ave (concurso, venda ou transporte)";
 
@@ -1480,7 +1610,7 @@ export function InscricaoConvoyageForm({
       setSaleBirdErrors(newSaleBirdErrors);
       setTransportGroupErrors(newTransportGroupErrors);
 
-      const section1Order = ["nomeCompleto", "pais", "email", "telefone", "numeroStam", "numIndividuais", "numEquipas", "numAves", "localRecolhaId", "socioBvaStatus"];
+      const section1Order = ["nomeCompleto", "pais", "email", "telefone", "numeroStam", "morada", "codigoPostal", "localidade", "numIndividuais", "numEquipas", "numAves", "localRecolhaId", "socioBvaStatus"];
       const firstSection1 = section1Order.find((f) => f in newFieldErrors);
 
       let targetEl: HTMLElement | null = null;
@@ -1502,6 +1632,10 @@ export function InscricaoConvoyageForm({
         targetEl = document.getElementById(`transport-group-${firstIdx}`);
       } else if ("aceitouRegulamento" in newFieldErrors) {
         targetEl = document.querySelector(`[name="aceitouRegulamento"]`) as HTMLElement | null;
+      } else if ("declaraArt59" in newFieldErrors) {
+        targetEl = document.querySelector(`[name="declaraArt59"]`) as HTMLElement | null;
+      } else if ("assinatura" in newFieldErrors) {
+        targetEl = document.getElementById("field-assinatura");
       }
 
       targetEl?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1518,8 +1652,13 @@ export function InscricaoConvoyageForm({
       telefone,
       pais: String(raw.get("pais") ?? "").trim(),
       numeroStam,
+      morada,
+      codigoPostal,
+      localidade,
+      assinaturaPngBase64: signaturePadRef.current?.toDataUrl() ?? "",
       localRecolhaId,
       aceitouRegulamento: true,
+      declaraArt59: true,
       socioBvaStatus: socioBvaStatus as SocioBvaStatus,
       aves: [
         ...birds.map((b) => ({
@@ -1578,6 +1717,7 @@ export function InscricaoConvoyageForm({
         const q = new URLSearchParams();
         if (res.submissionId != null) q.set("id", String(res.submissionId));
         if (res.downloadToken) q.set("t", res.downloadToken);
+        if (res.tracesAvailable) q.set("traces", "1");
         router.push(`/inscricao-convoyage/obrigado?${q.toString()}`);
         return;
       }
@@ -1598,6 +1738,44 @@ export function InscricaoConvoyageForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
+      {notice && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="fixed inset-x-3 top-3 z-50 mx-auto sm:top-6 sm:right-6 sm:left-auto sm:max-w-sm"
+        >
+          <div
+            className={`flex items-start gap-3 rounded-xl border p-3 shadow-lg backdrop-blur ${
+              notice.kind === "error"
+                ? "border-red-300 bg-red-50/95 text-red-900"
+                : "border-amber-300 bg-amber-50/95 text-amber-900"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-white text-xs font-bold ${
+                notice.kind === "error" ? "bg-red-500" : "bg-amber-500"
+              }`}
+            >
+              {notice.kind === "error" ? "!" : "i"}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">{notice.title}</p>
+              {notice.body && <p className="mt-0.5 text-xs opacity-90">{notice.body}</p>}
+            </div>
+            <button
+              type="button"
+              aria-label="Fechar aviso"
+              onClick={() => setNotice(null)}
+              className="ml-1 rounded p-0.5 text-current/60 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-current/30"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
       <section className={sectionCls}>
         <h2 className={sectionTitleCls}>1. Dados do criador</h2>
         <p className="mt-1 text-sm text-ink-500">Campos com * são obrigatórios.</p>
@@ -1659,15 +1837,59 @@ export function InscricaoConvoyageForm({
           </label>
 
           <label className="block">
-            <span className={labelCls}>Nº STAM *</span>
+            <span className={labelCls}>Nº Criador Nacional (STAM) *</span>
             <input
               name="numeroStam"
               required
+              placeholder="ex.: PT302O"
               onInvalid={onFieldInvalid}
               onChange={(e) => clearField(e.currentTarget.name)}
               className={`${inputCls} ${inputBorder(!!fieldErrors["numeroStam"])}`}
             />
             {err("numeroStam")}
+          </label>
+
+          <label className="block md:col-span-2">
+            <span className={labelCls}>Morada *</span>
+            <input
+              name="morada"
+              required
+              autoComplete="street-address"
+              placeholder="Rua e número"
+              onInvalid={onFieldInvalid}
+              onChange={(e) => clearField(e.currentTarget.name)}
+              className={`${inputCls} ${inputBorder(!!fieldErrors["morada"])}`}
+            />
+            {err("morada")}
+          </label>
+
+          <label className="block">
+            <span className={labelCls}>Código Postal *</span>
+            <input
+              name="codigoPostal"
+              required
+              autoComplete="postal-code"
+              placeholder="0000-000"
+              pattern="\d{4}-\d{3}"
+              inputMode="numeric"
+              onInvalid={onFieldInvalid}
+              onChange={(e) => clearField(e.currentTarget.name)}
+              className={`${inputCls} ${inputBorder(!!fieldErrors["codigoPostal"])}`}
+            />
+            {err("codigoPostal")}
+          </label>
+
+          <label className="block">
+            <span className={labelCls}>Localidade *</span>
+            <input
+              name="localidade"
+              required
+              autoComplete="address-level2"
+              onInvalid={onFieldInvalid}
+              onChange={(e) => clearField(e.currentTarget.name)}
+              className={`${inputCls} ${inputBorder(!!fieldErrors["localidade"])}`}
+            />
+            {err("localidade")}
           </label>
 
           <label className="block">
@@ -2095,6 +2317,98 @@ export function InscricaoConvoyageForm({
           </label>
           {err("aceitouRegulamento")}
         </div>
+
+        <div className="mt-3">
+          <label className="inline-flex cursor-pointer items-start gap-3">
+            <input
+              required
+              type="checkbox"
+              name="declaraArt59"
+              onInvalid={onFieldInvalid}
+              onChange={(e) => {
+                if (e.currentTarget.checked) clearField("declaraArt59");
+              }}
+              className="mt-1 h-4 w-4 accent-brand-500"
+            />
+            <span className="font-medium text-ink-900">
+              Declaro que as aves inscritas cumprem os requisitos constantes na alínea a) do
+              Nº 1 do Art. 59 do Regulamento Delegado (UE) 2020/688 da Comissão, de 17 de
+              dezembro de 2019 *
+            </span>
+          </label>
+          {err("declaraArt59")}
+        </div>
+
+        <div id="field-assinatura" className="mt-6">
+          <span className={labelCls}>Assinatura *</span>
+          <p className="mt-1 text-xs text-ink-500">
+            Assine no espaço abaixo com o dedo (mobile) ou com o rato.
+          </p>
+          <div className="mt-2">
+            <SignaturePad
+              ref={signaturePadRef}
+              error={!!fieldErrors["assinatura"]}
+              onEmptyChange={(empty) => {
+                setSignatureEmpty(empty);
+                if (!empty) clearField("assinatura");
+              }}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setSignatureFullscreen(true)}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ink-900/15 bg-white px-4 py-2 text-sm font-medium text-ink-800 transition hover:border-brand-500 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+              </svg>
+              Ampliar para assinar
+            </button>
+            <button
+              type="button"
+              onClick={onPreviewTraces}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-brand-500/60 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:border-brand-600 hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Previsualizar TRACES
+            </button>
+            <button
+              type="button"
+              disabled={signatureEmpty}
+              onClick={() => {
+                signaturePadRef.current?.clear();
+                setSignatureEmpty(true);
+              }}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ink-900/15 bg-white px-4 py-2 text-sm font-medium text-ink-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-400/30 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-900/15 disabled:hover:bg-white disabled:hover:text-ink-700"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18" />
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              </svg>
+              Limpar assinatura
+            </button>
+          </div>
+          {err("assinatura")}
+        </div>
+        <SignatureFullscreenModal
+          open={signatureFullscreen}
+          initialVector={signatureEmpty ? null : signaturePadRef.current?.getVectorData() ?? null}
+          onCancel={() => setSignatureFullscreen(false)}
+          onConfirm={(v) => {
+            signaturePadRef.current?.setVectorData(v);
+            setSignatureEmpty(false);
+            clearField("assinatura");
+            setSignatureFullscreen(false);
+          }}
+        />
       </section>
 
       {TURNSTILE_SITEKEY ? (

@@ -14,6 +14,8 @@ public class ConvoyageAdminService(AppDbContext db)
         DateTime? RegistrationClosesAt,
         int? RegulamentoDownloadId,
         string? RegulamentoTitle,
+        string? Campeonato,
+        string? MatriculaTraces,
         PricingConfig Pricing);
 
     public record PricingConfig(
@@ -36,6 +38,8 @@ public class ConvoyageAdminService(AppDbContext db)
                 y.RegistrationClosesAt,
                 y.RegulamentoDownloadId,
                 RegulamentoTitle = y.RegulamentoDownload != null ? y.RegulamentoDownload.Title : null,
+                y.Campeonato,
+                y.MatriculaTraces,
                 y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
                 y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
                 y.TarifaAdquirenteSocio, y.TarifaAdquirenteNaoSocio,
@@ -50,6 +54,7 @@ public class ConvoyageAdminService(AppDbContext db)
             y.NumCargasAlvo, y.CapacidadePorCarga, y.MinPorCarga, y.TransportadorasJson ?? "{}",
             y.RegistrationClosesAt,
             y.RegulamentoDownloadId, y.RegulamentoTitle,
+            y.Campeonato, y.MatriculaTraces,
             new PricingConfig(
                 y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
                 y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
@@ -87,6 +92,20 @@ public class ConvoyageAdminService(AppDbContext db)
         var y = await db.ConvoyageYears.FirstOrDefaultAsync(x => x.Id == yearId);
         if (y is null) return "Ano não encontrado.";
         y.RegistrationClosesAt = closesAtUtc;
+        await db.SaveChangesAsync();
+        return null;
+    }
+
+    /// Actualiza (ou limpa) os campos usados na Declaração TRACES do ano.
+    /// Campeonato: nome do concurso destino (ex: "EUROPASHAU26 Karlsruhe").
+    /// MatriculaTraces: matrícula emitida pela autoridade sanitária.
+    /// Ambos são normalizados (trim); vazio → null.
+    public async Task<string?> UpdateTracesFieldsAsync(int yearId, string? campeonato, string? matricula)
+    {
+        var y = await db.ConvoyageYears.FirstOrDefaultAsync(x => x.Id == yearId);
+        if (y is null) return "Ano não encontrado.";
+        y.Campeonato = string.IsNullOrWhiteSpace(campeonato) ? null : campeonato.Trim();
+        y.MatriculaTraces = string.IsNullOrWhiteSpace(matricula) ? null : matricula.Trim();
         await db.SaveChangesAsync();
         return null;
     }

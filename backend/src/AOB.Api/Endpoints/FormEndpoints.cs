@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Net.Http.Headers;
 
 namespace AOB.Api.Endpoints;
 
@@ -22,10 +23,20 @@ public static class FormEndpoints
     {
         var g = app.MapGroup("/api/sites/{siteSlug}/forms").WithTags("Forms");
 
-        g.MapPost("/contact", SubmitContact);
-        g.MapPost("/inscricao-socio", SubmitInscricaoSocio);
-        g.MapPost("/inscricao-convoyage", SubmitInscricaoConvoyage);
-        g.MapGet("/inscricao-convoyage/{id:int}/pdf", DownloadConvoyagePdf);
+        // Submits: policy "forms" restritiva (5/10min) para travar spam.
+        g.MapPost("/contact", SubmitContact).RequireRateLimiting("forms");
+        g.MapPost("/inscricao-socio", SubmitInscricaoSocio).RequireRateLimiting("forms");
+        g.MapPost("/inscricao-convoyage", SubmitInscricaoConvoyage).RequireRateLimiting("forms");
+
+        // Downloads e preview: usam a policy "public" (120/min) — são
+        // idempotentes e o utilizador pode legitimamente clicar várias vezes
+        // (ex.: rever o PDF, testar preview enquanto preenche o form).
+        g.MapGet("/inscricao-convoyage/{id:int}/pdf", DownloadConvoyagePdf)
+            .RequireRateLimiting("public");
+        g.MapGet("/inscricao-convoyage/{id:int}/traces", DownloadTracesPdf)
+            .RequireRateLimiting("public");
+        g.MapPost("/inscricao-convoyage/preview-traces", PreviewTracesPdf)
+            .RequireRateLimiting("public");
         return g;
     }
 
@@ -59,6 +70,102 @@ public static class FormEndpoints
 
     private static string Base64UrlEncode(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    // Preview do TRACES: recebe o payload actual do formulário (sem assinatura
+    // obrigatória, sem persistir nada) e devolve o PDF renderizado para o
+    // utilizador rever antes de assinar. Se o ano activo não tiver Campeonato +
+    // Matrícula TRACES configurados, devolve 400 com mensagem.
+    private static async Task<IResult> PreviewTracesPdf(
+        string siteSlug,
+        [FromBody] InscricaoConvoyageRequest req,
+        AppDbContext db,
+        HttpContext http,
+        IHostEnvironment env,
+        CancellationToken ct)
+    {
+        var site = await db.Sites.AsNoTracking().FirstOrDefaultAsync(s => s.Slug == siteSlug, ct);
+        if (site is null) return Results.NotFound();
+
+        var activeYear = await db.ConvoyageYears
+            .AsNoTracking()
+            .FirstOrDefaultAsync(y => y.SiteId == site.Id && y.IsActive, ct);
+        if (activeYear is null)
+            return Results.BadRequest("Não há ano de convoyage activo.");
+        if (string.IsNullOrWhiteSpace(activeYear.Campeonato) ||
+            string.IsNullOrWhiteSpace(activeYear.MatriculaTraces))
+            return Results.BadRequest("O ano activo ainda não tem Campeonato + Matrícula TRACES configurados.");
+
+        // Fonte das espécies/anilhas: usa o snapshot enviado (as entries só existem
+        // após o submit real). Inclui concurso + venda + transporte vendido.
+        var especieAnilha = new List<(string, string)>();
+        especieAnilha.AddRange((req.Aves ?? new List<AveConvoyageDto>())
+            .Where(a => !string.IsNullOrWhiteSpace(a.Anilha))
+            .Select(a => (FormatEspecie(a.Especie), (a.Anilha ?? "").Trim())));
+        especieAnilha.AddRange((req.AvesVenda ?? new List<AveVendaDto>())
+            .Where(a => !string.IsNullOrWhiteSpace(a.Anilha))
+            .Select(a => (FormatEspecie(a.Especie), (a.Anilha ?? "").Trim())));
+        especieAnilha.AddRange((req.AvesTransporte ?? new List<AveTransporteDto>())
+            .Where(a => a.Origem == OrigemAveTransporte.Vende && !string.IsNullOrWhiteSpace(a.Anilha))
+            .Select(a => (FormatEspecie(a.Especie), (a.Anilha ?? "").Trim())));
+
+        // Se o utilizador já assinou, usamos a assinatura. Caso contrário desenhamos
+        // um PNG 1x1 transparente para o gerador não crashar — a linha da assinatura
+        // fica visível vazia, e o PDF fica marcado inequivocamente como "prévia".
+        byte[] sigBytes = DecodeAssinatura(req.AssinaturaPngBase64) ?? TransparentPng();
+
+        async Task<byte[]?> LoadAsset(string fileName)
+        {
+            var p1 = Path.Combine(env.ContentRootPath, "PdfAssets", fileName);
+            if (File.Exists(p1)) return await File.ReadAllBytesAsync(p1, ct);
+            var p2 = Path.Combine(AppContext.BaseDirectory, "PdfAssets", fileName);
+            if (File.Exists(p2)) return await File.ReadAllBytesAsync(p2, ct);
+            return null;
+        }
+        var fonpLogo = await LoadAsset("logo-fonp.png");
+        var bvaLogo = await LoadAsset($"logo-{siteSlug}.png");
+
+        var bytes = TracesDeclarationPdfGenerator.Render(
+            req, activeYear.Campeonato!, activeYear.MatriculaTraces!,
+            especieAnilha, sigBytes, fonpLogo, bvaLogo);
+
+        http.Response.Headers["Content-Disposition"] = "inline; filename=\"TRACES-preview.pdf\"";
+        return Results.File(bytes, "application/pdf");
+    }
+
+    // PNG 1x1 transparente em bytes — usado como fallback quando o preview do
+    // TRACES é pedido antes do utilizador assinar.
+    private static byte[] TransparentPng() => Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+
+    private static async Task<IResult> DownloadTracesPdf(
+        string siteSlug,
+        int id,
+        [FromQuery] string? token,
+        HttpContext http,
+        AppDbContext db,
+        IConfiguration config,
+        IHostEnvironment env,
+        CancellationToken ct)
+    {
+        if (!VerifyPdfToken(config, siteSlug, id, token))
+            return Results.NotFound();
+        var result = await TracesPdfBuilder.BuildAsync(db, env, config, id, siteSlug, ct);
+        if (result is null) return Results.NotFound();
+        http.Response.Headers["Content-Disposition"] = ContentDispositionInline(result.FileName);
+        return Results.File(result.Bytes, "application/pdf");
+    }
+
+    // Kestrel rejeita non-ASCII em headers (o nome do criador pode ter acentos).
+    // RFC 6266/5987: `filename` ASCII + `filename*=UTF-8''<pct-encoded>` real.
+    private static string ContentDispositionInline(string fileName)
+    {
+        var ascii = new string(fileName.Select(c => c < 128 ? c : '_').ToArray());
+        return new ContentDispositionHeaderValue("inline")
+        {
+            FileName = ascii,
+            FileNameStar = fileName,
+        }.ToString();
+    }
 
     private static async Task<IResult> DownloadConvoyagePdf(
         string siteSlug,
@@ -541,6 +648,47 @@ public static class FormEndpoints
         await File.WriteAllBytesAsync(absPath, pdfBytes, ct);
         var relPath = Path.Combine(relDir, pdfFileName).Replace('\\', '/');
 
+        // Persistir PNG da assinatura (sempre; a validação já garantiu presença).
+        string? assinaturaRelPath = null;
+        var assinaturaBytes = DecodeAssinatura(req.AssinaturaPngBase64);
+        if (assinaturaBytes is not null)
+        {
+            var assinaturaFileName = $"assinatura-{submission.Id}.png";
+            var absAssinaturaPath = Path.Combine(absDir, assinaturaFileName);
+            await File.WriteAllBytesAsync(absAssinaturaPath, assinaturaBytes, ct);
+            assinaturaRelPath = Path.Combine(relDir, assinaturaFileName).Replace('\\', '/');
+        }
+
+        // Gerar Declaração TRACES se o ano tiver Campeonato + MatriculaTraces
+        // configurados. Se faltarem, o botão TRACES no admin fica desativado
+        // até o admin preencher os campos no ano.
+        byte[]? tracesBytes = null;
+        string? tracesRelPath = null;
+        if (!string.IsNullOrWhiteSpace(activeYear.Campeonato)
+            && !string.IsNullOrWhiteSpace(activeYear.MatriculaTraces)
+            && assinaturaBytes is not null)
+        {
+            try
+            {
+                var fonpLogoPath = Path.Combine(env.ContentRootPath, "PdfAssets", "logo-fonp.png");
+                byte[]? fonpLogo = File.Exists(fonpLogoPath)
+                    ? await File.ReadAllBytesAsync(fonpLogoPath, ct)
+                    : null;
+                var especiesAves = await BuildTracesEspecieAnilhaAsync(db, submission.Id, req, ct);
+                tracesBytes = TracesDeclarationPdfGenerator.Render(
+                    req, activeYear.Campeonato!, activeYear.MatriculaTraces!,
+                    especiesAves, assinaturaBytes, fonpLogo, logoBytes);
+                var tracesFileName = $"traces-{submission.Id}.pdf";
+                var absTracesPath = Path.Combine(absDir, tracesFileName);
+                await File.WriteAllBytesAsync(absTracesPath, tracesBytes, ct);
+                tracesRelPath = Path.Combine(relDir, tracesFileName).Replace('\\', '/');
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning(ex, "Falha a gerar Declaração TRACES para #{Id}", submission.Id);
+            }
+        }
+
         var aves = req.Aves ?? new List<AveConvoyageDto>();
         var avesVenda = req.AvesVenda ?? new List<AveVendaDto>();
         var avesTransporte = req.AvesTransporte ?? new List<AveTransporteDto>();
@@ -548,7 +696,11 @@ public static class FormEndpoints
         var stored = new
         {
             req.NomeCompleto, req.Email, req.Telefone, req.Pais,
-            req.NumeroStam, req.AceitouRegulamento,
+            req.NumeroStam,
+            req.Morada, req.CodigoPostal, req.Localidade,
+            AssinaturaPath = assinaturaRelPath,
+            TracesPath = tracesRelPath,
+            req.AceitouRegulamento,
             req.SocioBva,
             SocioBvaStatus = req.SocioBvaStatus.ToString(),
             LocalRecolha = localRecolhaLabel,
@@ -639,6 +791,16 @@ public static class FormEndpoints
             Content: pdfBytes,
             ContentType: "application/pdf");
 
+        var attachments = new List<EmailSender.EmailAttachment> { pdfAttachment };
+        if (tracesBytes is not null)
+        {
+            attachments.Add(new EmailSender.EmailAttachment(
+                FileName: SafeFileName($"TRACES-{req.NomeCompleto}.pdf"),
+                Content: tracesBytes,
+                ContentType: "application/pdf"));
+        }
+        var attachmentsArray = attachments.ToArray();
+
         if (!string.IsNullOrWhiteSpace(site.ContactEmail))
         {
             try
@@ -646,8 +808,8 @@ public static class FormEndpoints
                 await email.SendAsync(
                     site.ContactEmail,
                     $"[{site.Name}] Nova inscrição convoyage — {req.NomeCompleto}",
-                    RenderConvoyageEmailAssociacao(site, req, submission.Id, localRecolhaLabel, activeYear.Year),
-                    new[] { pdfAttachment },
+                    ConvoyageEmailRenderer.RenderAssociacao(site, req, submission.Id, localRecolhaLabel, activeYear.Year),
+                    attachmentsArray,
                     fromOverride: site.ContactEmail,
                     ct);
             }
@@ -664,8 +826,8 @@ public static class FormEndpoints
                 await email.SendAsync(
                     req.Email,
                     $"[{site.Name}] Recebemos a tua inscrição na convoyage",
-                    RenderConvoyageEmailCriador(site, req, submission.Id, localRecolhaLabel, activeYear.Year),
-                    new[] { pdfAttachment },
+                    ConvoyageEmailRenderer.RenderCriador(site, req, submission.Id, localRecolhaLabel, activeYear.Year),
+                    attachmentsArray,
                     fromOverride: site.ContactEmail,
                     ct);
             }
@@ -676,7 +838,11 @@ public static class FormEndpoints
         }
 
         var downloadToken = BuildPdfToken(config, siteSlug, submission.Id);
-        return TypedResults.Ok(new FormSubmissionResponse(true, SubmissionId: submission.Id, DownloadToken: downloadToken));
+        return TypedResults.Ok(new FormSubmissionResponse(
+            true,
+            SubmissionId: submission.Id,
+            DownloadToken: downloadToken,
+            TracesAvailable: tracesRelPath is not null));
     }
 
     private static string? ValidateConvoyage(InscricaoConvoyageRequest r)
@@ -684,8 +850,16 @@ public static class FormEndpoints
         if (string.IsNullOrWhiteSpace(r.NomeCompleto)) return "Nome completo obrigatorio.";
         if (string.IsNullOrWhiteSpace(r.Email)) return "Email obrigatorio.";
         if (string.IsNullOrWhiteSpace(r.Pais)) return "Pais obrigatorio.";
-        if (string.IsNullOrWhiteSpace(r.NumeroStam)) return "Numero STAM obrigatorio.";
+        if (string.IsNullOrWhiteSpace(r.NumeroStam)) return "Numero de Criador Nacional (STAM) obrigatorio.";
+        if (string.IsNullOrWhiteSpace(r.Morada)) return "Morada obrigatoria.";
+        if (string.IsNullOrWhiteSpace(r.CodigoPostal)) return "Codigo postal obrigatorio.";
+        if (!System.Text.RegularExpressions.Regex.IsMatch(r.CodigoPostal.Trim(), @"^\d{4}-\d{3}$"))
+            return "Codigo postal deve ter o formato 0000-000.";
+        if (string.IsNullOrWhiteSpace(r.Localidade)) return "Localidade obrigatoria.";
+        if (string.IsNullOrWhiteSpace(r.AssinaturaPngBase64)) return "Assinatura obrigatoria.";
+        if (DecodeAssinatura(r.AssinaturaPngBase64) is null) return "Assinatura invalida ou vazia.";
         if (!r.AceitouRegulamento) return "E necessario aceitar o regulamento.";
+        if (!r.DeclaraArt59) return "E necessario declarar que as aves cumprem o Art. 59 do Reg. Delegado (UE) 2020/688.";
         var totalAvesEnviadas = (r.Aves?.Count ?? 0) + (r.AvesVenda?.Count ?? 0) + (r.AvesTransporte?.Count ?? 0);
         if (totalAvesEnviadas == 0) return "E necessario inscrever pelo menos uma ave (concurso, venda ou transporte).";
         foreach (var (ave, i) in (r.Aves ?? new List<AveConvoyageDto>()).Select((a, i) => (a, i + 1)))
@@ -746,74 +920,6 @@ public static class FormEndpoints
         return null;
     }
 
-    private static string RenderConvoyageEmailAssociacao(Site site, InscricaoConvoyageRequest r, int submissionId, string localRecolha, int year)
-    {
-        var header = $"""
-        <h2 style="color:#1a4380;margin:0 0 8px">Nova inscrição de convoyage {year}</h2>
-        <p style="color:#666;margin:0 0 16px">Submissão #{submissionId} · {H(site.Name)}</p>
-        """;
-        return header + RenderConvoyageBody(site, r, localRecolha, year, forCriador: false);
-    }
-
-    private static string RenderConvoyageEmailCriador(Site site, InscricaoConvoyageRequest r, int submissionId, string localRecolha, int year)
-    {
-        var header = $"""
-        <p>Olá {H(r.NomeCompleto)},</p>
-        <p>Recebemos a tua inscrição na convoyage {year} da <b>{H(site.Name)}</b>. Segue em baixo o resumo dos dados que submeteste; o detalhe completo das aves e dos custos vai em anexo (PDF).</p>
-        <p style="color:#666;margin:0 0 16px;font-size:12px">Referência: submissão #{submissionId}</p>
-        """;
-        var footer = $"""
-        <p style="margin-top:20px">Cumprimentos,<br/>{H(site.Name)}</p>
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
-        <p style="color:#888;font-size:12px">Este é um email automático. Se não foste tu a submeter esta inscrição, por favor contacta-nos.</p>
-        """;
-        return header + RenderConvoyageBody(site, r, localRecolha, year, forCriador: true) + footer;
-    }
-
-    private static string RenderConvoyageBody(Site site, InscricaoConvoyageRequest r, string localRecolha, int year, bool forCriador)
-    {
-        var totalAves = r.Aves?.Count ?? 0;
-        var totalVenda = r.AvesVenda?.Count ?? 0;
-        var totalTransporte = r.AvesTransporte?.Count ?? 0;
-
-        var dadosHeader = forCriador ? "Dados submetidos" : "Dados do criador";
-
-        var pagamento = forCriador
-            ? "<div style=\"margin-top:12px;padding:10px 12px;background:#fff8e1;border-left:4px solid #f5a623;font-size:13px\"><b>Pagamento:</b> deve ser feito no valor certo, em dinheiro, num envelope fechado, e entregue juntamente com as aves.</div>"
-            : "";
-
-        var notasTransporte = totalTransporte > 0
-            ? "<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f5a623;font-size:12px\"><b>Notas sobre as aves de compra/venda:</b><ul style=\"margin:6px 0 0 18px;padding:0\"><li><b>Chegada prevista: 12h (hora belga).</b> O destinatário tem obrigatoriamente de estar presente a essa hora para receber as aves — <b>não há condições para as guardar por mais tempo</b>.</li><li>Sujeito a validação — limite total de <b>400 aves para transporte</b>, prioridade para aves de exposição. Confirmação por email <b>após o fecho das inscrições</b>.</li></ul></div>"
-            : "";
-
-        var anexoNota = forCriador
-            ? "<p style=\"margin-top:16px;color:#666;font-size:12px\">Vai anexo o PDF com o detalhe completo das aves e o resumo de custos. Guarda-o para tua referência.</p>"
-            : "<p style=\"margin-top:16px;color:#666;font-size:12px\">O detalhe das aves e o resumo de custos estão no PDF em anexo.</p>";
-
-        return $"""
-        <h3>{dadosHeader}</h3>
-        <table cellpadding="4" style="border-collapse:collapse;font-size:13px">
-          <tr><td><b>Nome:</b></td><td>{H(r.NomeCompleto)}</td></tr>
-          <tr><td><b>País:</b></td><td>{H(r.Pais)}</td></tr>
-          <tr><td><b>Email:</b></td><td>{H(r.Email)}</td></tr>
-          <tr><td><b>Telefone:</b></td><td>{H(r.Telefone)}</td></tr>
-          <tr><td><b>Nº STAM:</b></td><td>{H(r.NumeroStam)}</td></tr>
-          <tr><td valign="top"><b>Local de recolha:</b></td><td>{H(localRecolha)}<br/><span style="color:#b45309;font-size:12px">Contacta o responsável do ponto de recolha para combinar a hora de entrega das aves.</span></td></tr>
-        </table>
-
-        <h3>Resumo</h3>
-        <table cellpadding="4" style="border-collapse:collapse;font-size:13px">
-          <tr><td><b>Aves para concurso:</b></td><td>{totalAves}</td></tr>
-          {(totalVenda > 0 ? $"<tr><td><b>Aves para venda:</b></td><td>{totalVenda}</td></tr>" : "")}
-          {(totalTransporte > 0 ? $"<tr><td><b>Aves para transporte (compra/venda):</b></td><td>{totalTransporte} <span style=\"color:#b45309\">(sujeitas a validação de espaço)</span></td></tr>" : "")}
-        </table>
-
-        {notasTransporte}
-        {pagamento}
-        {anexoNota}
-        """;
-    }
-
     private static string H(string? s) => System.Net.WebUtility.HtmlEncode(s ?? "");
 
     private static string SafeFileName(string name)
@@ -821,5 +927,81 @@ public static class FormEndpoints
         var invalid = Path.GetInvalidFileNameChars();
         var clean = new string(name.Select(c => invalid.Contains(c) ? '-' : c).ToArray());
         return clean.Length > 100 ? clean[..100] : clean;
+    }
+
+    // Decodifica o dataURL da assinatura (formato "data:image/png;base64,....").
+    // Aceita entre 200 bytes (evita canvas em branco) e 500 KB (evita abuso).
+    // Retorna null se o formato/tamanho for inválido — o caller trata como erro.
+    private static byte[]? DecodeAssinatura(string? dataUrl)
+    {
+        if (string.IsNullOrWhiteSpace(dataUrl)) return null;
+        const string prefix = "data:image/png;base64,";
+        if (!dataUrl.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return null;
+        try
+        {
+            var bytes = Convert.FromBase64String(dataUrl[prefix.Length..]);
+            if (bytes.Length < 200 || bytes.Length > 512 * 1024) return null;
+            return bytes;
+        }
+        catch (FormatException) { return null; }
+    }
+
+    // Reúne (Espécie, NºAnilha) para a tabela da Declaração TRACES. Inclui
+    // TODAS as aves que viajam sob a inscrição deste criador (concurso + venda
+    // + transporte com origem "Vende"). Aves com origem "Compra" são de
+    // terceiros belgas e não entram na declaração portuguesa.
+    private static async Task<List<(string Especie, string Anilha)>>
+        BuildTracesEspecieAnilhaAsync(AppDbContext db, int submissionId, InscricaoConvoyageRequest req, CancellationToken ct)
+    {
+        var result = new List<(string, string)>();
+
+        // Concurso: preferir entries estruturadas (nome canónico via
+        // NomenclatureGroup.Species); fallback ao snapshot do request.
+        var entries = await db.ConvoyageBirdEntries
+            .AsNoTracking()
+            .Where(e => e.FormSubmissionId == submissionId)
+            .Include(e => e.NomenclatureClass).ThenInclude(c => c.NomenclatureGroup)
+            .OrderBy(e => e.BirdOrder)
+            .Select(e => new
+            {
+                Species = e.NomenclatureClass.NomenclatureGroup.Species,
+                e.RingNumber,
+            })
+            .ToListAsync(ct);
+        if (entries.Count > 0)
+        {
+            result.AddRange(entries.Select(e => (SpeciesGenus.Full(e.Species), e.RingNumber)));
+        }
+        else
+        {
+            result.AddRange((req.Aves ?? new List<AveConvoyageDto>())
+                .Where(a => !string.IsNullOrWhiteSpace(a.Anilha))
+                .Select(a => (FormatEspecie(a.Especie), (a.Anilha ?? "").Trim())));
+        }
+
+        // Aves para venda — viajam com o criador para o destino.
+        result.AddRange((req.AvesVenda ?? new List<AveVendaDto>())
+            .Where(a => !string.IsNullOrWhiteSpace(a.Anilha))
+            .Select(a => (FormatEspecie(a.Especie), (a.Anilha ?? "").Trim())));
+
+        // Aves de transporte com origem "Vende" — o criador está a vender a
+        // terceiros na Bélgica, portanto as aves partem de Portugal.
+        result.AddRange((req.AvesTransporte ?? new List<AveTransporteDto>())
+            .Where(a => a.Origem == OrigemAveTransporte.Vende && !string.IsNullOrWhiteSpace(a.Anilha))
+            .Select(a => (FormatEspecie(a.Especie), (a.Anilha ?? "").Trim())));
+
+        return result;
+    }
+
+    // Normaliza o nome da espécie para a tabela do TRACES. Se o valor
+    // corresponde a um enum SpeciesCode, devolve o nome binomial completo com
+    // o género correcto (Agapornis, Forpus, ...). Free-text é preservado.
+    internal static string FormatEspecie(string? raw)
+    {
+        var s = (raw ?? "").Trim();
+        if (string.IsNullOrEmpty(s)) return "";
+        return Enum.TryParse<SpeciesCode>(s, ignoreCase: true, out var code)
+            ? SpeciesGenus.Full(code)
+            : s;
     }
 }

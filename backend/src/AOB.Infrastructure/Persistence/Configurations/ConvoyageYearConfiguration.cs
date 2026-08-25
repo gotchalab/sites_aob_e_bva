@@ -16,6 +16,9 @@ public class ConvoyageYearConfiguration : IEntityTypeConfiguration<ConvoyageYear
 
         b.Property(x => x.RegistrationClosesAt);
 
+        b.Property(x => x.Campeonato).HasMaxLength(200);
+        b.Property(x => x.MatriculaTraces).HasMaxLength(50);
+
         b.Property(x => x.NumCargasAlvo).HasDefaultValue(23);
         b.Property(x => x.CapacidadePorCarga).HasDefaultValue(20);
         b.Property(x => x.MinPorCarga).HasDefaultValue(16);

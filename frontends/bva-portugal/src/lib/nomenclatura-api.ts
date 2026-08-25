@@ -9,6 +9,9 @@ import type {
 
 // Display labels for enum values coming from the API (which serialises them
 // as strings).
+// Nome curto para dropdowns/PDF: inicial do género + espécie em minúsculas.
+// Se acrescentares uma espécie ao enum SpeciesCode no backend, adiciona
+// também aqui e no tipo Species.
 export const SPECIES_LABELS: Record<Species, string> = {
   Roseicollis: "A. roseicollis",
   Personatus:  "A. personatus",
@@ -18,6 +21,7 @@ export const SPECIES_LABELS: Record<Species, string> = {
   Canus:       "A. canus",
   Taranta:     "A. taranta",
   Pullarius:   "A. pullarius",
+  Coelestis:   "F. coelestis",
 };
 
 export const TYPE_LABELS: Record<EntryType, string> = {

@@ -1,15 +1,20 @@
-using System.Net;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using MimeKit;
 
 namespace AOB.Application.Forms;
 
 /// <summary>
-/// SMTP simples. Replica o comportamento do Joomla no VPS antigo:
-/// - Producao Debian: aponta para "localhost:25" (Exim4 nativo, sem auth) e envia
-///   com o "From" do site (equivalente ao mailfrom do Joomla).
-/// - Dev Windows sem MTA local: `Smtp:Host` vazio → apenas loga o preview.
+/// SMTP via MailKit (System.Net.Mail.SmtpClient e obsoleto e tem bugs
+/// conhecidos com STARTTLS+AUTH em .NET moderno — ver
+/// https://learn.microsoft.com/dotnet/api/system.net.mail.smtpclient).
+///
+/// Modos:
+/// - `Smtp:Host` vazio (dev sem MTA) → apenas loga preview e sai.
+/// - `Smtp:UseSsl=true` na porta 587 → STARTTLS. Na porta 465 → SMTPS implicito.
+/// - Sem User/Password → conexao anonima (Exim4 local, localhost:25).
 /// </summary>
 public class EmailSender(IConfiguration config, ILogger<EmailSender> log)
 {
@@ -47,9 +52,7 @@ public class EmailSender(IConfiguration config, ILogger<EmailSender> log)
             return;
         }
 
-        // Dev override: redireccionar TODOS os envios para um endereco unico
-        // (evita mandar emails reais durante testes). Configurar via
-        // Smtp:DevRedirectTo em appsettings.Development.json.
+        // Dev override: redireccionar TODOS os envios para um endereco unico.
         var devRedirect = config["Smtp:DevRedirectTo"];
         if (!string.IsNullOrWhiteSpace(devRedirect))
         {
@@ -61,37 +64,45 @@ public class EmailSender(IConfiguration config, ILogger<EmailSender> log)
         var port = int.TryParse(config["Smtp:Port"], out var p) ? p : 25;
         var user = config["Smtp:User"];
         var pass = config["Smtp:Password"];
-        var from = fromOverride ?? config["Smtp:From"] ?? user ?? "noreply@aobarcelos.pt";
-        // Default sem SSL para replicar o Joomla + Exim4 local (localhost:25). Se
-        // aparecer explicitamente `Smtp:UseSsl=true`, activa STARTTLS.
+        var fromAddr = fromOverride ?? config["Smtp:From"] ?? user ?? "noreply@aobarcelos.pt";
         var useSsl = bool.TryParse(config["Smtp:UseSsl"], out var s) && s;
 
-        using var client = new SmtpClient(host, port)
-        {
-            EnableSsl = useSsl,
-            Credentials = string.IsNullOrEmpty(user) ? null : new NetworkCredential(user, pass),
-        };
-        using var msg = new MailMessage(from, to, subject, bodyHtml) { IsBodyHtml = true };
-        var disposables = new List<IDisposable>();
+        var msg = new MimeMessage();
+        msg.From.Add(MailboxAddress.Parse(fromAddr));
+        msg.To.Add(MailboxAddress.Parse(to));
+        msg.Subject = subject;
+
+        var builder = new BodyBuilder { HtmlBody = bodyHtml };
         if (attachments is not null)
         {
             foreach (var a in attachments)
-            {
-                var stream = new MemoryStream(a.Content, writable: false);
-                disposables.Add(stream);
-                var att = new Attachment(stream, a.FileName, a.ContentType);
-                disposables.Add(att);
-                msg.Attachments.Add(att);
-            }
+                builder.Attachments.Add(a.FileName, a.Content, ContentType.Parse(a.ContentType));
         }
+        msg.Body = builder.ToMessageBody();
+
+        // Escolha do modo TLS:
+        // - port 465 → SslOnConnect (SMTPS)
+        // - useSsl && port 587 → StartTls
+        // - useSsl && porta arbitraria → StartTlsWhenAvailable
+        // - !useSsl → None (Exim4 local sem TLS)
+        var secure = useSsl
+            ? (port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls)
+            : SecureSocketOptions.None;
+
+        using var client = new SmtpClient();
         try
         {
-            await client.SendMailAsync(msg, ct);
-            log.LogInformation("Email enviado {From} -> {To} ({Subject}, {N} anexos)", from, to, subject, msg.Attachments.Count);
+            await client.ConnectAsync(host, port, secure, ct);
+            if (!string.IsNullOrEmpty(user))
+                await client.AuthenticateAsync(user, pass, ct);
+            await client.SendAsync(msg, ct);
+            log.LogInformation("Email enviado {From} -> {To} ({Subject}, {N} anexos)",
+                fromAddr, to, subject, builder.Attachments.Count);
         }
         finally
         {
-            foreach (var d in disposables) d.Dispose();
+            if (client.IsConnected)
+                await client.DisconnectAsync(quit: true, ct);
         }
     }
 }

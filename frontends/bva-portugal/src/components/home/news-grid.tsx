@@ -1,30 +1,9 @@
 import Link from "next/link";
 import { SafeImage } from "./safe-image";
+import { NewBadge, RelativeDate } from "./relative-date";
 import type { ArticleSummary } from "@/lib/api-types";
-import { formatDate } from "@/lib/api";
-
-/** Considera "novo" um artigo publicado nas últimas 72h. */
-function isNew(publishedAt: string | null): boolean {
-  if (!publishedAt) return false;
-  const d = new Date(publishedAt).getTime();
-  if (Number.isNaN(d)) return false;
-  return Date.now() - d < 72 * 60 * 60 * 1000;
-}
-
-function relative(publishedAt: string | null): string {
-  if (!publishedAt) return "";
-  const d = new Date(publishedAt).getTime();
-  if (Number.isNaN(d)) return "";
-  const diffMs = Date.now() - d;
-  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (days < 1) return "Hoje";
-  if (days === 1) return "Ontem";
-  if (days < 7) return `Há ${days} dias`;
-  return formatDate(publishedAt);
-}
 
 function Card({ article }: { article: ArticleSummary }) {
-  const newFlag = isNew(article.publishedAt);
   return (
     <Link
       href={`/artigos/${article.slug}`}
@@ -46,17 +25,15 @@ function Card({ article }: { article: ArticleSummary }) {
               {article.categoryName}
             </div>
           )}
-          {newFlag && (
-            <div className="absolute right-3 top-3 rounded-full bg-accent-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm">
-              Novo
-            </div>
-          )}
+          {article.publishedAt && <NewBadge publishedAt={article.publishedAt} />}
           <div className="flex flex-1 flex-col gap-1.5 p-4">
             <h3 className="line-clamp-2 font-display text-base font-semibold leading-snug text-ink-900 group-hover:text-brand-600">
               {article.title}
             </h3>
             {article.publishedAt && (
-              <div className="mt-auto text-xs text-ink-500">{relative(article.publishedAt)}</div>
+              <div className="mt-auto text-xs text-ink-500">
+                <RelativeDate publishedAt={article.publishedAt} />
+              </div>
             )}
           </div>
         </>
@@ -76,11 +53,7 @@ function Card({ article }: { article: ArticleSummary }) {
               {article.categoryName}
             </div>
           )}
-          {newFlag && (
-            <div className="absolute right-3 top-3 rounded-full bg-accent-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm">
-              Novo
-            </div>
-          )}
+          {article.publishedAt && <NewBadge publishedAt={article.publishedAt} />}
           <div className="flex flex-1 flex-col gap-1.5 p-4">
             <h3 className="line-clamp-2 font-display text-base font-semibold leading-snug text-ink-900 group-hover:text-brand-600">
               {article.title}
@@ -91,7 +64,9 @@ function Card({ article }: { article: ArticleSummary }) {
               </p>
             )}
             {article.publishedAt && (
-              <div className="mt-auto text-xs text-ink-500">{relative(article.publishedAt)}</div>
+              <div className="mt-auto text-xs text-ink-500">
+                <RelativeDate publishedAt={article.publishedAt} />
+              </div>
             )}
           </div>
         </>

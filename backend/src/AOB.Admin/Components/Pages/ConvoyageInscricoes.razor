@@ -27,7 +27,7 @@
             }
         </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <label class="form-label small text-muted mb-1">Ano</label>
         <select class="form-select" @bind="SelectedYearId" @bind:after="ReloadAsync">
             @if (Years.Count == 0)
@@ -40,7 +40,7 @@
             }
         </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <label class="form-label small text-muted mb-1">Estado</label>
         <select class="form-select" @bind="StatusFilter" @bind:after="ReloadAsync">
             <option value="">Todos</option>
@@ -50,20 +50,122 @@
             }
         </select>
     </div>
-    <div class="col-md-3 d-flex align-items-end gap-2">
+    <div class="col-md-5 d-flex align-items-end justify-content-end gap-2">
         @if (SelectedYearId > 0)
         {
-            <a class="btn btn-outline-success flex-fill"
-               href="@($"/convoyage/{SelectedYearId}/transportes/export")"
-               target="_blank">
-                <i class="bi bi-file-earmark-excel"></i> Excel
-            </a>
-            <a class="btn btn-primary flex-fill" href="@($"/convoyage/{SelectedYearId}/transportes")">
+            <div class="dropdown @(ShowExportMenu ? "show" : "")" @onfocusout="ScheduleCloseExportMenu">
+                <button class="btn btn-outline-secondary dropdown-toggle text-nowrap" type="button"
+                        aria-expanded="@(ShowExportMenu ? "true" : "false")"
+                        title="Exportar dados do ano seleccionado"
+                        @onclick="ToggleExportMenu">
+                    <i class="bi bi-download"></i> Descarregar
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm @(ShowExportMenu ? "show" : "")">
+                    <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2"
+                           href="@($"/convoyage/{SelectedYearId}/transportes/export")"
+                           target="_blank"
+                           @onclick="CloseExportMenu">
+                            <i class="bi bi-file-earmark-excel text-success"></i>
+                            <span>Excel de transportes</span>
+                        </a>
+                    </li>
+                    <li>
+                        <button type="button" class="dropdown-item d-flex align-items-center gap-2"
+                                @onclick="OpenPdfBulkModal">
+                            <i class="bi bi-file-earmark-pdf text-danger"></i>
+                            <span>PDFs das inscrições…</span>
+                        </button>
+                    </li>
+                    @if (TracesReadyForCurrentYear)
+                    {
+                        <li>
+                            <a class="dropdown-item d-flex align-items-center gap-2"
+                               href="@TracesZipUrl"
+                               target="_blank"
+                               @onclick="CloseExportMenu">
+                                <i class="bi bi-file-earmark-zip text-primary"></i>
+                                <span>ZIP das Declarações TRACES</span>
+                            </a>
+                        </li>
+                    }
+                    else
+                    {
+                        <li>
+                            <span class="dropdown-item disabled d-flex align-items-center gap-2"
+                                  title="Configura Campeonato + Matrícula TRACES no ano para activar">
+                                <i class="bi bi-file-earmark-zip text-muted"></i>
+                                <span>ZIP TRACES (indisponível)</span>
+                            </span>
+                        </li>
+                    }
+                </ul>
+            </div>
+            <a class="btn btn-primary text-nowrap" href="@($"/convoyage/{SelectedYearId}/transportes")">
                 <i class="bi bi-truck"></i> Organizar transportes
             </a>
         }
     </div>
 </div>
+
+@if (ShowPdfBulkModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Descarregar todos os PDFs</h5>
+                    <button type="button" class="btn-close" aria-label="Fechar" @onclick="ClosePdfBulkModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Gera um ZIP com a ficha de cada inscrição do ano seleccionado.
+                        Respeita o filtro de estado activo em cima.
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Idioma</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="pdfLang"
+                                       id="pdfLangPt"
+                                       checked="@(PdfBulkLang == "pt")"
+                                       @onchange="@(() => PdfBulkLang = "pt")" />
+                                <label class="form-check-label" for="pdfLangPt">Português</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="pdfLang"
+                                       id="pdfLangEn"
+                                       checked="@(PdfBulkLang == "en")"
+                                       @onchange="@(() => PdfBulkLang = "en")" />
+                                <label class="form-check-label" for="pdfLangEn">English</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="pdfIncludeCosts"
+                               checked="@PdfBulkIncludeCosts"
+                               @onchange="@((ChangeEventArgs e) => PdfBulkIncludeCosts = (bool)(e.Value ?? true))" />
+                        <label class="form-check-label" for="pdfIncludeCosts">
+                            Incluir zona de custos e aviso de pagamento
+                        </label>
+                    </div>
+                    <div class="form-text">
+                        Desactiva para enviar aos parceiros sem revelar valores.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="ClosePdfBulkModal">Cancelar</button>
+                    <a class="btn btn-primary" href="@PdfBulkUrl" target="_blank" @onclick="ClosePdfBulkModal">
+                        <i class="bi bi-download"></i> Descarregar ZIP
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @if (Items is null)
 {
@@ -155,6 +257,16 @@ else
                             @if (f.HasPdf)
                             {
                                 <a class="btn btn-outline-primary" href="@($"/formularios/{f.Id}/pdf")" target="_blank">PDF</a>
+                            }
+                            @if (f.HasSignature && TracesReadyForCurrentYear)
+                            {
+                                <a class="btn btn-outline-success" href="@($"/formularios/{f.Id}/traces")" target="_blank"
+                                   title="Descarregar Declaração TRACES">TRACES</a>
+                            }
+                            else if (f.HasSignature)
+                            {
+                                <button class="btn btn-outline-secondary" disabled
+                                        title="Configura Campeonato + Matrícula TRACES no ano para activar">TRACES</button>
                             }
                             <button class="btn btn-outline-danger" @onclick="() => DeleteAsync(f.Id)">Eliminar</button>
                         </div>
@@ -266,7 +378,7 @@ else
         AllRows = raw.Select(f =>
         {
             var meta = ParseConvoyage(f.DataJson);
-            return new Row(f.Id, f.SubmittedAt, f.Status, meta.Nome, meta.Email, meta.LocalRecolha, meta.TotalAves, HasPdf(f.DataJson));
+            return new Row(f.Id, f.SubmittedAt, f.Status, meta.Nome, meta.Email, meta.LocalRecolha, meta.TotalAves, HasPdf(f.DataJson), HasSignature(f.DataJson));
         }).ToList();
 
         Total = AllRows.Count;
@@ -321,7 +433,68 @@ else
         return new MarkupString(SortDesc ? " <i class=\"bi bi-caret-down-fill small\"></i>" : " <i class=\"bi bi-caret-up-fill small\"></i>");
     }
 
-    private record Row(int Id, DateTime SubmittedAt, FormStatus Status, string Nome, string Email, string LocalRecolha, int TotalAves, bool HasPdf);
+    private record Row(int Id, DateTime SubmittedAt, FormStatus Status, string Nome, string Email, string LocalRecolha, int TotalAves, bool HasPdf, bool HasSignature);
+
+    // O botão TRACES só faz sentido para o ano seleccionado se este tiver
+    // Campeonato + MatriculaTraces preenchidos. Caso contrário mostra-se
+    // desactivado com tooltip a orientar o admin.
+    private bool TracesReadyForCurrentYear =>
+        Years.FirstOrDefault(y => y.Id == SelectedYearId) is { } y &&
+        !string.IsNullOrWhiteSpace(y.Campeonato) &&
+        !string.IsNullOrWhiteSpace(y.MatriculaTraces);
+
+    private string TracesZipUrl =>
+        int.TryParse(StatusFilter, out var st)
+            ? $"/convoyage/{SelectedYearId}/traces/zip?status={st}"
+            : $"/convoyage/{SelectedYearId}/traces/zip";
+
+    // ── Dropdown "Descarregar" ───────────────────────────────────────────
+    // Sem Bootstrap JS neste projecto: controlamos abertura por estado. O
+    // onfocusout com atraso curto permite que um clique num item da lista
+    // dispare antes de o dropdown fechar.
+    private bool ShowExportMenu;
+
+    private void ToggleExportMenu() => ShowExportMenu = !ShowExportMenu;
+    private void CloseExportMenu() => ShowExportMenu = false;
+
+    private async Task ScheduleCloseExportMenu()
+    {
+        await Task.Delay(150);
+        if (ShowExportMenu)
+        {
+            ShowExportMenu = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── Modal "descarregar todos os PDFs" ────────────────────────────────
+    private bool ShowPdfBulkModal;
+    private string PdfBulkLang = "pt";
+    private bool PdfBulkIncludeCosts = true;
+
+    private void OpenPdfBulkModal()
+    {
+        ShowExportMenu = false;
+        PdfBulkLang = "pt";
+        PdfBulkIncludeCosts = true;
+        ShowPdfBulkModal = true;
+    }
+
+    private void ClosePdfBulkModal() => ShowPdfBulkModal = false;
+
+    private string PdfBulkUrl
+    {
+        get
+        {
+            var qs = new List<string>
+            {
+                $"lang={PdfBulkLang}",
+                $"includeCosts={(PdfBulkIncludeCosts ? "true" : "false")}",
+            };
+            if (int.TryParse(StatusFilter, out var st)) qs.Add($"status={st}");
+            return $"/convoyage/{SelectedYearId}/inscricoes/zip?{string.Join('&', qs)}";
+        }
+    }
 
     private record LocationCount(string Local, int Submissoes, int Aves);
 
@@ -343,12 +516,15 @@ else
         }
     }
 
-    private static bool HasPdf(string json)
+    private static bool HasPdf(string json) => HasNonEmptyStringProp(json, "PdfPath");
+    private static bool HasSignature(string json) => HasNonEmptyStringProp(json, "AssinaturaPath");
+
+    private static bool HasNonEmptyStringProp(string json, string name)
     {
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(json);
-            return doc.RootElement.TryGetProperty("PdfPath", out var v)
+            return doc.RootElement.TryGetProperty(name, out var v)
                 && v.ValueKind == System.Text.Json.JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(v.GetString());
         }

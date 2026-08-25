@@ -322,6 +322,44 @@ else
 
                 <hr class="my-4" />
 
+                <h6 class="small text-uppercase text-muted fw-semibold mb-2 tracking-wider">
+                    Declaração TRACES
+                </h6>
+                <div class="small text-muted mb-2">
+                    Preenche estes dois campos para o botão <em>TRACES</em> ficar disponível nas inscrições deste ano.
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted mb-1">Campeonato de destino</label>
+                        <input type="text" class="form-control form-control-sm"
+                               maxlength="200"
+                               placeholder="ex.: EUROPASHAU26 Karlsruhe"
+                               value="@GetCampeonato(y.Id, y.Campeonato)"
+                               @oninput="e => SetCampeonato(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Matrícula TRACES</label>
+                        <input type="text" class="form-control form-control-sm"
+                               maxlength="50"
+                               placeholder="ex.: DE082122025"
+                               value="@GetMatricula(y.Id, y.MatriculaTraces)"
+                               @oninput="e => SetMatricula(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-auto">
+                        <button class="btn btn-sm btn-primary"
+                                @onclick="() => SaveTracesAsync(y.Id)"
+                                disabled="@_saving">
+                            Guardar
+                        </button>
+                    </div>
+                </div>
+                @if (_tracesFeedback.TryGetValue(y.Id, out var tmsg))
+                {
+                    <div class="small mt-1 @(_tracesIsError.Contains(y.Id) ? "text-danger" : "text-success")">@tmsg</div>
+                }
+
+                <hr class="my-4" />
+
                 <h6 class="small text-uppercase text-muted fw-semibold mb-3 tracking-wider">
                     Configuração de transportes
                 </h6>
@@ -689,6 +727,44 @@ else
         }
         _regFeedback[yearId] = "Regulamento removido.";
         _regEdits.Remove(yearId);
+        await ReloadAsync();
+    }
+
+    // ── Declaração TRACES ─────────────────────────────────────────────────────
+    private readonly Dictionary<int, string> _tracesCampeonato = new();
+    private readonly Dictionary<int, string> _tracesMatricula = new();
+    private readonly Dictionary<int, string> _tracesFeedback = new();
+    private readonly HashSet<int> _tracesIsError = new();
+
+    private string GetCampeonato(int yearId, string? current)
+        => _tracesCampeonato.TryGetValue(yearId, out var v) ? v : (current ?? "");
+    private void SetCampeonato(int yearId, string v) => _tracesCampeonato[yearId] = v;
+
+    private string GetMatricula(int yearId, string? current)
+        => _tracesMatricula.TryGetValue(yearId, out var v) ? v : (current ?? "");
+    private void SetMatricula(int yearId, string v) => _tracesMatricula[yearId] = v;
+
+    private async Task SaveTracesAsync(int yearId)
+    {
+        _tracesFeedback.Remove(yearId);
+        _tracesIsError.Remove(yearId);
+
+        var year = Years?.FirstOrDefault(y => y.Id == yearId);
+        var camp = GetCampeonato(yearId, year?.Campeonato);
+        var mat = GetMatricula(yearId, year?.MatriculaTraces);
+
+        _saving = true;
+        var err = await Convoyage.UpdateTracesFieldsAsync(yearId, camp, mat);
+        _saving = false;
+        if (err is not null)
+        {
+            _tracesFeedback[yearId] = err;
+            _tracesIsError.Add(yearId);
+            return;
+        }
+        _tracesFeedback[yearId] = "Guardado.";
+        _tracesCampeonato.Remove(yearId);
+        _tracesMatricula.Remove(yearId);
         await ReloadAsync();
     }
 

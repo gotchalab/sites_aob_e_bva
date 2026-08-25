@@ -52,8 +52,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const site = await api.site().catch(() => null);
   const announcement = parseAnnouncement(site);
   return (
-    <html lang="pt-PT" className={`${inter.variable} ${playfair.variable}`}>
+    <html lang="pt-PT" className={`${inter.variable} ${playfair.variable}`} suppressHydrationWarning>
       <head>
+        <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no" />
         <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL} crossOrigin="anonymous" />
         <OrgJsonLd />
       </head>
