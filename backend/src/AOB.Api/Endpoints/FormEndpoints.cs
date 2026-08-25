@@ -417,8 +417,8 @@ public static class FormEndpoints
         """;
 
     private static string RenderInscricaoEmailAssociacao(Site site, InscricaoSocioRequest r, int submissionId) => $"""
-        <h2 style="color:#1a4380;margin:0 0 8px">Novo pedido de inscricao de socio</h2>
-        <p style="color:#666;margin:0 0 16px">Submissao #{submissionId} · {site.Name}</p>
+        <h2 style="color:#1a4380;margin:0 0 8px">Novo pedido de inscrição de sócio</h2>
+        <p style="color:#666;margin:0 0 16px">Submissão #{submissionId} · {site.Name}</p>
 
         <h3>Dados pessoais</h3>
         <table cellpadding="4" style="border-collapse:collapse;font-size:13px">
@@ -426,35 +426,35 @@ public static class FormEndpoints
           <tr><td><b>CC/BI:</b></td><td>{H(r.CartaoCidadao)}</td></tr>
           <tr><td><b>NIF:</b></td><td>{H(r.NIF)}</td></tr>
           <tr><td><b>Nacionalidade:</b></td><td>{H(r.Nacionalidade)}</td></tr>
-          <tr><td><b>Data nascimento:</b></td><td>{r.DataNascimento?.ToString("yyyy-MM-dd")}</td></tr>
+          <tr><td><b>Data de nascimento:</b></td><td>{r.DataNascimento?.ToString("yyyy-MM-dd")}</td></tr>
           <tr><td><b>Estado civil:</b></td><td>{r.EstadoCivil}</td></tr>
           <tr><td><b>Email:</b></td><td>{H(r.Email)}</td></tr>
           <tr><td><b>Telefone:</b></td><td>{H(r.Telefone)}</td></tr>
           <tr><td><b>Morada:</b></td><td>{H(r.Morada)} {H(r.MoradaLinha2)}<br/>{H(r.CodigoPostal)} {H(r.Localidade)}</td></tr>
-          <tr><td><b>Profissao:</b></td><td>{H(r.Profissao)}</td></tr>
+          <tr><td><b>Profissão:</b></td><td>{H(r.Profissao)}</td></tr>
         </table>
 
-        <h3>Tipo de socio</h3>
+        <h3>Tipo de sócio</h3>
         <ul>
-          <li>Socio Apoiante: <b>{(r.SocioApoiante ? "Sim" : "Nao")}</b></li>
-          <li>Socio Criador: <b>{(r.SocioCriador ? "Sim" : "Nao")}</b></li>
+          <li>Sócio Apoiante: <b>{(r.SocioApoiante ? "Sim" : "Não")}</b></li>
+          <li>Sócio Criador: <b>{(r.SocioCriador ? "Sim" : "Não")}</b></li>
           <li>STAM FONP: <b>{r.StamFonp} {H(r.StamFonpNumero)}</b></li>
-          <li>Socio BVA Portugal: <b>{(r.SocioBvaPortugal ? "Sim" : "Nao")}</b></li>
+          <li>Sócio BVA Portugal: <b>{(r.SocioBvaPortugal ? "Sim" : "Não")}</b></li>
           <li>STAM BVA: <b>{r.StamBva} {H(r.StamBvaNumero)}</b></li>
         </ul>
 
         {(string.IsNullOrWhiteSpace(r.Notas) ? "" : $"<h3>Notas</h3><p>{H(r.Notas)}</p>")}
 
-        <p style="margin-top:20px;color:#666;font-size:12px">O PDF com a ficha completa esta anexo a este email. O pedido esta pendente de aprovacao no backoffice.</p>
+        <p style="margin-top:20px;color:#666;font-size:12px">O PDF com a ficha completa está anexo a este email. O pedido está pendente de aprovação no backoffice.</p>
         """;
 
     private static string RenderInscricaoEmailCandidato(Site site, InscricaoSocioRequest r) => $"""
-        <p>Ola {H(r.NomeCompleto)},</p>
-        <p>Recebemos o teu pedido de inscricao como socio da <b>{H(site.Name)}</b>. Vai anexo o PDF com todos os dados que submeteste.</p>
-        <p>A tua candidatura sera analisada em reuniao de Direcao. Sera contactado(a) por email assim que houver uma decisao.</p>
+        <p>Olá {H(r.NomeCompleto)},</p>
+        <p>Recebemos o teu pedido de inscrição como sócio da <b>{H(site.Name)}</b>. Vai anexo o PDF com todos os dados que submeteste.</p>
+        <p>A tua candidatura será analisada em reunião de Direcção.</p>
         <p style="margin-top:20px">Cumprimentos,<br/>{H(site.Name)}</p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
-        <p style="color:#888;font-size:12px">Este e um email automatico. Se nao foste tu a submeter este pedido, por favor ignora ou responde a este email.</p>
+        <p style="color:#888;font-size:12px">Este é um email automático. Se não foste tu a submeter este pedido, por favor ignora ou responde a este email.</p>
         """;
 
     private static async Task<Results<Ok<FormSubmissionResponse>, BadRequest<FormSubmissionResponse>, NotFound>>
