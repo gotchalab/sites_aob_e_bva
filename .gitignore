@@ -59,8 +59,12 @@ pdf-test*.pdf
 # Test Excel output
 /excel-*-test*.xlsx
 
-# Deploy logs (gerados em runtime)
-_deploy/logs-*.txt
+# Artefactos de build (dotnet publish output). Nunca commitar binarios.
+/_deploy/
+
+# Assets locais (backups, dumps, exemplos com dados reais, artefactos de build).
+# Nao commitar — tudo o que va aqui e apenas para uso do developer.
+/_local/
 
 # OS
 Thumbs.db
