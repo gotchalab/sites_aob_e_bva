@@ -488,6 +488,46 @@ TARGETS: dict = {
 ALL_ORDER = ["setup", "db", "infra", "api", "admin", "uploads", "aobarcelos", "bva", "services"]
 
 
+def _current_branch() -> str | None:
+    """Devolve o nome do branch git actual, ou None se falhar/detached."""
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(REPO_ROOT), stderr=subprocess.DEVNULL,
+        )
+        name = out.decode().strip()
+        return None if name in ("", "HEAD") else name
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def _warn_if_not_on_main() -> None:
+    """Avisa (nao bloqueia) se estamos a deployar de um branch != main.
+
+    A convencao (ver CONTRIBUTING.md) e deployar apos merge de dev → main
+    + tag. Deployar directo de dev/feature branch e legitimo para hotfixes
+    ou testes pontuais, mas fica ruidoso no log.
+
+    Para bloquear estritamente (CI, prod), definir AOB_STRICT_BRANCH=1
+    — deployar de branch != main passa a ser erro.
+    """
+    branch = _current_branch()
+    if branch is None or branch == "main":
+        return
+    strict = os.environ.get("AOB_STRICT_BRANCH") in ("1", "true", "yes")
+    banner = "=" * 52
+    print()
+    print(banner)
+    print(f"  {'✗' if strict else '⚠'}  A deployar de '{branch}', nao de 'main'.")
+    print("     Convencao (CONTRIBUTING.md): deploy so a partir de main")
+    print("     apos merge de dev + tag vX.Y.Z.")
+    if strict:
+        print("     AOB_STRICT_BRANCH activo — a abortar.")
+        print(banner)
+        sys.exit(1)
+    print(banner)
+
+
 def main() -> None:
     args = sys.argv[1:] if len(sys.argv) > 1 else ["all"]
 
@@ -500,6 +540,8 @@ def main() -> None:
             print("Validos:", ", ".join(TARGETS) + ", all")
             sys.exit(1)
         order = args
+
+    _warn_if_not_on_main()
 
     ssh = connect()
     try:
