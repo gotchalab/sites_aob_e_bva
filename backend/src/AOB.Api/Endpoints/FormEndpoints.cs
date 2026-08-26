@@ -251,11 +251,16 @@ public static class FormEndpoints
         {
             try
             {
+                var (fromEmail, fromName) = site.MailFrom();
                 await email.SendAsync(site.ContactEmail,
                     $"[{site.Name}] Contacto: {req.Subject}",
                     RenderContactEmail(req),
                     attachments: null,
-                    fromOverride: site.ContactEmail,
+                    // Reply-To: o proprio remetente do formulario, para
+                    // a associacao responder directamente ao contacto.
+                    replyTo: req.Email,
+                    fromEmail: fromEmail,
+                    fromName: fromName,
                     ct);
             }
             catch { /* nao falhar a submissao por causa do email */ }
@@ -387,12 +392,17 @@ public static class FormEndpoints
         {
             try
             {
+                var (fromEmail, fromName) = site.MailFrom();
                 await email.SendAsync(
                     site.ContactEmail,
                     $"[{site.Name}] Novo pedido de inscricao — {req.NomeCompleto}",
                     RenderInscricaoEmailAssociacao(site, req, submission.Id),
                     new[] { pdfAttachment, comprovativoAttachment },
-                    fromOverride: site.ContactEmail,
+                    // Reply-To: o candidato, para a associacao poder
+                    // responder-lhe directamente.
+                    replyTo: req.Email,
+                    fromEmail: fromEmail,
+                    fromName: fromName,
                     ct);
             }
             catch (Exception ex)
@@ -406,12 +416,17 @@ public static class FormEndpoints
         {
             try
             {
+                var (fromEmail, fromName) = site.MailFrom();
                 await email.SendAsync(
                     req.Email,
                     $"[{site.Name}] Recebemos o teu pedido de inscricao",
                     RenderInscricaoEmailCandidato(site, req),
                     new[] { pdfAttachment },
-                    fromOverride: site.ContactEmail,
+                    // Reply-To: o email da associacao, para o candidato
+                    // conseguir responder ao acuse de recepcao.
+                    replyTo: site.ContactEmail,
+                    fromEmail: fromEmail,
+                    fromName: fromName,
                     ct);
             }
             catch (Exception ex)
@@ -805,12 +820,17 @@ public static class FormEndpoints
         {
             try
             {
+                var (fromEmail, fromName) = site.MailFrom();
                 await email.SendAsync(
                     site.ContactEmail,
                     $"[{site.Name}] Nova inscrição convoyage — {req.NomeCompleto}",
                     ConvoyageEmailRenderer.RenderAssociacao(site, req, submission.Id, localRecolhaLabel, activeYear.Year),
                     attachmentsArray,
-                    fromOverride: site.ContactEmail,
+                    // Reply-To: o criador, para a associacao responder
+                    // directamente sobre a inscricao.
+                    replyTo: req.Email,
+                    fromEmail: fromEmail,
+                    fromName: fromName,
                     ct);
             }
             catch (Exception ex)
@@ -823,12 +843,17 @@ public static class FormEndpoints
         {
             try
             {
+                var (fromEmail, fromName) = site.MailFrom();
                 await email.SendAsync(
                     req.Email,
                     $"[{site.Name}] Recebemos a tua inscrição na convoyage",
                     ConvoyageEmailRenderer.RenderCriador(site, req, submission.Id, localRecolhaLabel, activeYear.Year),
                     attachmentsArray,
-                    fromOverride: site.ContactEmail,
+                    // Reply-To: a associacao — o criador responde para la
+                    // se tiver duvidas sobre a inscricao.
+                    replyTo: site.ContactEmail,
+                    fromEmail: fromEmail,
+                    fromName: fromName,
                     ct);
             }
             catch (Exception ex)

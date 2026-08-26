@@ -521,12 +521,15 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
             {
                 try
                 {
+                    var (fromEmailA, fromNameA) = site.MailFrom();
                     await email.SendAsync(
                         site.ContactEmail,
                         $"[{site.Name}] Inscrição convoyage actualizada — {model.NomeCompleto}",
                         ConvoyageEmailRenderer.RenderAssociacao(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail),
                         attachmentsArray,
-                        fromOverride: site.ContactEmail);
+                        replyTo: model.Email,
+                        fromEmail: fromEmailA,
+                        fromName: fromNameA);
                 }
                 catch (Exception ex)
                 {
@@ -538,12 +541,15 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
             {
                 try
                 {
+                    var (fromEmailC, fromNameC) = site.MailFrom();
                     await email.SendAsync(
                         model.Email,
                         $"[{site.Name}] Inscrição convoyage actualizada",
                         ConvoyageEmailRenderer.RenderCriador(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail),
                         attachmentsArray,
-                        fromOverride: site.ContactEmail);
+                        replyTo: site.ContactEmail,
+                        fromEmail: fromEmailC,
+                        fromName: fromNameC);
                 }
                 catch (Exception ex)
                 {
