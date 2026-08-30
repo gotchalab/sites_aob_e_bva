@@ -18,11 +18,17 @@ public static class TransportExcelExporter
     /// SocioBva deve ser um de: "Sócio", "Paga na inscrição", "Não sócio".
     /// Estes valores são referenciados directamente pelas fórmulas de tarifa/quota.
     /// </summary>
+    /// <remarks>
+    /// NumAvesTransportePtBe / NumAvesTransporteBePt: contagens por sentido. Cada
+    /// gaiola no camião conta como UM espaço mesmo que vá cheia num sentido e
+    /// volte cheia no outro — por isso o custo do transporte adquirente é sobre
+    /// MAX(PT→BE, BE→PT), não a soma.
+    /// </remarks>
     public record InscricaoRow(
         int SubmissionId, DateTime SubmittedAt,
         string Nome, string Email, string Telefone, string Pais,
         string LocalRecolha, int NumAvesConcurso, int NumAvesVenda,
-        int NumAvesTransporte,
+        int NumAvesTransportePtBe, int NumAvesTransporteBePt,
         string SocioBva, decimal TotalPago, string CargaAtribuida);
 
     // Valores permitidos na coluna Sócio (usados na data validation e nas fórmulas).
@@ -250,13 +256,17 @@ public static class TransportExcelExporter
 
         // Layout:
         //  A #  B Submetido em  C Nome  D Email  E Telefone  F País  G Local recolha
-        //  H Aves concurso  I Aves venda  J Aves transporte  K Sócio
-        //  L Inscrição  M Aves BVA  N Gaiolas  O Transporte  P Transp. adq.
-        //  Q Quota  R Total (€)  S BVA Portugal (€)  T BVA Masters (€)  U Transportadora
+        //  H Aves concurso  I Aves venda
+        //  J Aves T. PT→BE (aves que partem de PT — "Vende")
+        //  K Aves T. BE→PT (aves que chegam a PT — "Compra")
+        //  L Sócio
+        //  M Inscrição  N Aves BVA  O Gaiolas  P Transporte  Q Transp. adq.
+        //  R Quota  S Total (€)  T BVA Portugal (€)  U BVA Masters (€)  V Transportadora
         var headers = new[]
         {
             "#", "Submetido em", "Nome", "Email", "Telefone", "País",
-            "Local de recolha", "Aves concurso", "Aves venda", "Aves transporte",
+            "Local de recolha", "Aves concurso", "Aves venda",
+            "Aves T. PT→BE", "Aves T. BE→PT",
             "Sócio",
             "Inscrição (€)", "Aves BVA (€)", "Gaiolas (€)", "Transporte (€)",
             "Transp. adq. (€)", "Quota (€)",
@@ -284,36 +294,39 @@ public static class TransportExcelExporter
             ws.Cell(r, 7).Value = row.LocalRecolha;
             ws.Cell(r, 8).Value = row.NumAvesConcurso;
             ws.Cell(r, 9).Value = row.NumAvesVenda;
-            ws.Cell(r, 10).Value = row.NumAvesTransporte;
-            ws.Cell(r, 11).Value = row.SocioBva;
+            ws.Cell(r, 10).Value = row.NumAvesTransportePtBe;
+            ws.Cell(r, 11).Value = row.NumAvesTransporteBePt;
+            ws.Cell(r, 12).Value = row.SocioBva;
 
-            // Fórmulas de custo — a coluna Sócio (K) é o único discriminador.
-            ws.Cell(r, 12).FormulaA1 = $"IF(($H{r}+$I{r})>0,{R_INSCR},0)";
-            ws.Cell(r, 13).FormulaA1 = $"{R_AVES}*$H{r}";
-            ws.Cell(r, 14).FormulaA1 = $"{R_GAIOLAS}*($H{r}+$I{r})";
-            ws.Cell(r, 15).FormulaA1 =
-                $"IF($K{r}=\"{SOCIO_NAO}\",{R_TAR_NS},{R_TAR_S})*($H{r}+$I{r})";
+            // Fórmulas de custo — a coluna Sócio (L) é o único discriminador.
+            ws.Cell(r, 13).FormulaA1 = $"IF(($H{r}+$I{r})>0,{R_INSCR},0)";
+            ws.Cell(r, 14).FormulaA1 = $"{R_AVES}*$H{r}";
+            ws.Cell(r, 15).FormulaA1 = $"{R_GAIOLAS}*($H{r}+$I{r})";
             ws.Cell(r, 16).FormulaA1 =
-                $"IF($K{r}=\"{SOCIO_NAO}\",{R_ADQ_NS},{R_ADQ_S})*$J{r}";
-            ws.Cell(r, 17).FormulaA1 = $"IF($K{r}=\"{SOCIO_PAGA_INSCR}\",{R_QUOTA},0)";
-            ws.Cell(r, 18).FormulaA1 = $"SUM($L{r}:$Q{r})";
-            // BVA Masters = Inscrição (L) + Aves BVA (M).
+                $"IF($L{r}=\"{SOCIO_NAO}\",{R_TAR_NS},{R_TAR_S})*($H{r}+$I{r})";
+            // Transp. adq. = tarifa × MAX(PT→BE, BE→PT). Cada gaiola do camião
+            // conta uma vez mesmo que vá cheia num sentido e volte cheia no outro.
+            ws.Cell(r, 17).FormulaA1 =
+                $"IF($L{r}=\"{SOCIO_NAO}\",{R_ADQ_NS},{R_ADQ_S})*MAX($J{r},$K{r})";
+            ws.Cell(r, 18).FormulaA1 = $"IF($L{r}=\"{SOCIO_PAGA_INSCR}\",{R_QUOTA},0)";
+            ws.Cell(r, 19).FormulaA1 = $"SUM($M{r}:$R{r})";
+            // BVA Masters = Inscrição (M) + Aves BVA (N).
             // Aves BVA já multiplica só pelas aves concurso; aves venda pagam só a gaiola.
-            ws.Cell(r, 20).FormulaA1 = $"$L{r}+$M{r}";
+            ws.Cell(r, 21).FormulaA1 = $"$M{r}+$N{r}";
             // BVA Portugal: o que sobra do total pago depois de pagar à Masters.
-            ws.Cell(r, 19).FormulaA1 = $"$R{r}-$T{r}";
+            ws.Cell(r, 20).FormulaA1 = $"$S{r}-$U{r}";
 
-            for (int c = 12; c <= 20; c++)
+            for (int c = 13; c <= 21; c++)
                 ws.Cell(r, c).Style.NumberFormat.Format = "0.00";
 
-            ws.Cell(r, 21).Value = row.CargaAtribuida;
+            ws.Cell(r, 22).Value = row.CargaAtribuida;
             r++;
         }
 
         // Data validation na coluna Sócio: dropdown com os 3 valores válidos.
         if (rows.Count > 0)
         {
-            var socioRange = ws.Range(2, 11, r - 1, 11);
+            var socioRange = ws.Range(2, 12, r - 1, 12);
             var dv = socioRange.CreateDataValidation();
             dv.List($"\"{SOCIO_SIM},{SOCIO_PAGA_INSCR},{SOCIO_NAO}\"", true);
             dv.InCellDropdown = true;
@@ -327,13 +340,13 @@ public static class TransportExcelExporter
         {
             var lastData = r - 1;
             // Header + dados — cada uma com cor distinta.
-            ws.Cell(1, 18).Style.Fill.BackgroundColor = XLColor.FromArgb(80, 96, 128);   // Total (azul-escuro)
-            ws.Cell(1, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(56, 118, 74);   // BVA Portugal (verde)
-            ws.Cell(1, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(180, 95, 6);    // BVA Masters (laranja)
+            ws.Cell(1, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(80, 96, 128);   // Total (azul-escuro)
+            ws.Cell(1, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(56, 118, 74);   // BVA Portugal (verde)
+            ws.Cell(1, 21).Style.Fill.BackgroundColor = XLColor.FromArgb(180, 95, 6);    // BVA Masters (laranja)
 
-            ws.Range(2, 18, lastData, 18).Style.Fill.BackgroundColor = XLColor.FromArgb(230, 234, 244); // Total
-            ws.Range(2, 19, lastData, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(217, 234, 211); // Portugal
-            ws.Range(2, 20, lastData, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(252, 229, 205); // Masters
+            ws.Range(2, 19, lastData, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(230, 234, 244); // Total
+            ws.Range(2, 20, lastData, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(217, 234, 211); // Portugal
+            ws.Range(2, 21, lastData, 21).Style.Fill.BackgroundColor = XLColor.FromArgb(252, 229, 205); // Masters
         }
 
         // Linha TOTAL
@@ -342,13 +355,13 @@ public static class TransportExcelExporter
             var totalRow = r;
             ws.Cell(totalRow, 3).Value = "TOTAL";
             ws.Cell(totalRow, 3).Style.Font.Bold = true;
-            for (int col = 8; col <= 10; col++) // Aves concurso/venda/transporte
+            for (int col = 8; col <= 11; col++) // Aves concurso/venda/transporte PT→BE/BE→PT
             {
                 ws.Cell(totalRow, col).FormulaA1 =
                     $"SUM({ws.Cell(2, col).Address.ColumnLetter}2:{ws.Cell(2, col).Address.ColumnLetter}{totalRow - 1})";
                 ws.Cell(totalRow, col).Style.Font.Bold = true;
             }
-            for (int col = 12; col <= 20; col++)
+            for (int col = 13; col <= 21; col++)
             {
                 ws.Cell(totalRow, col).FormulaA1 =
                     $"SUM({ws.Cell(2, col).Address.ColumnLetter}2:{ws.Cell(2, col).Address.ColumnLetter}{totalRow - 1})";
@@ -358,9 +371,9 @@ public static class TransportExcelExporter
             ws.Range(totalRow, 1, totalRow, headers.Length).Style.Fill.BackgroundColor =
                 XLColor.FromArgb(240, 240, 240);
             // Preservar destaque das 3 colunas de síntese na linha TOTAL (tons mais saturados).
-            ws.Cell(totalRow, 18).Style.Fill.BackgroundColor = XLColor.FromArgb(197, 208, 232);
-            ws.Cell(totalRow, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(182, 215, 168);
-            ws.Cell(totalRow, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(249, 203, 156);
+            ws.Cell(totalRow, 19).Style.Fill.BackgroundColor = XLColor.FromArgb(197, 208, 232);
+            ws.Cell(totalRow, 20).Style.Fill.BackgroundColor = XLColor.FromArgb(182, 215, 168);
+            ws.Cell(totalRow, 21).Style.Fill.BackgroundColor = XLColor.FromArgb(249, 203, 156);
         }
 
         ws.Columns(1, headers.Length).AdjustToContents();

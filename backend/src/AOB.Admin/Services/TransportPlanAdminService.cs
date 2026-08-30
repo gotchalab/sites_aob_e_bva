@@ -608,7 +608,8 @@ public class TransportPlanAdminService(AppDbContext db)
                 LocalRecolha: LocalRecolhaLabelFor(s, m.LocalRecolha),
                 NumAvesConcurso: m.NumAvesConcurso,
                 NumAvesVenda: m.NumAvesVenda,
-                NumAvesTransporte: m.NumAvesTransporte,
+                NumAvesTransportePtBe: m.NumAvesTransportePtBe,
+                NumAvesTransporteBePt: m.NumAvesTransporteBePt,
                 SocioBva: m.SocioBvaLabel,
                 TotalPago: m.TotalPago,
                 CargaAtribuida: CargaLabelFor(s.Id));
@@ -651,6 +652,7 @@ public class TransportPlanAdminService(AppDbContext db)
     private record SubmissionMeta(
         string Nome, string Email, string Telefone, string Pais, string LocalRecolha,
         int NumAvesConcurso, int NumAvesVenda, int NumAvesTransporte,
+        int NumAvesTransportePtBe, int NumAvesTransporteBePt,
         string SocioBvaLabel, string SocioBvaStatus, decimal TotalPago,
         List<AveMeta> Aves);
 
@@ -717,10 +719,23 @@ public class TransportPlanAdminService(AppDbContext db)
                 numVenda = vEl2.GetArrayLength();
 
             int numTransporte = 0;
-            if (r.TryGetProperty("AvesTransporte", out var tEl) && tEl.ValueKind == JsonValueKind.Array)
-                numTransporte = tEl.GetArrayLength();
-            else if (r.TryGetProperty("avesTransporte", out var tEl2) && tEl2.ValueKind == JsonValueKind.Array)
-                numTransporte = tEl2.GetArrayLength();
+            int numTransporteVende = 0;   // PT→BE
+            int numTransporteCompra = 0;  // BE→PT
+            JsonElement transporteArr = default;
+            var hasTransporte = (r.TryGetProperty("AvesTransporte", out transporteArr) && transporteArr.ValueKind == JsonValueKind.Array)
+                             || (r.TryGetProperty("avesTransporte", out transporteArr) && transporteArr.ValueKind == JsonValueKind.Array);
+            if (hasTransporte)
+            {
+                numTransporte = transporteArr.GetArrayLength();
+                foreach (var a in transporteArr.EnumerateArray())
+                {
+                    var origem = S("Origem", a);
+                    if (string.Equals(origem, "Vende", StringComparison.OrdinalIgnoreCase))
+                        numTransporteVende++;
+                    else if (string.Equals(origem, "Compra", StringComparison.OrdinalIgnoreCase))
+                        numTransporteCompra++;
+                }
+            }
 
             var totalAves = I("TotalAves", r);
             if (totalAves > numConcurso) numConcurso = totalAves;
@@ -748,11 +763,13 @@ public class TransportPlanAdminService(AppDbContext db)
             return new SubmissionMeta(
                 S("NomeCompleto", r), S("Email", r), S("Telefone", r),
                 S("Pais", r), S("LocalRecolha", r),
-                numConcurso, numVenda, numTransporte, socioLabel, socioStatus, totalPago, aves);
+                numConcurso, numVenda, numTransporte,
+                numTransporteVende, numTransporteCompra,
+                socioLabel, socioStatus, totalPago, aves);
         }
         catch
         {
-            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, "—", "NaoSocio", 0m, new());
+            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, 0, 0, "—", "NaoSocio", 0m, new());
         }
     }
 
