@@ -379,6 +379,16 @@ def deploy_infra(ssh: paramiko.SSHClient) -> None:
     for mf in ("redirects.aob.map", "redirects.bva.map"):
         sudo(ssh, f"test -f /opt/aob/infra/nginx/{mf} && "
                   f"cp /opt/aob/infra/nginx/{mf} /etc/nginx/ || true", check=False)
+    # Pagina de manutencao servida como error_page 503 do vhost bva-p-socios.
+    # Sem isto, o vhost devolve 503 com corpo vazio.
+    sudo(ssh,
+        "if [ -f /opt/aob/infra/nginx/bva-p-socios-maintenance.html ]; then "
+        "  mkdir -p /var/www/aob-maintenance/bva-p-socios && "
+        "  cp /opt/aob/infra/nginx/bva-p-socios-maintenance.html "
+        "     /var/www/aob-maintenance/bva-p-socios/_maintenance.html && "
+        "  chown -R www-data:www-data /var/www/aob-maintenance; "
+        "fi",
+        check=False)
     # Symlinks sites-enabled
     for domain in ("aobarcelos.pt", "bva-p.aobarcelos.pt", "api.aobarcelos.pt",
                    "admin.aobarcelos.pt", "bva-p-socios.aobarcelos.pt"):
