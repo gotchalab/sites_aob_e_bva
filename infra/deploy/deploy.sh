@@ -44,8 +44,12 @@ deploy_dotnet() {
 deploy_next() {
     local name=$1 dir=$2 remote_dir=$3 service=$4
     echo "==> Build $name (Next.js $NEXT_VERSION)"
-    # Build corre localmente — NEXT_PUBLIC_* tem de estar no ambiente do chamador
-    (cd "$FRONTENDS/$dir" && npx next build)
+    # Build corre localmente e le NEXT_PUBLIC_* de .env.production do proprio frontend.
+    # Usa 'npm run build' (nao 'npx next build') para disparar o postbuild que:
+    #   1. patcha o webpack-runtime chunk path
+    #   2. valida que os NEXT_PUBLIC_* de .env.production ficaram embutidos
+    #      (falha o build se env vars da shell sobrescreveram silenciosamente)
+    (cd "$FRONTENDS/$dir" && npm run build)
 
     echo "==> Rsync $name → $remote_dir"
     # Envia apenas output compilado; node_modules NAO vai para o VPS.
@@ -94,6 +98,13 @@ deploy_infra() {
             sudo cp /opt/aob/infra/nginx/redirects.aob.map /etc/nginx/
         [[ -f /opt/aob/infra/nginx/redirects.bva.map ]] && \
             sudo cp /opt/aob/infra/nginx/redirects.bva.map /etc/nginx/
+        # Pagina de manutencao servida como error_page 503 do vhost bva-p-socios
+        if [[ -f /opt/aob/infra/nginx/bva-p-socios-maintenance.html ]]; then
+            sudo mkdir -p /var/www/aob-maintenance/bva-p-socios
+            sudo cp /opt/aob/infra/nginx/bva-p-socios-maintenance.html \
+                    /var/www/aob-maintenance/bva-p-socios/_maintenance.html
+            sudo chown -R www-data:www-data /var/www/aob-maintenance
+        fi
         # Symlinks sites-enabled
         for c in aobarcelos.pt bva-p.aobarcelos.pt api.aobarcelos.pt admin.aobarcelos.pt bva-p-socios.aobarcelos.pt; do
             [[ -f /etc/nginx/sites-available/$c.conf ]] && \
