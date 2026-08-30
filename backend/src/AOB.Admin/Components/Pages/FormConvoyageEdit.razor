@@ -1,5 +1,6 @@
 @page "/formularios/{Id:int}/edit"
 @attribute [Authorize]
+@using AOB.Application.Contracts
 @inject FormAdminService Forms
 @inject AppDbContext Db
 @inject NavigationManager Nav
@@ -353,6 +354,19 @@ else
             <button class="btn btn-sm btn-light" @onclick="AddSale">+ Adicionar ave venda</button>
         </div>
         <div class="card-body">
+            @if (_sales.Count > 0)
+            {
+                <div class="alert alert-success py-2 px-3 small mb-3 d-flex align-items-center flex-wrap gap-2">
+                    <i class="bi bi-gift"></i>
+                    <b>Aves oferecidas (isentas de pagamento):</b>
+                    <input type="number" min="0" max="@_sales.Count" step="1"
+                           class="form-control form-control-sm"
+                           style="width:80px"
+                           value="@_saleOfferedCount"
+                           @onchange="e => OnSaleOfferedChanged(StrOf(e))" />
+                    <span class="text-muted">de @_sales.Count · não contam para o cálculo de gaiolas e transporte.</span>
+                </div>
+            }
             @if (_sales.Count == 0)
             {
                 <p class="text-muted mb-0">Sem aves para venda.</p>
@@ -468,7 +482,14 @@ else
                     <li>
                         <b>Chegada prevista: 12h (hora belga).</b> O destinatário tem obrigatoriamente
                         de estar presente no local a essa hora para receber as aves —
-                        <b>não há condições para as guardar por mais tempo</b>.
+                        <b>não há condições para lhes dar água e alimentação</b> e não nos
+                        responsabilizamos por eventuais mortes.
+                    </li>
+                    <li>
+                        <b>Se comprou aves na Bélgica:</b> o remetente indicado tem de entregar as aves
+                        à <b>convoyage portuguesa no domingo de manhã</b>, e não antes. Entregas antecipadas
+                        não podem ser aceites — <b>não temos condições para dar água e alimentação às aves</b>
+                        e não nos responsabilizamos por eventuais mortes.
                     </li>
                     <li>
                         <b>Sujeito a validação de espaço:</b> limite total de <b>400 aves para transporte</b>;
@@ -478,6 +499,29 @@ else
                     </li>
                 </ul>
             </div>
+            @{
+                var totalTransportBirds = _transportGroups.Sum(g => g.Birds.Count);
+                var nCompraTr = _transportGroups.Where(g => g.Origem == "Compra").Sum(g => g.Birds.Count);
+                var nVendeTr = _transportGroups.Where(g => g.Origem == "Vende").Sum(g => g.Birds.Count);
+                var espacosTr = ConvoyagePricing.EspacosTransporteAdquirido(nCompraTr, nVendeTr);
+            }
+            @if (espacosTr > 0)
+            {
+                <div class="alert alert-info py-2 px-3 small mb-2">
+                    <b>Cálculo por espaço:</b> cada espaço na transportadora pode ir (PT→BE), voltar (BE→PT) ou ambos.
+                    Custo = <b>max(compra, vende) = max(@nCompraTr, @nVendeTr) = @espacosTr espaço@(espacosTr == 1 ? "" : "s")</b>.
+                </div>
+                <div class="alert alert-success py-2 px-3 small mb-3 d-flex align-items-center flex-wrap gap-2">
+                    <i class="bi bi-gift"></i>
+                    <b>Espaços oferecidos (isentos de pagamento):</b>
+                    <input type="number" min="0" max="@espacosTr" step="1"
+                           class="form-control form-control-sm"
+                           style="width:80px"
+                           value="@_transportOfferedCount"
+                           @onchange="e => OnTransportOfferedChanged(StrOf(e), espacosTr)" />
+                    <span class="text-muted">de @espacosTr · cada espaço isento não é faturado.</span>
+                </div>
+            }
             @if (_transportGroups.Count == 0)
             {
                 <p class="text-muted mb-0">Sem aves para transporte.</p>
@@ -524,39 +568,49 @@ else
                             @FldMsg(kOrigem)
                         </div>
 
-                        @if (g.Origem == "Compra")
+                        @if (g.Origem == "Compra" || g.Origem == "Vende")
                         {
-                            <div class="alert alert-info py-2 px-3 small mb-3">
-                                <b>Compra:</b> as aves viajam da Bélgica para Portugal e são entregues ao próprio
-                                criador (<b>@_model.NomeCompleto</b>@(string.IsNullOrWhiteSpace(_model.Telefone) ? "" : $" · {_model.Telefone}")),
-                                junto com as aves de concurso.
-                            </div>
-                        }
-                        else if (g.Origem == "Vende")
-                        {
-                            <div class="alert alert-warning py-2 px-3 small mb-3">
-                                <b>Venda:</b> as aves viajam de Portugal para a Bélgica e são entregues à pessoa
-                                indicada abaixo, que <b>tem de estar presente na chegada (12h hora belga)</b>.
-                            </div>
+                            var isCompra = g.Origem == "Compra";
+                            var role = isCompra ? "remetente" : "destinatário";
+                            var notasPlaceholder = isCompra
+                                ? "Notas adicionais sobre o remetente (ex.: local/hora de recolha, referência do vendedor)"
+                                : "Notas adicionais (ex.: instruções de entrega)";
+                            if (isCompra)
+                            {
+                                <div class="alert alert-warning py-2 px-3 small mb-3">
+                                    <b>Compra:</b> as aves viajam da Bélgica para Portugal e são entregues ao próprio
+                                    criador (<b>@_model.NomeCompleto</b>@(string.IsNullOrWhiteSpace(_model.Telefone) ? "" : $" · {_model.Telefone}")),
+                                    junto com as aves de concurso. Indique abaixo os dados do
+                                    <b>remetente na Bélgica</b> (quem entrega as aves à convoyage portuguesa).
+                                    <div class="mt-1"><b>Importante:</b> o remetente tem de entregar as aves à convoyage portuguesa no <b>domingo de manhã</b>.</div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="alert alert-warning py-2 px-3 small mb-3">
+                                    <b>Venda:</b> as aves viajam de Portugal para a Bélgica e são entregues à pessoa
+                                    indicada abaixo, que <b>tem de estar presente na chegada (12h hora belga)</b>.
+                                </div>
+                            }
                             <div class="row g-2 mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label small text-muted mb-1">Nome do destinatário na Bélgica *</label>
+                                    <label class="form-label small text-muted mb-1">Nome do @role na Bélgica *</label>
                                     <input id="fld-@kDestNome" class="form-control form-control-sm @Inv(kDestNome)" value="@g.DestinatarioNome"
                                            placeholder="Ex: Jan Peeters"
                                            @oninput="e => UpdateTransportGroup(gIdx, x => x with { DestinatarioNome = StrOf(e) })" />
                                     @FldMsg(kDestNome)
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small text-muted mb-1">WhatsApp do destinatário *</label>
+                                    <label class="form-label small text-muted mb-1">WhatsApp do @role *</label>
                                     <input id="fld-@kDestWa" class="form-control form-control-sm font-monospace @Inv(kDestWa)" value="@g.DestinatarioWhatsapp"
                                            placeholder="+32 470 123 456"
                                            @oninput="e => UpdateTransportGroup(gIdx, x => x with { DestinatarioWhatsapp = StrOf(e) })" />
                                     @FldMsg(kDestWa)
                                 </div>
                                 <div class="col-12">
-                                    <label class="form-label small text-muted mb-1">Notas do destinatário (opcional)</label>
+                                    <label class="form-label small text-muted mb-1">Notas do @role (opcional)</label>
                                     <textarea class="form-control form-control-sm" rows="2"
-                                              placeholder="Notas adicionais (ex.: instruções de entrega)"
+                                              placeholder="@notasPlaceholder"
                                               @oninput="e => UpdateTransportGroup(gIdx, x => x with { DestinatarioNotas = StrOf(e) })">@g.DestinatarioNotas</textarea>
                                 </div>
                             </div>
@@ -606,11 +660,104 @@ else
 
                         <button class="btn btn-sm btn-outline-primary mt-3"
                                 @onclick="() => AddBirdToGroup(gIdx)">
-                            + Adicionar outra ave para este destinatário
+                            + Adicionar outra ave @(g.Origem == "Compra" ? "deste remetente" : "para este destinatário")
                         </button>
                     </div>
                 }
             }
+        </div>
+    </div>
+
+    @* ── Resumo de custos ── *@
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header fw-semibold bg-primary text-white">6. Resumo de custos</div>
+        <div class="card-body">
+            @{ var cs = ComputeCostSummary(); }
+            <p class="small text-muted mb-3">
+                Valores calculados automaticamente com base nas aves inscritas, aves para venda e aves para transporte.
+                O transporte adquirido/cedido é cobrado por <b>espaço</b> (max entre compra e venda).
+                @if (cs.VendaOferecidas > 0 || cs.EspacosOferecidos > 0)
+                {
+                    <span> Oferecidos (isentos) já descontados.</span>
+                }
+            </p>
+            <div class="table-responsive border rounded">
+                <table class="table table-sm mb-0 align-middle">
+                    <tbody>
+                        @if (cs.Fixa > 0)
+                        {
+                            <tr>
+                                <td class="ps-3">Inscrição na exposição</td>
+                                <td class="text-end font-monospace pe-3" style="width:140px">@cs.Fixa.ToString("0.00") €</td>
+                            </tr>
+                        }
+                        @if (cs.NConcurso > 0)
+                        {
+                            <tr>
+                                <td class="ps-3">Inscrição por ave · @cs.NConcurso × @ConvoyagePricing.InscricaoPorAve.ToString("0.00") €</td>
+                                <td class="text-end font-monospace pe-3">@cs.Inscricoes.ToString("0.00") €</td>
+                            </tr>
+                        }
+                        @if (cs.TotalAvesBruto > 0)
+                        {
+                            <tr>
+                                <td class="ps-3">Aluguer de gaiola · @cs.TotalAvesBruto × @ConvoyagePricing.GaiolaPorAve.ToString("0.00") €</td>
+                                <td class="text-end font-monospace pe-3">@cs.GaiolasBruto.ToString("0.00") €</td>
+                            </tr>
+                            <tr>
+                                <td class="ps-3">Transporte @cs.SocioLabel · @cs.TotalAvesBruto × @cs.Tarifa.ToString("0.00") €</td>
+                                <td class="text-end font-monospace pe-3">@cs.TransporteBruto.ToString("0.00") €</td>
+                            </tr>
+                        }
+                        @if (cs.EspacosTransporte > 0)
+                        {
+                            <tr>
+                                <td class="ps-3">
+                                    Transporte de aves adquiridas/cedidas @cs.SocioLabel · @cs.EspacosTransporte espaço@(cs.EspacosTransporte == 1 ? "" : "s") × @cs.TarifaAdq.ToString("0.00") €
+                                    <span class="text-muted small">(max de @cs.NTransporteCompra compra e @cs.NTransporteVende venda)</span>
+                                </td>
+                                <td class="text-end font-monospace pe-3">@cs.TransporteAdquiridasBruto.ToString("0.00") €</td>
+                            </tr>
+                        }
+                        @if (cs.Quota > 0)
+                        {
+                            <tr>
+                                <td class="ps-3">Quota BVA Portugal</td>
+                                <td class="text-end font-monospace pe-3">@cs.Quota.ToString("0.00") €</td>
+                            </tr>
+                        }
+                        @if (cs.VendaOferecidas > 0 || cs.EspacosOferecidos > 0)
+                        {
+                            <tr class="table-success">
+                                <td class="ps-3">
+                                    <i class="bi bi-gift"></i>
+                                    Oferta (isento de pagamento):
+                                    @if (cs.VendaOferecidas > 0)
+                                    {
+                                        <span>@cs.VendaOferecidas ave@(cs.VendaOferecidas == 1 ? "" : "s") de venda</span>
+                                    }
+                                    @if (cs.VendaOferecidas > 0 && cs.EspacosOferecidos > 0)
+                                    {
+                                        <span> + </span>
+                                    }
+                                    @if (cs.EspacosOferecidos > 0)
+                                    {
+                                        <span>@cs.EspacosOferecidos espaço@(cs.EspacosOferecidos == 1 ? "" : "s") de transporte</span>
+                                    }
+                                </td>
+                                <td class="text-end font-monospace pe-3 fw-semibold text-success">−@cs.DescontoOferta.ToString("0.00") €</td>
+                            </tr>
+                        }
+                        <tr class="table-primary">
+                            <td class="ps-3 fw-semibold">TOTAL a pagar</td>
+                            <td class="text-end font-monospace pe-3 fw-semibold fs-5">@cs.Total.ToString("0.00") €</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="alert alert-warning mt-3 mb-0 py-2 px-3 small">
+                <b>Pagamento:</b> deve ser feito no valor certo, em dinheiro, num envelope fechado, e entregue juntamente com as aves.
+            </div>
         </div>
     </div>
 
@@ -743,6 +890,10 @@ else
     private List<TeamBird> _teams = new();
     private List<SaleBird> _sales = new();
     private List<TransportGroup> _transportGroups = new();
+    // Aves oferecidas (isentas de pagamento) — só editável no backoffice; o
+    // valor tem de ficar entre 0 e a contagem total da respectiva lista.
+    private int _saleOfferedCount;
+    private int _transportOfferedCount;
 
     private static readonly string[] TeamPositions = new[] { "A", "B", "C", "D" };
 
@@ -861,6 +1012,12 @@ else
             grp.Birds.Add(new TransportGroupBird(NormalizeSpecies(t.Especie), t.Anilha ?? ""));
         }
         foreach (var k in groupOrder) _transportGroups.Add(groupsByKey[k]);
+
+        _saleOfferedCount = Math.Clamp(_model.NumAvesVendaOferecidas, 0, _sales.Count);
+        var maxEspacos = ConvoyagePricing.EspacosTransporteAdquirido(
+            _transportGroups.Where(g => g.Origem == "Compra").Sum(g => g.Birds.Count),
+            _transportGroups.Where(g => g.Origem == "Vende").Sum(g => g.Birds.Count));
+        _transportOfferedCount = Math.Clamp(_model.NumAvesTransporteOferecidas, 0, maxEspacos);
     }
 
     // ── Species / Nomenclature helpers ────────────────────────────────────────
@@ -1036,6 +1193,12 @@ else
     private void RemoveSale(int idx)
     {
         if (idx >= 0 && idx < _sales.Count) _sales.RemoveAt(idx);
+        if (_saleOfferedCount > _sales.Count) _saleOfferedCount = _sales.Count;
+    }
+
+    private void OnSaleOfferedChanged(string? raw)
+    {
+        _saleOfferedCount = Math.Clamp(ParseIntOr(raw, 0), 0, _sales.Count);
     }
 
     private void UpdateSale(int idx, Func<SaleBird, SaleBird> mut)
@@ -1073,12 +1236,29 @@ else
     private void RemoveTransportGroup(int gIdx)
     {
         if (gIdx >= 0 && gIdx < _transportGroups.Count) _transportGroups.RemoveAt(gIdx);
+        ClampTransportOffered();
+    }
+
+    private void OnTransportOfferedChanged(string? raw, int max)
+    {
+        _transportOfferedCount = Math.Clamp(ParseIntOr(raw, 0), 0, max);
+    }
+
+    private void ClampTransportOffered()
+    {
+        var maxEspacos = ConvoyagePricing.EspacosTransporteAdquirido(
+            _transportGroups.Where(g => g.Origem == "Compra").Sum(g => g.Birds.Count),
+            _transportGroups.Where(g => g.Origem == "Vende").Sum(g => g.Birds.Count));
+        if (_transportOfferedCount > maxEspacos) _transportOfferedCount = maxEspacos;
+        if (_transportOfferedCount < 0) _transportOfferedCount = 0;
     }
 
     private void UpdateTransportGroup(int gIdx, Func<TransportGroup, TransportGroup> mut)
     {
         if (gIdx < 0 || gIdx >= _transportGroups.Count) return;
         _transportGroups[gIdx] = mut(_transportGroups[gIdx]);
+        // Mudar Origem altera o max de espaços; reclampar para não passar do limite.
+        ClampTransportOffered();
     }
 
     private void AddBirdToGroup(int gIdx)
@@ -1092,6 +1272,7 @@ else
         if (gIdx < 0 || gIdx >= _transportGroups.Count) return;
         var birds = _transportGroups[gIdx].Birds;
         if (bIdx >= 0 && bIdx < birds.Count && birds.Count > 1) birds.RemoveAt(bIdx);
+        ClampTransportOffered();
     }
 
     private void UpdateBirdInGroup(int gIdx, int bIdx, Func<TransportGroupBird, TransportGroupBird> mut)
@@ -1109,6 +1290,93 @@ else
         s = s.Replace(',', '.');
         return decimal.TryParse(s, System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0m;
+    }
+
+    private static int ParseIntOr(string? s, int def)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return def;
+        return int.TryParse(s, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : def;
+    }
+
+    // Snapshot de custos calculado ao vivo para o resumo (mesma fórmula do
+    // formulário público e do PDF). Aves de venda oferecidas descontam do total
+    // de venda; espaços de transporte oferecidos descontam do nº de espaços.
+    // O transporte adquirido é cobrado por espaço = max(compra, vende).
+    //
+    // Os campos *Bruto contêm o valor sem desconto de oferta (para exibir os
+    // preços "cheios" na tabela); DescontoOferta é a soma dos benefícios que
+    // aparece como linha negativa. custos.total (Total) já vem descontado.
+    private record CostSummary(
+        int NConcurso, int NVenda, int NTransporte,
+        int NTransporteCompra, int NTransporteVende, int EspacosTransporte,
+        int VendaOferecidas, int EspacosOferecidos,
+        int VendaFaturavel, int EspacosFaturaveis,
+        int TotalAvesBruto, int TotalAvesFaturavel,
+        bool SocioBva, string SocioLabel,
+        decimal Tarifa, decimal TarifaAdq,
+        decimal Fixa, decimal Inscricoes,
+        decimal GaiolasBruto, decimal TransporteBruto, decimal TransporteAdquiridasBruto,
+        decimal Gaiolas, decimal Transporte, decimal TransporteAdquiridas,
+        decimal DescontoOferta, decimal Quota, decimal Total);
+
+    private CostSummary ComputeCostSummary()
+    {
+        var nConcurso = _individuals.Count + _teams.Count * 4;
+        var nVenda = _sales.Count;
+        var nTransporte = _transportGroups.Sum(g => g.Birds.Count);
+        var nCompra = _transportGroups.Where(g => g.Origem == "Compra").Sum(g => g.Birds.Count);
+        var nVendeTr = _transportGroups.Where(g => g.Origem == "Vende").Sum(g => g.Birds.Count);
+        var espacos = ConvoyagePricing.EspacosTransporteAdquirido(nCompra, nVendeTr);
+        var vendaOferecidas = Math.Clamp(_saleOfferedCount, 0, nVenda);
+        var espacosOferecidos = Math.Clamp(_transportOfferedCount, 0, espacos);
+        var statusEnum = Enum.TryParse<SocioBvaStatus>(_model?.SocioBvaStatus ?? "NaoSocio", out var st)
+            ? st
+            : ((_model?.SocioBva ?? false) ? SocioBvaStatus.JaSocio : SocioBvaStatus.NaoSocio);
+        var socioBva = statusEnum != SocioBvaStatus.NaoSocio;
+        var tarifa = ConvoyagePricing.TransportePorAve(socioBva);
+        var tarifaAdq = ConvoyagePricing.TransporteAdquiridaPorAve(socioBva);
+        var custos = ConvoyagePricing.Compute(nConcurso, nVenda, nTransporte, statusEnum,
+            vendaOferecidas, espacosOferecidos, nCompra, nVendeTr);
+        var vendaFaturavel = nVenda - vendaOferecidas;
+        var espacosFaturaveis = espacos - espacosOferecidos;
+        var totalAvesBruto = nConcurso + nVenda;
+        var totalAvesFaturavel = nConcurso + vendaFaturavel;
+        var gaiolasBruto = ConvoyagePricing.GaiolaPorAve * totalAvesBruto;
+        var transporteBruto = tarifa * totalAvesBruto;
+        var transporteAdqBruto = tarifaAdq * espacos;
+        // Desconto = (bruto − faturável) para cada componente afectada por oferta.
+        var descontoOferta = (gaiolasBruto - custos.gaiolas)
+                             + (transporteBruto - custos.transporte)
+                             + (transporteAdqBruto - custos.transporteAdquiridas);
+        return new CostSummary(
+            NConcurso: nConcurso,
+            NVenda: nVenda,
+            NTransporte: nTransporte,
+            NTransporteCompra: nCompra,
+            NTransporteVende: nVendeTr,
+            EspacosTransporte: espacos,
+            VendaOferecidas: vendaOferecidas,
+            EspacosOferecidos: espacosOferecidos,
+            VendaFaturavel: vendaFaturavel,
+            EspacosFaturaveis: espacosFaturaveis,
+            TotalAvesBruto: totalAvesBruto,
+            TotalAvesFaturavel: totalAvesFaturavel,
+            SocioBva: socioBva,
+            SocioLabel: socioBva ? "(sócio BVA)" : "(não-sócio)",
+            Tarifa: tarifa,
+            TarifaAdq: tarifaAdq,
+            Fixa: custos.fixa,
+            Inscricoes: custos.inscricoes,
+            GaiolasBruto: gaiolasBruto,
+            TransporteBruto: transporteBruto,
+            TransporteAdquiridasBruto: transporteAdqBruto,
+            Gaiolas: custos.gaiolas,
+            Transporte: custos.transporte,
+            TransporteAdquiridas: custos.transporteAdquiridas,
+            DescontoOferta: descontoOferta,
+            Quota: custos.quota,
+            Total: custos.total);
     }
 
     private static string FormatPoint(ConvoyageCollectionPoint p) =>
@@ -1169,12 +1437,13 @@ else
             var g = _transportGroups[gi];
             if (string.IsNullOrWhiteSpace(g.Origem))
                 _fieldErrors[$"tg_{gi}_origem"] = "Selecione se é Compra ou Venda.";
-            if (g.Origem == "Vende")
+            if (g.Origem == "Compra" || g.Origem == "Vende")
             {
+                var role = g.Origem == "Compra" ? "remetente" : "destinatário";
                 if (string.IsNullOrWhiteSpace(g.DestinatarioNome))
-                    _fieldErrors[$"tg_{gi}_destNome"] = "Nome do destinatário obrigatório.";
+                    _fieldErrors[$"tg_{gi}_destNome"] = $"Nome do {role} obrigatório.";
                 if (string.IsNullOrWhiteSpace(g.DestinatarioWhatsapp))
-                    _fieldErrors[$"tg_{gi}_destWa"] = "WhatsApp do destinatário obrigatório.";
+                    _fieldErrors[$"tg_{gi}_destWa"] = $"WhatsApp do {role} obrigatório.";
             }
             for (int bi = 0; bi < g.Birds.Count; bi++)
             {
@@ -1237,21 +1506,30 @@ else
                 s.Anilha
             )).ToList();
 
-            // Compra: destinatário é o próprio criador (mesma regra do formulário público).
-            // Vende: usa os dados preenchidos no grupo.
+            // Compra: dados do remetente na Bélgica (quem entrega as aves à convoyage portuguesa).
+            // Vende: dados do destinatário na Bélgica (quem recebe as aves).
             var avesTransporte = _transportGroups.SelectMany(g =>
             {
                 var origem = string.IsNullOrWhiteSpace(g.Origem) ? "Compra" : g.Origem;
-                var destNome  = origem == "Compra" ? (_model?.NomeCompleto ?? "") : g.DestinatarioNome;
-                var destWa    = origem == "Compra" ? (_model?.Telefone ?? "")     : g.DestinatarioWhatsapp;
-                var destNotas = origem == "Compra"
-                    ? null
-                    : (string.IsNullOrWhiteSpace(g.DestinatarioNotas) ? null : g.DestinatarioNotas);
+                var destNotas = string.IsNullOrWhiteSpace(g.DestinatarioNotas) ? null : g.DestinatarioNotas;
                 return g.Birds.Select(b => new FormAdminService.ConvoyageAveTransporteEdit(
-                    b.Species, origem, b.Anilha, destNome, destWa, destNotas));
+                    b.Species, origem, b.Anilha, g.DestinatarioNome, g.DestinatarioWhatsapp, destNotas));
             }).ToList();
 
-            var payload = _model with { Aves = aves, AvesVenda = avesVenda, AvesTransporte = avesTransporte };
+            // Clamp defensivo caso o input tenha desalinhado (ex.: valor manual > total actual).
+            var saleOffered = Math.Clamp(_saleOfferedCount, 0, avesVenda.Count);
+            var maxEspacos = ConvoyagePricing.EspacosTransporteAdquirido(
+                avesTransporte.Count(a => a.Origem is "Compra" or "Adquirida"),
+                avesTransporte.Count(a => a.Origem is "Vende" or "Cedida"));
+            var transportOffered = Math.Clamp(_transportOfferedCount, 0, maxEspacos);
+            var payload = _model with
+            {
+                Aves = aves,
+                AvesVenda = avesVenda,
+                AvesTransporte = avesTransporte,
+                NumAvesVendaOferecidas = saleOffered,
+                NumAvesTransporteOferecidas = transportOffered,
+            };
             _error = await Forms.UpdateConvoyageAsync(Id, payload, resendEmails);
             if (_error is null)
             {

@@ -28,8 +28,10 @@ public static class InscricaoConvoyagePdfGenerator
         string BirdsForContest, string SeriesNumber, string SpeciesMutation, string Ring, string Pos,
         string TeamPrefix, string TotalContestBirds,
         string BirdsForSale, string BirthDate, string Sex, string Price, string TotalSaleBirds,
-        string BirdsForTransport, string ArrivalPart1, string ArrivalPart2, string ArrivalPart3,
-        string SubjectToConfirmation, string Origin, string Species, string RecipientWhatsapp, string NotesPrefix,
+        string BirdsForTransport,
+        string Origin, string Species,
+        string TransportRecipientHeader, string TransportSenderHeader, string TransportContactHeader,
+        string NotesPrefix,
         string Buy, string Sell, string TotalTransportBirds,
         string SexMale, string SexFemale, string SexUndef,
         string CostsSummary, string ExpoRegistration, string PerBird, string CageRental,
@@ -60,12 +62,10 @@ public static class InscricaoConvoyagePdfGenerator
             BirthDate: "Hatch date", Sex: "Sex", Price: "Price",
             TotalSaleBirds: "Total birds for sale: {0}",
             BirdsForTransport: "Transported birds (purchase / sale)",
-            ArrivalPart1: "Estimated arrival: ",
-            ArrivalPart2: "12:00 (Belgium time)",
-            ArrivalPart3: " — the recipient must be on-site to receive the birds.",
-            SubjectToConfirmation: "Subject to confirmation once registration closes.",
             Origin: "Direction", Species: "Species",
-            RecipientWhatsapp: "Recipient · WhatsApp",
+            TransportRecipientHeader: "Recipient in Belgium",
+            TransportSenderHeader: "Sender in Belgium",
+            TransportContactHeader: "Recipient / Sender in Belgium",
             NotesPrefix: "Notes: ",
             Buy: "Purchase", Sell: "Sale",
             TotalTransportBirds: "Total transported birds: {0}",
@@ -77,7 +77,7 @@ public static class InscricaoConvoyagePdfGenerator
             TransportLabel: "Transport {0} · {1} × {2:0.00} €",
             TransportSocio: "(BVA member rate)",
             TransportNonSocio: "(non-member rate)",
-            AcquiredTransport: "Transport of purchased / received birds {0} · {1} × {2:0.00} €",
+            AcquiredTransport: "Transport of purchased / delivered birds {0} · {1} space(s) × {2:0.00} €",
             BvaFee: "BVA Portugal membership",
             TotalToPay: "TOTAL to pay",
             PaymentLabel: "Payment: ",
@@ -104,12 +104,10 @@ public static class InscricaoConvoyagePdfGenerator
             BirthDate: "Data Nasc.", Sex: "Sexo", Price: "Preço",
             TotalSaleBirds: "Total de aves para venda: {0}",
             BirdsForTransport: "Aves para transporte (compra/venda)",
-            ArrivalPart1: "Chegada às ",
-            ArrivalPart2: "12h (hora belga)",
-            ArrivalPart3: " — o destinatário tem de estar presente para receber as aves.",
-            SubjectToConfirmation: "Sujeito a confirmação após o fecho das inscrições.",
             Origin: "Origem", Species: "Espécie",
-            RecipientWhatsapp: "Destinatário · WhatsApp",
+            TransportRecipientHeader: "Destinatário na Bélgica",
+            TransportSenderHeader: "Remetente na Bélgica",
+            TransportContactHeader: "Destinatário / Remetente na Bélgica",
             NotesPrefix: "Notas: ",
             Buy: "Compra", Sell: "Vende",
             TotalTransportBirds: "Total de aves para transporte: {0}",
@@ -121,7 +119,7 @@ public static class InscricaoConvoyagePdfGenerator
             TransportLabel: "Transporte {0} · {1} × {2:0.00} €",
             TransportSocio: "(sócio BVA)",
             TransportNonSocio: "(não-sócio)",
-            AcquiredTransport: "Transporte de aves adquiridas/cedidas {0} · {1} × {2:0.00} €",
+            AcquiredTransport: "Transporte de aves adquiridas/cedidas {0} · {1} espaço(s) × {2:0.00} €",
             BvaFee: "Quota BVA Portugal",
             TotalToPay: "TOTAL a pagar",
             PaymentLabel: "Pagamento: ",
@@ -135,7 +133,11 @@ public static class InscricaoConvoyagePdfGenerator
         int year,
         byte[]? logoBytes = null,
         PdfLang lang = PdfLang.Pt,
-        bool includeCosts = true)
+        bool includeCosts = true,
+        // Aves oferecidas (isentas de pagamento) marcadas pelo admin ao editar.
+        // Descontadas dos cálculos de gaiola/transporte no resumo de custos.
+        int numAvesVendaOferecidas = 0,
+        int numAvesTransporteOferecidas = 0)
     {
         var t = L(lang);
         var doc = new PdfDocument();
@@ -487,38 +489,97 @@ public static class InscricaoConvoyagePdfGenerator
         // ── Tabela de aves para transporte (compra/venda) ────────────────────
         if (r.AvesTransporte is { Count: > 0 })
         {
-            EnsureRowSpace(20 + 34 + 16 + 26);
+            var hasVende = r.AvesTransporte.Any(a => a.Origem == OrigemAveTransporte.Vende);
+            var hasCompra = r.AvesTransporte.Any(a => a.Origem == OrigemAveTransporte.Compra);
+
+            var amberBg  = new XSolidBrush(XColor.FromArgb(255, 248, 225));
+            var amberBar = new XSolidBrush(XColor.FromArgb(245, 166, 35));
+            var fNotice  = new XFont("Arial", 9,  XFontStyleEx.Regular);
+            var fNoticeB = new XFont("Arial", 9,  XFontStyleEx.Bold);
+
+            // Constrói cada aviso como lista de (texto, font) — permite word-wrap
+            // com bold intercalado. Textos alinhados com as checkboxes do form.
+            var noticeParagraphs = new List<List<(string text, XFont font)>>();
+            if (hasVende)
+            {
+                noticeParagraphs.Add(lang == PdfLang.En
+                    ? new List<(string, XFont)>
+                    {
+                        ("Sale birds (Portugal → Belgium): the ", fNotice),
+                        ("recipient in Belgium", fNoticeB),
+                        (" must be present when we arrive, scheduled for ", fNotice),
+                        ("12:00 (Belgium time)", fNoticeB),
+                        (", to receive the birds. Without conditions to provide water and food after that time, BVA ", fNotice),
+                        ("assumes no responsibility for bird deaths", fNoticeB),
+                        (".", fNotice),
+                    }
+                    : new List<(string, XFont)>
+                    {
+                        ("Aves para venda (Portugal → Bélgica): o ", fNotice),
+                        ("destinatário na Bélgica", fNoticeB),
+                        (" terá de estar presente na hora da nossa chegada, prevista para as ", fNotice),
+                        ("12h (hora belga)", fNoticeB),
+                        (", para receber as aves. Sem condições para dar água e alimentação após essa hora, a BVA ", fNotice),
+                        ("não se responsabiliza por mortes", fNoticeB),
+                        (".", fNotice),
+                    });
+            }
+            if (hasCompra)
+            {
+                noticeParagraphs.Add(lang == PdfLang.En
+                    ? new List<(string, XFont)>
+                    {
+                        ("Purchase birds (Belgium → Portugal): the ", fNotice),
+                        ("sender in Belgium", fNoticeB),
+                        (" may only deliver the birds to the convoy ", fNotice),
+                        ("on Sunday morning", fNoticeB),
+                        (". Without conditions to provide water and food before that time, BVA ", fNotice),
+                        ("assumes no responsibility for bird deaths", fNoticeB),
+                        (".", fNotice),
+                    }
+                    : new List<(string, XFont)>
+                    {
+                        ("Aves para compra (Bélgica → Portugal): o ", fNotice),
+                        ("remetente na Bélgica", fNoticeB),
+                        (" só pode entregar as aves à convoyage ", fNotice),
+                        ("no domingo de manhã", fNoticeB),
+                        (". Sem condições para dar água e alimentação antes desse momento, a BVA ", fNotice),
+                        ("não se responsabiliza por mortes", fNoticeB),
+                        (".", fNotice),
+                    });
+            }
+
+            var noticeW = pageW - 2 * margin;
+            var padX = 10.0;
+            var lineH = 13.0;
+            var contentMaxW = noticeW - 4 - 2 * padX;
+            var paragraphGap = 5.0;
+
+            // Pré-calcula linhas por parágrafo para dimensionar a caixa.
+            var paragraphLineCounts = noticeParagraphs
+                .Select(p => CountWrappedLines(g, p, contentMaxW))
+                .ToArray();
+            var totalLines = paragraphLineCounts.Sum();
+            var noticeTextH = totalLines * lineH
+                + (noticeParagraphs.Count > 1 ? (noticeParagraphs.Count - 1) * paragraphGap : 0);
+            var noticeH = 12 + noticeTextH;
+
+            EnsureRowSpace(20 + noticeH + 16 + 26);
             DrawSectionTitle(t.BirdsForTransport);
             y -= 2;
 
+            g.DrawRectangle(amberBg,  new XRect(margin, y - 3, noticeW, noticeH));
+            g.DrawRectangle(amberBar, new XRect(margin, y - 3, 4, noticeH));
+
+            var contentX = margin + 4 + padX;
+            var cursorY = y + 8;
+            for (int pi = 0; pi < noticeParagraphs.Count; pi++)
             {
-                var amberBg  = new XSolidBrush(XColor.FromArgb(255, 248, 225));
-                var amberBar = new XSolidBrush(XColor.FromArgb(245, 166, 35));
-                var fNotice  = new XFont("Arial", 9,  XFontStyleEx.Regular);
-                var fNoticeB = new XFont("Arial", 9,  XFontStyleEx.Bold);
-                var line1a = t.ArrivalPart1;
-                var line1b = t.ArrivalPart2;
-                var line1c = t.ArrivalPart3;
-                var line2  = t.SubjectToConfirmation;
-                var noticeW = pageW - 2 * margin;
-                var padX = 10.0;
-                var lineH = 13.0;
-                var noticeH = 8 + 2 * lineH;
-
-                g.DrawRectangle(amberBg,  new XRect(margin, y - 3, noticeW, noticeH));
-                g.DrawRectangle(amberBar, new XRect(margin, y - 3, 4, noticeH));
-
-                var tx = margin + 4 + padX;
-                var ty = y + 8;
-                g.DrawString(line1a, fNotice,  ink, new XPoint(tx, ty));
-                var w1a = g.MeasureString(line1a, fNotice).Width;
-                g.DrawString(line1b, fNoticeB, ink, new XPoint(tx + w1a, ty));
-                var w1b = g.MeasureString(line1b, fNoticeB).Width;
-                g.DrawString(line1c, fNotice,  ink, new XPoint(tx + w1a + w1b, ty));
-                g.DrawString(line2,  fNotice,  ink, new XPoint(tx, ty + lineH));
-
-                y += noticeH + 6;
+                cursorY = DrawWrappedSegments(g, noticeParagraphs[pi], contentX, cursorY, contentMaxW, lineH);
+                if (pi < noticeParagraphs.Count - 1) cursorY += paragraphGap;
             }
+
+            y += noticeH + 6;
 
             // Colunas: Origem | Espécie | Anilha | Destinatário (nome + WhatsApp)
             double tc0 = 55;                        // Origem
@@ -526,14 +587,21 @@ public static class InscricaoConvoyagePdfGenerator
             double tc3 = 175;                       // Destinatário
             double tc1 = tableW - tc0 - tc2 - tc3;  // Espécie (resto)
 
+            var contactHeader = (hasVende, hasCompra) switch
+            {
+                (true, false) => t.TransportRecipientHeader,
+                (false, true) => t.TransportSenderHeader,
+                _             => t.TransportContactHeader,
+            };
+
             void DrawTransporteHeader()
             {
                 var xh = margin;
                 g.DrawRectangle(darkBlue, new XRect(xh, y - 11, tableW, 16));
-                g.DrawString(t.Origin,            fontHeader, white, new XPoint(xh + 3, y)); xh += tc0;
-                g.DrawString(t.Species,           fontHeader, white, new XPoint(xh + 3, y)); xh += tc1;
-                g.DrawString(t.Ring,              fontHeader, white, new XPoint(xh + 3, y)); xh += tc2;
-                g.DrawString(t.RecipientWhatsapp, fontHeader, white, new XPoint(xh + 3, y));
+                g.DrawString(t.Origin,     fontHeader, white, new XPoint(xh + 3, y)); xh += tc0;
+                g.DrawString(t.Species,    fontHeader, white, new XPoint(xh + 3, y)); xh += tc1;
+                g.DrawString(t.Ring,       fontHeader, white, new XPoint(xh + 3, y)); xh += tc2;
+                g.DrawString(contactHeader, fontHeader, white, new XPoint(xh + 3, y));
                 y += 16;
             }
 
@@ -590,8 +658,18 @@ public static class InscricaoConvoyagePdfGenerator
             var numAvesConcurso = avesConcurso.Count;
             var numAvesVenda2 = r.AvesVenda?.Count ?? 0;
             var numAvesTransporte2 = r.AvesTransporte?.Count ?? 0;
-            var totalAvesConta = numAvesConcurso + numAvesVenda2;
-            var c = ConvoyagePricing.Compute(numAvesConcurso, numAvesVenda2, numAvesTransporte2, r.SocioBvaStatus);
+            var numAvesTransporteCompra = r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Compra) ?? 0;
+            var numAvesTransporteVende = r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Vende) ?? 0;
+            var espacosTransporteTotais = ConvoyagePricing.EspacosTransporteAdquirido(
+                numAvesTransporteCompra, numAvesTransporteVende);
+            var vendaOferecidas = Math.Clamp(numAvesVendaOferecidas, 0, numAvesVenda2);
+            var espacosOferecidos = Math.Clamp(numAvesTransporteOferecidas, 0, espacosTransporteTotais);
+            var vendaFaturavel = numAvesVenda2 - vendaOferecidas;
+            var espacosFaturaveis = espacosTransporteTotais - espacosOferecidos;
+            var totalAvesConta = numAvesConcurso + vendaFaturavel;
+            var c = ConvoyagePricing.Compute(numAvesConcurso, numAvesVenda2, numAvesTransporte2, r.SocioBvaStatus,
+                vendaOferecidas, espacosOferecidos,
+                numAvesTransporteCompra, numAvesTransporteVende);
             var tarifa = ConvoyagePricing.TransportePorAve(r.SocioBva);
             var tarifaAdq = ConvoyagePricing.TransporteAdquiridaPorAve(r.SocioBva);
             var socioLabel = r.SocioBva ? t.TransportSocio : t.TransportNonSocio;
@@ -632,20 +710,46 @@ public static class InscricaoConvoyagePdfGenerator
                 shadeToggle = !shadeToggle;
             }
 
+            // Mostramos as linhas com valores BRUTOS (sem oferta) e a seguir a
+            // linha "Oferta" com o desconto negativo — deixa o benefício visível.
+            var totalAvesBruto = numAvesConcurso + numAvesVenda2;
+            var gaiolasBruto = ConvoyagePricing.GaiolaPorAve * totalAvesBruto;
+            var transporteBruto = tarifa * totalAvesBruto;
+            var transporteAdqBruto = tarifaAdq * espacosTransporteTotais;
+            var descontoOferta = (gaiolasBruto - c.gaiolas)
+                                 + (transporteBruto - c.transporte)
+                                 + (transporteAdqBruto - c.transporteAdquiridas);
+
             if (c.fixa > 0)
                 CostRowAuto(t.ExpoRegistration, $"{c.fixa:0.00} €");
             if (numAvesConcurso > 0)
                 CostRowAuto(string.Format(t.PerBird, numAvesConcurso, ConvoyagePricing.InscricaoPorAve),
                     $"{c.inscricoes:0.00} €");
-            if (totalAvesConta > 0)
-                CostRowAuto(string.Format(t.CageRental, totalAvesConta, ConvoyagePricing.GaiolaPorAve),
-                    $"{c.gaiolas:0.00} €");
-            if (totalAvesConta > 0)
-                CostRowAuto(string.Format(t.TransportLabel, socioLabel, totalAvesConta, tarifa),
-                    $"{c.transporte:0.00} €");
-            if (numAvesTransporte2 > 0)
-                CostRowAuto(string.Format(t.AcquiredTransport, socioLabel, numAvesTransporte2, tarifaAdq),
-                    $"{c.transporteAdquiridas:0.00} €");
+            if (totalAvesBruto > 0)
+                CostRowAuto(string.Format(t.CageRental, totalAvesBruto, ConvoyagePricing.GaiolaPorAve),
+                    $"{gaiolasBruto:0.00} €");
+            if (totalAvesBruto > 0)
+                CostRowAuto(string.Format(t.TransportLabel, socioLabel, totalAvesBruto, tarifa),
+                    $"{transporteBruto:0.00} €");
+            if (espacosTransporteTotais > 0)
+                CostRowAuto(string.Format(t.AcquiredTransport, socioLabel, espacosTransporteTotais, tarifaAdq),
+                    $"{transporteAdqBruto:0.00} €");
+            if (descontoOferta > 0)
+            {
+                var partes = new List<string>();
+                if (vendaOferecidas > 0)
+                    partes.Add(lang == PdfLang.En
+                        ? $"{vendaOferecidas} sale bird{(vendaOferecidas == 1 ? "" : "s")}"
+                        : $"{vendaOferecidas} ave{(vendaOferecidas == 1 ? "" : "s")} de venda");
+                if (espacosOferecidos > 0)
+                    partes.Add(lang == PdfLang.En
+                        ? $"{espacosOferecidos} transport space{(espacosOferecidos == 1 ? "" : "s")}"
+                        : $"{espacosOferecidos} espaço{(espacosOferecidos == 1 ? "" : "s")} de transporte");
+                var lbl = lang == PdfLang.En
+                    ? $"Offer (exempt from payment): {string.Join(" + ", partes)}"
+                    : $"Oferta (isento de pagamento): {string.Join(" + ", partes)}";
+                CostRowAuto(lbl, $"−{descontoOferta:0.00} €");
+            }
             if (r.SocioBvaStatus == SocioBvaStatus.PagaComInscricao)
                 CostRowAuto(t.BvaFee, $"{c.quota:0.00} €");
 
@@ -792,6 +896,95 @@ public static class InscricaoConvoyagePdfGenerator
 
         if (current.Length > 0) lines.Add(current);
         return lines.ToArray();
+    }
+
+    // Desenha uma sequência de segmentos (texto+font) com word-wrap; permite
+    // trocar de font (ex.: bold) no meio do parágrafo. Devolve o Y após a
+    // última linha desenhada. Usado nos avisos amarelos.
+    private static double DrawWrappedSegments(
+        XGraphics g,
+        List<(string text, XFont font)> segments,
+        double x,
+        double y,
+        double maxWidth,
+        double lineHeight)
+    {
+        var currentLine = new List<(string word, XFont font, double width, double spaceAfterWidth)>();
+        double lineWidth = 0;
+
+        void Flush()
+        {
+            if (currentLine.Count == 0) return;
+            double cursor = x;
+            for (int i = 0; i < currentLine.Count; i++)
+            {
+                var item = currentLine[i];
+                g.DrawString(item.word, item.font, XBrushes.Black, new XPoint(cursor, y));
+                cursor += item.width;
+                if (i < currentLine.Count - 1) cursor += item.spaceAfterWidth;
+            }
+            y += lineHeight;
+            currentLine.Clear();
+            lineWidth = 0;
+        }
+
+        foreach (var (text, font) in segments)
+        {
+            if (string.IsNullOrEmpty(text)) continue;
+            var words = text.Split(' ', StringSplitOptions.None);
+            for (int i = 0; i < words.Length; i++)
+            {
+                var word = words[i];
+                if (string.IsNullOrEmpty(word)) continue;
+                double wWidth = g.MeasureString(word, font).Width;
+                double sWidth = g.MeasureString(" ", font).Width;
+                double addWidth = (currentLine.Count == 0 ? 0 : currentLine[^1].spaceAfterWidth) + wWidth;
+                if (currentLine.Count > 0 && lineWidth + addWidth > maxWidth)
+                    Flush();
+                currentLine.Add((word, font, wWidth, sWidth));
+                lineWidth += (currentLine.Count == 1 ? 0 : sWidth) + wWidth;
+            }
+        }
+
+        Flush();
+        return y;
+    }
+
+    // Conta as linhas que resultarão do word-wrap sem desenhar. Usado para
+    // pré-dimensionar caixas de aviso antes de renderizar.
+    private static int CountWrappedLines(
+        XGraphics g,
+        List<(string text, XFont font)> segments,
+        double maxWidth)
+    {
+        int lines = 1;
+        double lineWidth = 0;
+        double lastSpace = 0;
+
+        foreach (var (text, font) in segments)
+        {
+            if (string.IsNullOrEmpty(text)) continue;
+            var words = text.Split(' ', StringSplitOptions.None);
+            foreach (var word in words)
+            {
+                if (string.IsNullOrEmpty(word)) continue;
+                double wWidth = g.MeasureString(word, font).Width;
+                double sWidth = g.MeasureString(" ", font).Width;
+                double addWidth = (lineWidth == 0 ? 0 : lastSpace) + wWidth;
+                if (lineWidth > 0 && lineWidth + addWidth > maxWidth)
+                {
+                    lines++;
+                    lineWidth = wWidth;
+                }
+                else
+                {
+                    lineWidth += (lineWidth == 0 ? 0 : lastSpace) + wWidth;
+                }
+                lastSpace = sWidth;
+            }
+        }
+
+        return lines;
     }
 
     private const double RowLineHeight = 12.0;

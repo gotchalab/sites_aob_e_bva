@@ -508,7 +508,9 @@ else
             var r = doc.RootElement;
             string S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? (v.GetString() ?? "") : "";
             int I(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetInt32() : 0;
-            return new ConvoyageMeta(S("NomeCompleto"), S("Email"), S("Pais"), S("LocalRecolha"), I("TotalAves"));
+            // Total = concurso + venda + transporte (mesma soma que o TransportPlanner usa para carga).
+            var totalAves = I("TotalAves") + I("TotalAvesVenda") + I("TotalAvesTransporte");
+            return new ConvoyageMeta(S("NomeCompleto"), S("Email"), S("Pais"), S("LocalRecolha"), totalAves);
         }
         catch
         {

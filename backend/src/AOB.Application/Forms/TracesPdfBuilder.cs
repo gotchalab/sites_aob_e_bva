@@ -82,9 +82,10 @@ public static class TracesPdfBuilder
         var especieAnilha = new List<(string, string)>();
         especieAnilha.AddRange(aves.Select(a => (SpeciesGenus.Full(a.Species), a.RingNumber)));
 
-        // Aves para venda + aves transporte com origem "Vende" — vêm apenas do
-        // snapshot em DataJson (não há tabela estruturada). Ambas viajam com o
-        // criador para o destino, logo entram na declaração TRACES.
+        // Aves para venda e aves de transporte (compra/venda) — vêm apenas do
+        // snapshot em DataJson (não há tabela estruturada). Todas entram na
+        // declaração TRACES: as de venda/vende viajam com o criador na ida, as
+        // de compra viajam com ele no retorno; o documento cobre o transporte.
         try
         {
             using var doc = JsonDocument.Parse(submission.DataJson);
@@ -103,8 +104,6 @@ public static class TracesPdfBuilder
             {
                 foreach (var a in tArr.EnumerateArray())
                 {
-                    var origem = GetStr(a, "Origem") ?? "";
-                    if (!string.Equals(origem, "Vende", StringComparison.OrdinalIgnoreCase)) continue;
                     var esp = GetStr(a, "Especie") ?? "";
                     var an = GetStr(a, "Anilha") ?? "";
                     if (!string.IsNullOrWhiteSpace(an))

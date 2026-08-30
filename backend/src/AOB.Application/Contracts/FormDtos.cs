@@ -150,19 +150,51 @@ public static class ConvoyagePricing
     public static decimal TransporteAdquiridaPorAve(bool socioBva) =>
         socioBva ? TransporteAdquiridaSocio : TransporteAdquiridaNaoSocio;
 
+    // Número de espaços de transporte de aves adquiridas/cedidas. Um espaço é
+    // uma gaiola no camião que pode ir (PT→BE), voltar (BE→PT) ou ambos —
+    // portanto o custo é max(nº aves compra, nº aves vende), não a soma.
+    public static int EspacosTransporteAdquirido(int numAvesCompra, int numAvesVende) =>
+        Math.Max(Math.Max(0, numAvesCompra), Math.Max(0, numAvesVende));
+
+    // numAvesVendaOferecidas: aves de venda isentas de pagamento (oferecidas
+    // pelo criador). Continuam a existir na inscrição (e a ocupar espaço na
+    // sala de vendas / camião), mas são descontadas dos custos de gaiolas e
+    // transporte de exposição.
+    //
+    // numAvesTransporteOferecidas: NÃO é o nº de aves oferecidas — é o nº de
+    // *espaços* isentos. Cada espaço isento subtrai uma linha à factura, mas
+    // o espaço físico continua a existir. Semanticamente equivalente a "N
+    // gaiolas oferecidas ao criador".
+    //
+    // numAvesTransporteCompra / numAvesTransporteVende: nº de aves por sentido.
+    // Se ambos passados, os espaços = max(compra, vende). Se algum for null,
+    // fallback ao comportamento antigo (numAvesTransporte = nº espaços) para
+    // compat com chamadores que não têm breakdown.
+    //
+    // A exposição fixa mantém-se enquanto houver aves físicas de
+    // concurso/venda (mesmo que todas sejam oferecidas).
     public static (decimal fixa, decimal inscricoes, decimal gaiolas, decimal transporte, decimal transporteAdquiridas, decimal quota, decimal total)
-        Compute(int numAvesConcurso, int numAvesVenda, int numAvesTransporte, SocioBvaStatus status)
+        Compute(int numAvesConcurso, int numAvesVenda, int numAvesTransporte, SocioBvaStatus status,
+            int numAvesVendaOferecidas = 0, int numAvesTransporteOferecidas = 0,
+            int? numAvesTransporteCompra = null, int? numAvesTransporteVende = null)
     {
         var socioBva = status != SocioBvaStatus.NaoSocio;
         var transporte = TransportePorAve(socioBva);
         var transporteAdquiridaUnit = TransporteAdquiridaPorAve(socioBva);
-        var totalAvesConcursoVenda = numAvesConcurso + numAvesVenda;
-        var temExposicao = totalAvesConcursoVenda > 0;
+        var vendaFaturavel = Math.Max(0, numAvesVenda - Math.Max(0, numAvesVendaOferecidas));
+        var espacosTotais = (numAvesTransporteCompra is int c && numAvesTransporteVende is int v)
+            ? EspacosTransporteAdquirido(c, v)
+            : Math.Max(0, numAvesTransporte);
+        var espacosFaturaveis = Math.Max(0, espacosTotais - Math.Max(0, numAvesTransporteOferecidas));
+        var totalAvesConcursoVendaFaturavel = numAvesConcurso + vendaFaturavel;
+        // Exposição fixa aplica-se enquanto houver aves físicas (mesmo que todas as
+        // pagas sejam concurso; se só houver aves oferecidas, também há exposição).
+        var temExposicao = (numAvesConcurso + numAvesVenda) > 0;
         var fixa = temExposicao ? InscricaoExposicao : 0m;
         var inscricoes = InscricaoPorAve * numAvesConcurso;
-        var gaiolas = GaiolaPorAve * totalAvesConcursoVenda;
-        var transporteTotal = transporte * totalAvesConcursoVenda;
-        var transporteAdquiridas = transporteAdquiridaUnit * numAvesTransporte;
+        var gaiolas = GaiolaPorAve * totalAvesConcursoVendaFaturavel;
+        var transporteTotal = transporte * totalAvesConcursoVendaFaturavel;
+        var transporteAdquiridas = transporteAdquiridaUnit * espacosFaturaveis;
         var quota = status == SocioBvaStatus.PagaComInscricao ? QuotaBva : 0m;
         var total = fixa + inscricoes + gaiolas + transporteTotal + transporteAdquiridas + quota;
         return (fixa, inscricoes, gaiolas, transporteTotal, transporteAdquiridas, quota, total);
