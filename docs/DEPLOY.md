@@ -57,17 +57,29 @@ Passar um ou mais como argumentos:
 | Target | O que faz |
 |---|---|
 | `infra` | Sincroniza `infra/` → `/opt/aob/infra/`, copia nginx confs / systemd units, valida e recarrega nginx. Também copia a página de manutenção do `bva-p-socios`. |
-| `api` | `dotnet publish AOB.Api` + `AOB.Migrator` → `/opt/aob/api/` + restart `aob-api`. |
+| `api` | `dotnet publish AOB.Api` + `AOB.Migrator` → `/opt/aob/api/`, **corre `AOB.Migrator db-update` automaticamente** e depois restart `aob-api`. Se a migração falhar, o restart não acontece e a API antiga continua. |
 | `admin` | `dotnet publish AOB.Admin` → `/opt/aob/admin/` + restart `aob-admin`. |
 | `aobarcelos` | `npm run build` local → upload `.next/` + `public/` + `package.json` + `next.config.mjs` → `/opt/aob/aobarcelos/` + restart `aob-aobarcelos`. |
 | `bva` | Idem, para `bva-p.aobarcelos.pt`. |
-| `uploads` | Sincroniza `/uploads/` local → `/var/www/uploads/` (usa `--keep-newer-files`, nunca sobrescreve ficheiros mais recentes no VPS). Correr depois do `AOB.Migrator`. |
+| `uploads` | Sincroniza `/uploads/` local → `/var/www/uploads/` (usa `--keep-newer-files`, nunca sobrescreve ficheiros mais recentes no VPS). Correr depois do `api` (que faz o Migrator). |
+| `migrations` | Corre `AOB.Migrator db-update` sozinho. Raramente útil — o target `api` já o faz. Só usar quando queres aplicar migrations sem substituir os binários da API. |
 | `services` | Pára Apache2, arranca nginx + todos os `aob-*`. |
 | `setup` | Bootstrap do VPS (dotnet, next, users, dirs, PG). Idempotente mas **só correr no primeiro provisioning**. |
 | `db` | **DESTRUTIVO** — faz `pg_dump` da BD local e restaura em `aob_prod` no VPS (com `--clean --if-exists`). Só usar em bootstrap ou refresh consciente da BD. |
 | `all` | `setup db infra api admin uploads aobarcelos bva services` — só para primeiro provisioning. |
 
-**Deploy corrente típico:** `infra api admin aobarcelos bva services` (sem `setup`, sem `db`).
+**Deploy corrente típico:** `infra api admin aobarcelos bva services` (sem `setup`, sem `db`; as migrations correm dentro de `api`).
+
+### Migrations automáticas
+
+O target `api` corre `AOB.Migrator db-update` no VPS entre o upload dos binários e o restart do `aob-api`:
+
+- Executado como `aob-api` com `/etc/aob/api.env` carregado (mesma connection string que a API).
+- Idempotente — só aplica migrations pendentes (o comando lista quais antes de aplicar).
+- Se falhar, o `deploy_api` aborta antes do restart e a API antiga continua a servir com o schema antigo (rollback natural).
+- Para saltar (raríssimo, ex.: hotfix só do binário sem tocar em schema): `AOB_SKIP_MIGRATIONS=1 python infra/deploy/deploy.py api`.
+
+O comando `AOB.Migrator migrate` (sem `db-update`) faz outra coisa completamente diferente — migra dados do Joomla legacy. **Não confundir.**
 
 ---
 
@@ -128,7 +140,7 @@ sudo journalctl -u aob-api -n 50
 sudo systemctl status aob-api
 ```
 - Erros de connection string ou credenciais → verificar `/etc/aob/api.env`.
-- Migrations pendentes → correr `sudo -u aob-api /opt/aob/api/AOB.Migrator migrate`.
+- Se por algum motivo o target `api` foi corrido com `AOB_SKIP_MIGRATIONS=1` e há schema em falta → correr `python infra/deploy/deploy.py migrations` (aplica pendentes com o `AOB.Migrator` já no VPS).
 
 ### nginx: `nginx -t` falha após `deploy_infra`
 - Alteração num `.conf` inválida — o `deploy.py` já valida antes de `reload`; se falhar, o config **não é aplicado** e o nginx continua com a versão anterior.

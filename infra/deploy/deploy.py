@@ -11,17 +11,23 @@ Uso:
 
 Targets:
     setup       — instala dependencias no VPS (dotnet 10, next@15.5.4, users, dirs)
-    db          — faz dump da BD local e restaura no VPS
-    api         — build + deploy AOB.Api + AOB.Migrator
+    db          — faz dump da BD local e restaura no VPS (DESTRUTIVO; so em bootstrap)
+    api         — build + deploy AOB.Api + AOB.Migrator; corre migrations
+                  (AOB.Migrator db-update) automaticamente antes do restart
     admin       — build + deploy AOB.Admin
     aobarcelos  — deploy .next/ do frontend aobarcelos.pt
     bva         — deploy .next/ do frontend bva-p.aobarcelos.pt
     uploads     — sincroniza /uploads/ local (Uploads:RootPath) para /var/www/uploads/
                   (correr apos AOB.Migrator; nunca sobrescreve ficheiros mais recentes
                   no VPS — respeita uploads criados pelo backoffice de admin)
+    migrations  — corre AOB.Migrator db-update sozinho (raro; api ja o faz)
     infra       — copia nginx.conf + systemd units + daemon-reload
     services    — para Apache2, arranca nginx e todos os servicos AOB
     all         — setup + db + infra + api + admin + uploads + aobarcelos + bva + services
+
+Env opcional:
+    AOB_SKIP_MIGRATIONS=1  — salta AOB.Migrator db-update em deploy api
+                              (raro; documenta o porque num commit se usares)
 
 Variaveis de ambiente (opcionais):
     AOB_SSH_HOST  — default: 51.83.40.43
@@ -288,8 +294,43 @@ def _dotnet_publish(project_name: str, out_dir: Path) -> None:
     )
 
 
+def run_migrations(ssh: paramiko.SSHClient) -> None:
+    """Corre EF Core `AOB.Migrator db-update` no VPS. Idempotente.
+
+    Usa o mesmo user (aob-api) e EnvironmentFile (/etc/aob/api.env) do
+    serviço aob-api, para partilhar ConnectionStrings__Default. Se nao
+    houver migrations pendentes, o Migrator imprime uma linha e sai 0.
+
+    Set AOB_SKIP_MIGRATIONS=1 para saltar (raramente util; documenta o
+    porque na mensagem de commit se o fizeres).
+    """
+    if os.environ.get("AOB_SKIP_MIGRATIONS") in ("1", "true", "yes"):
+        print("\n[migrations] AOB_SKIP_MIGRATIONS activo — a saltar db-update.")
+        return
+
+    print("\n[migrations] AOB.Migrator db-update (aob-api, /etc/aob/api.env)")
+    # 'set -a' exporta automaticamente as vars definidas pelo source do
+    # envfile; 'set +a' desliga. cwd tem de ser /opt/aob/api para o
+    # AppDbContext carregar appsettings.json correcto.
+    sudo(ssh,
+        "-u aob-api bash -c '"
+        "set -a && . /etc/aob/api.env && set +a && "
+        "cd /opt/aob/api && "
+        "/opt/dotnet/dotnet AOB.Migrator.dll db-update"
+        "'"
+    )
+
+
 def deploy_api(ssh: paramiko.SSHClient) -> None:
-    """dotnet publish AOB.Api + AOB.Migrator -> /opt/aob/api + restart."""
+    """dotnet publish AOB.Api + AOB.Migrator -> /opt/aob/api, aplica
+    migrations pendentes, depois restart do aob-api.
+
+    A ordem (upload -> migrations -> restart) e deliberada:
+      - upload primeiro para ter o Migrator novo no VPS
+      - migrations depois, com o Migrator novo mas antes do restart
+      - se migrations falharem, o restart nao acontece e a API antiga
+        continua a servir (rollback natural)
+    """
     print("\n[api] dotnet publish AOB.Api")
     out = Path(tempfile.mkdtemp())
     _dotnet_publish("AOB.Api", out)
@@ -300,6 +341,10 @@ def deploy_api(ssh: paramiko.SSHClient) -> None:
     print("[api] Upload -> /opt/aob/api")
     upload_tar(ssh, out, "/opt/aob/api")
     sudo(ssh, "chown -R aob-api:aob-api /opt/aob/api")
+
+    run_migrations(ssh)
+
+    print("[api] Restart aob-api")
     sudo(ssh, "systemctl restart aob-api && systemctl status --no-pager aob-api | head -6")
     shutil.rmtree(out, ignore_errors=True)
 
@@ -493,6 +538,10 @@ TARGETS: dict = {
     "uploads":    deploy_uploads,
     "infra":      deploy_infra,
     "services":   start_services,
+    # Migrations correm sempre dentro do deploy_api antes do restart. Este
+    # target sozinho serve para aplicar migrations sem redeploy da API
+    # (raro, mas util em investigacao).
+    "migrations": run_migrations,
 }
 
 ALL_ORDER = ["setup", "db", "infra", "api", "admin", "uploads", "aobarcelos", "bva", "services"]
@@ -564,13 +613,14 @@ def main() -> None:
         ssh.close()
 
     print("\nDeploy concluido com sucesso.")
-    if "services" in order:
-        print("\nProximos passos manuais no VPS:")
+    if "setup" in order:
+        # Proximos passos so relevantes em bootstrap inicial (target setup).
+        print("\nProximos passos manuais no VPS (so no primeiro provisioning):")
         print("  1. Criar /etc/aob/*.env (ver infra/deploy/env-samples/)")
         print("  2. systemctl restart aob-api aob-admin")
         print("  3. certbot --nginx -d aobarcelos.pt -d www.aobarcelos.pt \\")
         print("       -d bva-p.aobarcelos.pt -d api.aobarcelos.pt -d admin.aobarcelos.pt")
-        print("  4. sudo -u aob-api /opt/aob/api/AOB.Migrator migrate")
+        print("     (migrations correm agora automaticamente dentro de deploy api)")
 
 
 if __name__ == "__main__":
