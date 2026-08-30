@@ -36,8 +36,9 @@ Pre-requisitos:
     - paramiko
 
 Depois do primeiro bootstrap (manual):
-    1. Criar /etc/aob/api.env, /etc/aob/admin.env, /etc/aob/aobarcelos.env,
-       /etc/aob/bva-portugal.env a partir dos env.sample em infra/deploy/env-samples/
+    1. Criar /etc/aob/smtp.env (fonte unica da SMTP key, partilhado por
+       aob-api e aob-admin), /etc/aob/api.env, /etc/aob/admin.env a partir
+       dos samples em infra/deploy/env-samples/
     2. certbot --nginx -d aobarcelos.pt -d www.aobarcelos.pt \\
          -d bva-p.aobarcelos.pt -d api.aobarcelos.pt -d admin.aobarcelos.pt
     3. Correr `python deploy.py infra api admin aobarcelos bva services`
@@ -224,7 +225,9 @@ def main() -> None:
 
     print("\nBootstrap concluido.")
     print("\nProximos passos manuais no VPS:")
-    print("  1. Criar /etc/aob/*.env (ver infra/deploy/env-samples/)")
+    print("  1. Criar /etc/aob/smtp.env, /etc/aob/api.env, /etc/aob/admin.env")
+    print("     (ver infra/deploy/env-samples/*.sample). smtp.env e a fonte")
+    print("     unica da Brevo SMTP key, partilhada por aob-api e aob-admin.")
     print("  2. certbot --nginx -d aobarcelos.pt -d www.aobarcelos.pt \\")
     print("       -d bva-p.aobarcelos.pt -d api.aobarcelos.pt -d admin.aobarcelos.pt")
     print("  3. Deploy do codigo actual:")

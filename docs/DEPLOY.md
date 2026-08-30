@@ -117,7 +117,23 @@ Ficheiros `.env.production` **de cada frontend** (`frontends/aobarcelos/`, `fron
 
 ### Backend — runtime (lidos pelo processo `dotnet`)
 
-Em `/etc/aob/api.env`, `/etc/aob/admin.env` no VPS (criados manualmente a partir de `infra/deploy/env-samples/*.env.sample`). Contêm connection string PostgreSQL, credenciais SMTP, chaves de API, etc.
+Três ficheiros em `/etc/aob/` no VPS (criados manualmente a partir de `infra/deploy/env-samples/*.env.sample`):
+
+| Ficheiro | Consumido por | Conteúdo |
+|---|---|---|
+| `smtp.env` | `aob-api` **e** `aob-admin` | Só `Smtp__*` (Brevo). **Fonte única — rodar a key faz-se aqui.** |
+| `api.env` | `aob-api` | Connection string PG, JWT, Turnstile, Cors, Revalidate URLs, Uploads |
+| `admin.env` | `aob-admin` | Connection string PG, `Api__BaseUrl`, Uploads |
+
+Os systemd units carregam `smtp.env` **antes** do env próprio, portanto os ficheiros `api.env`/`admin.env` não devem redefinir `Smtp__*` (fica silenciosamente sobreposto — evita divergência).
+
+**Rodar a SMTP key do Brevo** (quando falha com `535: 5.7.8 Authentication failed`):
+
+1. Gerar nova key em https://app.brevo.com/settings/keys/smtp (se aparecer "Desactivada", **reactivar não funciona** — gerar nova).
+2. Copiar valor completo NA HORA (só mostrado 1 vez).
+3. No VPS, editar `/etc/aob/smtp.env` linha `Smtp__Password=`.
+4. `sudo systemctl restart aob-api aob-admin`.
+5. Confirmar: `sudo journalctl -u aob-api | grep "Email enviado"` deve mostrar linhas novas após próximo envio.
 
 ---
 
@@ -150,6 +166,10 @@ sudo systemctl status aob-api
 ```
 - Erros de connection string ou credenciais → verificar `/etc/aob/api.env`.
 - Se por algum motivo o target `api` foi corrido com `AOB_SKIP_MIGRATIONS=1` e há schema em falta → correr `python infra/deploy/deploy.py migrations` (aplica pendentes com o `AOB.Migrator` já no VPS).
+
+### Email a falhar com `535: 5.7.8 Authentication failed`
+
+SMTP key do Brevo inválida/desactivada. Ver secção "Rodar a SMTP key" acima. O erro afecta **ambos** os serviços que enviam email (`aob-api` para submissões públicas e `aob-admin` para reenvios do backoffice) — daí a key ter fonte única em `smtp.env` e os dois systemd units serem reiniciados juntos.
 
 ### nginx: `nginx -t` falha após `deploy_infra`
 - Alteração num `.conf` inválida — o `deploy.py` já valida antes de `reload`; se falhar, o config **não é aplicado** e o nginx continua com a versão anterior.
