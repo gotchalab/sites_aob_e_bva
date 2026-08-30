@@ -86,24 +86,26 @@ def run_migrations(ssh) -> None:
         print("\n[migrations] AOB_SKIP_MIGRATIONS activo - a saltar db-update.")
         return
 
-    print("\n[migrations] AOB.Migrator db-update (root, /etc/aob/api.env)")
-    # Corre como root porque /etc/aob/api.env e 0640 (root:root ou
-    # root:aob-api) - o systemd EnvironmentFile do aob-api.service e lido
-    # pelo systemd como root antes de descer para aob-api, mas nos aqui
-    # precisamos de fazer o source manualmente e o aob-api nao tem read
-    # directo ao ficheiro. O Migrator so faz DDL EF Core e as conexoes
-    # usam 'aobapp' via ConnectionStrings__Default, portanto o UID do
-    # processo e irrelevante para o efeito.
+    print("\n[migrations] AOB.Migrator db-update (via systemd-run + EnvironmentFile)")
+    # Nao fazer 'source /etc/aob/api.env' em bash: o formato systemd
+    # EnvironmentFile permite valores nao-quoted com espacos (ex.:
+    # AOB_ORG=Associacao Ornitologica ...), que bash interpreta como
+    # 'command not found'. Alem disso o ficheiro e 0640 root:root e
+    # 'sudo -u aob-api' perde o acesso ao ler.
     #
-    # 'set -a' exporta automaticamente as vars definidas pelo source do
-    # envfile; 'set +a' desliga. cwd tem de ser /opt/aob/api para o
-    # AppDbContext carregar appsettings.json.
-    inner = (
-        "set -a && . /etc/aob/api.env && set +a && "
-        "cd /opt/aob/api && "
+    # systemd-run cria uma transient unit que carrega o EnvironmentFile
+    # exactamente como o aob-api.service faz. --uid/--gid corre como
+    # aob-api; --wait bloqueia ate terminar; --pipe conecta stdin/out;
+    # --collect faz GC da unit apos exit. --quiet elimina o ruido de
+    # "Running as unit: run-XXXX.service".
+    run(ssh,
+        "sudo systemd-run "
+        "--uid=aob-api --gid=aob-api "
+        "--property=EnvironmentFile=/etc/aob/api.env "
+        "--property=WorkingDirectory=/opt/aob/api "
+        "--wait --pipe --collect --quiet "
         "/opt/dotnet/dotnet AOB.Migrator.dll db-update"
     )
-    sudo(ssh, inner)
 
 
 def deploy_api(ssh) -> None:
