@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
+# ============================================================================
+# DEPRECATED — usar `python infra/deploy/deploy.py` (ver docs/DEPLOY.md).
+#
+# Este script foi a primeira versao do deploy (bash + rsync + ssh). Nao
+# funciona em Windows sem WSL/MSYS2 com rsync instalado; o `deploy.py`
+# (paramiko) e cross-platform e e o unico usado desde o setup actual.
+#
+# Mantido so para referencia. Nao correr em producao.
+# ============================================================================
+#
 # Deploy do local para VPS via rsync + restart systemd.
 # Uso: ./deploy.sh [api|admin|aobarcelos|bva|infra|install-next|all]
 #

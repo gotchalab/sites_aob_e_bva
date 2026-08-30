@@ -1,130 +1,171 @@
-# Deploy — AOB Frontends
+# Deploy — AOB / BVA
 
-Referência rápida para desenvolvimento local e deploy para produção.
+Referência de deploy para produção (VPS OVH, Debian 11) via `infra/deploy/deploy.py`.
+
+Ver [CONTRIBUTING.md](../CONTRIBUTING.md) para o fluxo git (`dev` → `main` → tag → deploy).
 
 ---
 
-## Comandos do dia-a-dia
+## Pré-requisitos (uma só vez)
 
-### Desenvolvimento local
+### Local (Windows / Linux / macOS)
+
+- **.NET SDK 10** (`dotnet --version` → `10.x`).
+- **Node.js 20+** e `npm` (para os frontends Next.js).
+- **Python 3.10+** com `paramiko`:
+  ```bash
+  pip install paramiko
+  ```
+- **Chave SSH** em `~/.ssh/id_ed25519` autorizada no VPS (ou define `AOB_SSH_KEY`).
+- **`npm install`** feito em `frontends/aobarcelos/` e `frontends/bva-portugal/` (o deploy usa o `node_modules` local para o build).
+- Ficheiros `.env.production` populados em cada frontend (ver secção “Variáveis de ambiente”).
+
+### VPS (feito pelo target `setup` do `deploy.py` — **não repetir**)
+
+Instala `.NET 10`, `next@15.5.4` global em `/usr/bin/next`, cria users `aob-api`, `aob-admin`, `aob-web`, diretórios em `/opt/aob/`, `/var/www/uploads/`, role e BD PostgreSQL. Ver `infra/deploy/deploy.py::setup`.
+
+Ficheiros `/etc/aob/*.env` (secrets prod) **têm de ser criados manualmente** a partir de `infra/deploy/env-samples/`.
+
+---
+
+## Fluxo normal (deploy de release)
 
 ```bash
-# aobarcelos.pt  →  http://localhost:3000
-cd frontends/aobarcelos
-npm run dev
+# 1) Merge dev -> main e tag (ver CONTRIBUTING.md)
+git checkout main && git pull
+git merge --no-ff dev -m "release: vX.Y.Z"
+git tag -a vX.Y.Z -m "Descrição curta"
+git push origin main --follow-tags
 
-# bva-p.aobarcelos.pt  →  http://localhost:3001
-cd frontends/bva-portugal
-npm run dev
+# 2) Deploy: builds locais + upload SFTP + restart systemd
+python infra/deploy/deploy.py infra api admin aobarcelos bva services
 ```
 
-Os ficheiros `.env.local` já apontam para `http://localhost:5135` (API local).
+`AOB_SSH_HOST` tem default `51.83.40.43` — para outro host, `AOB_SSH_HOST=... python infra/deploy/deploy.py ...`.
 
-### Deploy para produção
-
+O `deploy.py` **avisa** se estiveres num branch diferente de `main` (não bloqueia). Para bloquear estritamente (ex.: CI):
 ```bash
-# 1. Compilar e montar pacote auto-suficiente
-cd frontends/aobarcelos  &&  npm run build:prod
-cd frontends/bva-portugal &&  npm run build:prod
-
-# 2. Enviar para a VPS (para, faz upload, arranca, testa)
-cd d:/PROJETOS/aob
-python infra/deploy/_redeploy_frontends.py
+AOB_STRICT_BRANCH=1 python infra/deploy/deploy.py ...
 ```
-
-Só isto. A VPS não executa nenhum `npm install`.
 
 ---
 
-## O que o `build:prod` faz
+## Targets disponíveis
 
-```
-npm run build:prod
-    │
-    ├─ next build          (produção, sem eval, sem source maps)
-    ├─ patch-build.mjs     (corrige chunk path se necessário — bug Windows)
-    └─ build-prod.mjs
-           ├─ cria dist/
-           ├─ copia dist/.next/         ← build output
-           ├─ copia dist/public/        ← assets estáticos
-           ├─ copia dist/node_modules/  ← react, react-dom, lucide-react
-           │    (copiados do node_modules local, sem reinstalar)
-           └─ copia dist/next.config.mjs + package.json
-```
+Passar um ou mais como argumentos:
 
-O pacote `dist/` (~40 MB) é auto-suficiente. O `next` não está incluído porque já está instalado globalmente na VPS (`/usr/lib/node_modules/next`).
-
----
-
-## Ambientes e variáveis
-
-| Ficheiro | Quando é usado |
+| Target | O que faz |
 |---|---|
-| `.env.local` | `npm run dev` (dev local) |
-| `.env.production` | `npm run build` / `npm run build:prod` (produção) |
+| `infra` | Sincroniza `infra/` → `/opt/aob/infra/`, copia nginx confs / systemd units, valida e recarrega nginx. Também copia a página de manutenção do `bva-p-socios`. |
+| `api` | `dotnet publish AOB.Api` + `AOB.Migrator` → `/opt/aob/api/` + restart `aob-api`. |
+| `admin` | `dotnet publish AOB.Admin` → `/opt/aob/admin/` + restart `aob-admin`. |
+| `aobarcelos` | `npm run build` local → upload `.next/` + `public/` + `package.json` + `next.config.mjs` → `/opt/aob/aobarcelos/` + restart `aob-aobarcelos`. |
+| `bva` | Idem, para `bva-p.aobarcelos.pt`. |
+| `uploads` | Sincroniza `/uploads/` local → `/var/www/uploads/` (usa `--keep-newer-files`, nunca sobrescreve ficheiros mais recentes no VPS). Correr depois do `AOB.Migrator`. |
+| `services` | Pára Apache2, arranca nginx + todos os `aob-*`. |
+| `setup` | Bootstrap do VPS (dotnet, next, users, dirs, PG). Idempotente mas **só correr no primeiro provisioning**. |
+| `db` | **DESTRUTIVO** — faz `pg_dump` da BD local e restaura em `aob_prod` no VPS (com `--clean --if-exists`). Só usar em bootstrap ou refresh consciente da BD. |
+| `all` | `setup db infra api admin uploads aobarcelos bva services` — só para primeiro provisioning. |
 
-**aobarcelos** `.env.production`:
-```
-NEXT_PUBLIC_API_URL=https://aobarcelos.pt
-NEXT_PUBLIC_SITE_SLUG=aob
-NEXT_PUBLIC_TURNSTILE_SITEKEY=1x00000000000000000000AA   ← substituir por chave real
-```
-
-**bva-portugal** `.env.production`:
-```
-NEXT_PUBLIC_API_URL=https://bva-p.aobarcelos.pt
-NEXT_PUBLIC_SITE_SLUG=bva
-NEXT_PUBLIC_TURNSTILE_SITEKEY=1x00000000000000000000AA   ← substituir por chave real
-```
-
-As variáveis `NEXT_PUBLIC_*` são compiladas no bundle — alterar requer rebuild.
-
----
-
-## Porquê não usar `output: "standalone"`
-
-O modo `standalone` do Next.js cria symlinks em `node_modules/` durante o build. No Windows sem **Developer Mode** activo, a criação de symlinks sem admin falha com `EPERM`.
-
-A solução adoptada (`build:prod`) contorna isto copiando directamente as dependências de runtime do `node_modules` local para `dist/`, usando `realpathSync` para resolver os symlinks do pnpm antes de copiar.
-
-Se activares o Developer Mode (Settings → Sistema → Para Programadores → Modo de Programador: ON), podes mudar para `output: "standalone"` em `next.config.mjs` — o deploy fica mais simples e o pacote mais pequeno.
-
----
-
-## Backend (.NET)
-
-```bash
-# Build + deploy do backoffice (admin.aobarcelos.pt)
-python infra/deploy/deploy.py admin
-
-# Build + deploy da API (api.aobarcelos.pt)
-python infra/deploy/deploy.py api
-```
+**Deploy corrente típico:** `infra api admin aobarcelos bva services` (sem `setup`, sem `db`).
 
 ---
 
 ## Serviços na VPS
 
-| Serviço | Porta | URL |
+| Serviço systemd | Porta interna | URL público |
 |---|---|---|
 | `aob-api` | 5000 | `https://api.aobarcelos.pt` |
 | `aob-admin` | 5001 | `https://admin.aobarcelos.pt` |
 | `aob-aobarcelos` | 3000 | `https://aobarcelos.pt` |
 | `aob-bva-portugal` | 3001 | `https://bva-p.aobarcelos.pt` |
+| _(nenhum)_ | — | `https://bva-p-socios.aobarcelos.pt` → **503 estático** (área de sócios legacy desactivada por compromisso de segurança; ver `infra/nginx/bva-p-socios.aobarcelos.pt.conf`) |
+
+Cada `aob-*.service` está em `infra/systemd/`.
+
+---
+
+## Variáveis de ambiente
+
+### Frontends — build (compilado no bundle, alterar exige rebuild)
+
+Ficheiros `.env.production` **de cada frontend** (`frontends/aobarcelos/`, `frontends/bva-portugal/`). São lidos pelo `next build` local.
+
+- Valores dev-only vão em `.env.development.local` (não em `.env.local`, senão o `next build` usa-os em produção).
+- Não pôr `NEXT_PUBLIC_*` na shell antes de correr o build — o Next dá prioridade à shell e o `.env.production` é ignorado silenciosamente. O `postbuild` (`patch-build.mjs`) valida a coincidência entre `.env.production` e o output; se algum valor não aparecer nos chunks, o build **falha** e o deploy aborta.
+
+### Backend — runtime (lidos pelo processo `dotnet`)
+
+Em `/etc/aob/api.env`, `/etc/aob/admin.env` no VPS (criados manualmente a partir de `infra/deploy/env-samples/*.env.sample`). Contêm connection string PostgreSQL, credenciais SMTP, chaves de API, etc.
+
+---
+
+## O que o `patch-build.mjs` faz (postbuild dos frontends)
+
+Corre automaticamente após `next build`:
+
+1. **Corrige o chunk path do `webpack-runtime.js`** — bug de builds Windows sem *Developer Mode* activo.
+2. **Injecta `dataRoutes` / `staticRoutes` / `dynamicRoutes` vazios em `routes-manifest.json`** — bug do Next 15.5 no Windows em builds só-App-Router. Sem isto o `next start` no Linux crasha com `TypeError: routesManifest.dataRoutes is not iterable` em loop e o nginx devolve 502.
+3. **Valida que os `NEXT_PUBLIC_*` de `.env.production` ficaram embutidos** no build. Se algum não aparecer nos chunks, falha o postbuild (deploy aborta por `set -euo pipefail` / `check=True` no paramiko).
+
+---
+
+## Troubleshooting
+
+### `502 Bad Gateway` num frontend Next.js
+```bash
+sudo journalctl -u aob-aobarcelos -n 50
+sudo journalctl -u aob-bva-portugal -n 50
+```
+
+- **`TypeError: routesManifest.dataRoutes is not iterable`** → build Windows sem o patch. Actualiza o `patch-build.mjs` (já corrigido nesta versão), rebuild e redeploy só do frontend afectado.
+- **`Cannot find module 'react/jsx-runtime'`** → next global no VPS em versão errada. `next --version` deve dar `15.5.4`.
+- **Envs erradas embutidas** → verificar `.env.production` e re-fazer `npm run build` (o postbuild bloqueia se estiver desalinhado).
+
+### `aob-api` / `aob-admin` não arrancam
+```bash
+sudo journalctl -u aob-api -n 50
+sudo systemctl status aob-api
+```
+- Erros de connection string ou credenciais → verificar `/etc/aob/api.env`.
+- Migrations pendentes → correr `sudo -u aob-api /opt/aob/api/AOB.Migrator migrate`.
+
+### nginx: `nginx -t` falha após `deploy_infra`
+- Alteração num `.conf` inválida — o `deploy.py` já valida antes de `reload`; se falhar, o config **não é aplicado** e o nginx continua com a versão anterior.
+
+### Deploy relata sucesso mas o site continua 502
+Os serviços marcam “active” no arranque do processo, mas podem crashar 1s depois. Confirmar sempre com curl externo:
+```bash
+for u in aobarcelos.pt bva-p.aobarcelos.pt api.aobarcelos.pt admin.aobarcelos.pt; do
+  echo -n "$u → "; curl -s -o /dev/null -w "%{http_code}\n" -m 10 https://$u/
+done
+```
+
+### Página de manutenção do `bva-p-socios` sem body
+- O ficheiro `infra/nginx/bva-p-socios-maintenance.html` tem de estar em `/var/www/aob-maintenance/bva-p-socios/_maintenance.html` no VPS. O `deploy_infra` copia-o automaticamente.
+
+---
+
+## Rollback
 
 ```bash
-# Ver estado de todos os serviços
-python infra/deploy/_final_verify.py
+# Reverter um ou mais commits e re-deploy
+git checkout main
+git revert <sha>...
+git push origin main
+python infra/deploy/deploy.py <alvo>
+```
+
+Ou, para reverter só um frontend rapidamente sem rebuild:
+```bash
+git checkout <tag-anterior> -- frontends/<name>/
+python infra/deploy/deploy.py <aobarcelos|bva>
 ```
 
 ---
 
-## Troubleshooting rápido
+## Notas históricas (não usar)
 
-| Sintoma | Causa | Fix |
-|---|---|---|
-| `Cannot find module 'react/jsx-runtime'` | `node_modules/react` ausente na VPS | Usar `npm run build:prod` em vez de `npm run build` |
-| `EvalError: Code generation from strings disallowed` | Build gerou `eval()` no middleware | `devtool: false` em `next.config.mjs` — já configurado |
-| `Cannot find module './435.js'` | Chunk path errado no webpack-runtime | `patch-build.mjs` corre no postbuild — já configurado |
-| Site retorna 500 após deploy | Ver logs: `sudo journalctl -u aob-aobarcelos -n 30` | — |
-| Artigo apagado continua no frontend | ISR cache — admin chama revalidação automaticamente | — |
+- **`infra/deploy/deploy.sh`** — versão bash que exige `rsync` no PATH. Não funciona em Windows sem WSL/MSYS2 com rsync. Mantido só para referência; usar `deploy.py`.
+- **`frontends/*/scripts/build-prod.mjs` + `dist/`** — abordagem alternativa que empacotava `dist/` com `node_modules` seleccionados. Não é usada pelo `deploy.py` actual (envia `.next/` directo; o `next` global do VPS traz react/react-dom bundleados).
+- **`infra/deploy/_archive/`** — scripts one-off de debug de sessões anteriores. Podem ser removidos.
