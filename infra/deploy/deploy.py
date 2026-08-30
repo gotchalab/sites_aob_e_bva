@@ -86,21 +86,24 @@ def run_migrations(ssh) -> None:
         print("\n[migrations] AOB_SKIP_MIGRATIONS activo - a saltar db-update.")
         return
 
-    print("\n[migrations] AOB.Migrator db-update (aob-api, /etc/aob/api.env)")
-    # Nao usar o helper sudo(): ele faz 'sudo bash -c "..."' e nos aqui
-    # precisamos de 'sudo -u aob-api bash -c "..."'. Passamos via run()
-    # com sudo explicito.
+    print("\n[migrations] AOB.Migrator db-update (root, /etc/aob/api.env)")
+    # Corre como root porque /etc/aob/api.env e 0640 (root:root ou
+    # root:aob-api) - o systemd EnvironmentFile do aob-api.service e lido
+    # pelo systemd como root antes de descer para aob-api, mas nos aqui
+    # precisamos de fazer o source manualmente e o aob-api nao tem read
+    # directo ao ficheiro. O Migrator so faz DDL EF Core e as conexoes
+    # usam 'aobapp' via ConnectionStrings__Default, portanto o UID do
+    # processo e irrelevante para o efeito.
+    #
     # 'set -a' exporta automaticamente as vars definidas pelo source do
     # envfile; 'set +a' desliga. cwd tem de ser /opt/aob/api para o
-    # AppDbContext carregar appsettings.json correcto.
+    # AppDbContext carregar appsettings.json.
     inner = (
         "set -a && . /etc/aob/api.env && set +a && "
         "cd /opt/aob/api && "
         "/opt/dotnet/dotnet AOB.Migrator.dll db-update"
     )
-    # Quoting: o inner nao contem aspas simples, portanto envolver em '...'
-    # e seguro sem escaping adicional.
-    run(ssh, f"sudo -u aob-api bash -c '{inner}'")
+    sudo(ssh, inner)
 
 
 def deploy_api(ssh) -> None:
