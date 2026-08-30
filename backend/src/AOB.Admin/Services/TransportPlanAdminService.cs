@@ -585,6 +585,16 @@ public class TransportPlanAdminService(AppDbContext db)
             .OrderBy(f => f.SubmittedAt)
             .ToListAsync();
 
+        // Fonte de verdade para o local de recolha: a FK LocalRecolhaId; o campo textual
+        // no JSON pode faltar em inscrições antigas.
+        var pointsById = overview.Zones.ToDictionary(z => z.Id, z => z);
+        string LocalRecolhaLabelFor(FormSubmission s, string jsonFallback)
+        {
+            if (s.LocalRecolhaId is int pid && pointsById.TryGetValue(pid, out var pt))
+                return string.IsNullOrWhiteSpace(pt.Location) ? pt.Name : $"{pt.Name} ({pt.Location})";
+            return string.IsNullOrWhiteSpace(jsonFallback) ? "" : jsonFallback;
+        }
+
         var inscricoes = submissoes.Select(s =>
         {
             var m = ParseSubmission(s.DataJson);
@@ -595,7 +605,7 @@ public class TransportPlanAdminService(AppDbContext db)
                 Email: m.Email,
                 Telefone: m.Telefone,
                 Pais: m.Pais,
-                LocalRecolha: m.LocalRecolha,
+                LocalRecolha: LocalRecolhaLabelFor(s, m.LocalRecolha),
                 NumAvesConcurso: m.NumAvesConcurso,
                 NumAvesVenda: m.NumAvesVenda,
                 NumAvesTransporte: m.NumAvesTransporte,
