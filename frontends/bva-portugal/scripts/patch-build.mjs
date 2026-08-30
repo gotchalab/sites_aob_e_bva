@@ -1,7 +1,10 @@
 // Executado automaticamente apos "next build" via "postbuild" no package.json
-// Faz duas coisas:
+// Faz tres coisas:
 //   1. Corrige o chunk path do webpack-runtime (bug de builds Windows sem Developer Mode)
-//   2. Valida que os NEXT_PUBLIC_* de .env.production ficaram embutidos no build.
+//   2. Injecta dataRoutes/staticRoutes/dynamicRoutes vazios em routes-manifest.json
+//      quando missing. Next 15.5 no Windows omite estas chaves em builds so-App-Router
+//      e o `next start` crasha com "routesManifest.dataRoutes is not iterable".
+//   3. Valida que os NEXT_PUBLIC_* de .env.production ficaram embutidos no build.
 //      Env vars passadas pela shell sobrescrevem o .env.production silenciosamente
 //      (foi assim que uma vez fomos para producao com o Turnstile testing sitekey em
 //      vez do real). Se algum valor esperado nao aparecer, o build falha e o deploy
@@ -21,6 +24,23 @@ if (existsSync(runtimePath)) {
   }
 } else {
   console.log("patch-build: webpack-runtime.js nao encontrado, a saltar patch");
+}
+
+const routesManifestPath = resolve(".next/routes-manifest.json");
+if (existsSync(routesManifestPath)) {
+  const manifest = JSON.parse(readFileSync(routesManifestPath, "utf8"));
+  const missing = [];
+  for (const key of ["dataRoutes", "staticRoutes", "dynamicRoutes"]) {
+    if (!(key in manifest)) { manifest[key] = []; missing.push(key); }
+  }
+  if (missing.length > 0) {
+    writeFileSync(routesManifestPath, JSON.stringify(manifest), "utf8");
+    console.log(`patch-build: injectadas chaves vazias em routes-manifest.json: ${missing.join(", ")}`);
+  } else {
+    console.log("patch-build: routes-manifest.json OK");
+  }
+} else {
+  console.log("patch-build: routes-manifest.json nao encontrado, a saltar patch");
 }
 
 const envPath = resolve(".env.production");
