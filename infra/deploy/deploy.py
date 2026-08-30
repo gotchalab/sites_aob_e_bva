@@ -87,16 +87,20 @@ def run_migrations(ssh) -> None:
         return
 
     print("\n[migrations] AOB.Migrator db-update (aob-api, /etc/aob/api.env)")
+    # Nao usar o helper sudo(): ele faz 'sudo bash -c "..."' e nos aqui
+    # precisamos de 'sudo -u aob-api bash -c "..."'. Passamos via run()
+    # com sudo explicito.
     # 'set -a' exporta automaticamente as vars definidas pelo source do
     # envfile; 'set +a' desliga. cwd tem de ser /opt/aob/api para o
     # AppDbContext carregar appsettings.json correcto.
-    sudo(ssh,
-        "-u aob-api bash -c '"
+    inner = (
         "set -a && . /etc/aob/api.env && set +a && "
         "cd /opt/aob/api && "
         "/opt/dotnet/dotnet AOB.Migrator.dll db-update"
-        "'"
     )
+    # Quoting: o inner nao contem aspas simples, portanto envolver em '...'
+    # e seguro sem escaping adicional.
+    run(ssh, f"sudo -u aob-api bash -c '{inner}'")
 
 
 def deploy_api(ssh) -> None:
