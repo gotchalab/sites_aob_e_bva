@@ -15,12 +15,26 @@ import { resolve, join } from "path";
 const runtimePath = resolve(".next/server/webpack-runtime.js");
 if (existsSync(runtimePath)) {
   let content = readFileSync(runtimePath, "utf8");
-  if (content.includes('"" + chunkId + ".js"')) {
+  const hasNonMinPattern = content.includes('"" + chunkId + ".js"');
+  const hasChunksPrefix = content.includes('chunks/');
+  if (hasNonMinPattern) {
     content = content.replaceAll('"" + chunkId + ".js"', '"chunks/" + chunkId + ".js"');
     writeFileSync(runtimePath, content, "utf8");
     console.log("patch-build: corrigido chunk path em webpack-runtime.js");
+  } else if (hasChunksPrefix) {
+    console.log("patch-build: chunk path OK (minificado com 'chunks/'), sem patches necessarios");
   } else {
-    console.log("patch-build: chunk path OK, sem patches necessarios");
+    // Estado inesperado: nem o pattern conhecido nem o resultado esperado.
+    // Provavel cache incremental corrupta - o build precisa de correr
+    // limpo (rm -rf .next && npm run build). Falhar aqui em vez de deixar
+    // o deploy subir SSR partido com "Cannot find module ./XXX.js".
+    console.error("");
+    console.error("patch-build: ERRO - webpack-runtime.js em estado inesperado.");
+    console.error("             Nao contem nem '\"\" + chunkId + \".js\"' nem 'chunks/'.");
+    console.error("             O build pode estar corrupto por cache incremental.");
+    console.error("             Solucao: rm -rf .next && npm run build");
+    console.error("");
+    process.exit(1);
   }
 } else {
   console.log("patch-build: webpack-runtime.js nao encontrado, a saltar patch");

@@ -68,7 +68,7 @@ Passar um ou mais como argumentos:
 | `infra` | Sincroniza `infra/` → `/opt/aob/infra/`, copia nginx confs / systemd units, valida e recarrega nginx. Também copia a página de manutenção do `bva-p-socios`. |
 | `api` | `dotnet publish AOB.Api` + `AOB.Migrator` → `/opt/aob/api/`, **corre `AOB.Migrator db-update` automaticamente** e depois restart `aob-api`. Se a migração falhar, o restart não acontece e a API antiga continua. |
 | `admin` | `dotnet publish AOB.Admin` → `/opt/aob/admin/` + restart `aob-admin`. |
-| `aobarcelos` | `npm run build` local → upload `.next/` + `public/` + `package.json` + `next.config.mjs` → `/opt/aob/aobarcelos/` + restart `aob-aobarcelos`. |
+| `aobarcelos` | **`rm -rf .next/` + `npm run build`** local → upload `.next/` + `public/` + `package.json` + `next.config.mjs` → `/opt/aob/aobarcelos/` + restart `aob-aobarcelos`. O `.next/` é sempre limpo antes para evitar builds incrementais com cache corrupta. |
 | `bva` | Idem, para `bva-p.aobarcelos.pt`. |
 | `uploads` | Sincroniza `/uploads/` local → `/var/www/uploads/` (usa `--keep-newer-files`, nunca sobrescreve ficheiros mais recentes no VPS). Raro — só quando se semeou algo local que não passa pela BD. |
 | `migrations` | Corre `AOB.Migrator db-update` sozinho. Raramente útil — o target `api` já o faz. Só usar quando queres aplicar migrations sem substituir os binários da API. |
@@ -141,9 +141,11 @@ Os systemd units carregam `smtp.env` **antes** do env próprio, portanto os fich
 
 Corre automaticamente após `next build`:
 
-1. **Corrige o chunk path do `webpack-runtime.js`** — bug de builds Windows sem *Developer Mode* activo.
+1. **Corrige o chunk path do `webpack-runtime.js`** — bug de builds Windows sem *Developer Mode* activo. Se o webpack-runtime.js ficar em estado inconsistente (sem `chunks/` e sem o pattern conhecido — sinal de cache incremental corrupta) o postbuild **falha** com instrução `rm -rf .next && npm run build`.
 2. **Injecta `dataRoutes` / `staticRoutes` / `dynamicRoutes` vazios em `routes-manifest.json`** — bug do Next 15.5 no Windows em builds só-App-Router. Sem isto o `next start` no Linux crasha com `TypeError: routesManifest.dataRoutes is not iterable` em loop e o nginx devolve 502.
 3. **Valida que os `NEXT_PUBLIC_*` de `.env.production` ficaram embutidos** no build. Se algum não aparecer nos chunks, falha o postbuild (deploy aborta por `set -euo pipefail` / `check=True` no paramiko).
+
+O `deploy.py` já apaga `.next/` antes de correr `npm run build`, portanto a defesa em profundidade do postbuild é para o caso raro de builds manuais sem limpeza.
 
 ---
 

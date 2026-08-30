@@ -151,15 +151,25 @@ def deploy_admin(ssh) -> None:
 
 def deploy_frontend(ssh, name: str, local_dir: Path,
                     remote_dir: str, service: str) -> None:
-    """Upload .next/ + public/ + package.json + next.config.mjs; sem node_modules."""
-    print(f"\n[{name}] Upload .next/ -> {remote_dir}")
+    """rm -rf .next && npm run build + upload .next/ + public/ + package.json + next.config.mjs.
 
+    O build corre sempre a partir de zero (`.next/` apagado antes) para evitar
+    builds incrementais com cache corrupta - ja vimos casos em que o
+    webpack-runtime.js saia nao-minificado com path de chunk errado, quebrando
+    todas as paginas SSR com 'Cannot find module ./XXX.js'.
+    """
     next_dir = local_dir / ".next"
+
+    print(f"\n[{name}] rm -rf .next")
+    shutil.rmtree(next_dir, ignore_errors=True)
+
+    print(f"[{name}] npm run build  (postbuild patch-build.mjs valida envs + chunk path)")
+    subprocess.run(["npm", "run", "build"], cwd=str(local_dir), check=True, shell=True)
+
     if not next_dir.exists():
-        raise FileNotFoundError(
-            f"Build nao encontrado: {next_dir}\n"
-            "Corre primeiro: npm run build  (o postbuild patch-build.mjs valida envs)"
-        )
+        raise FileNotFoundError(f"Build falhou: {next_dir} nao existe apos npm run build")
+
+    print(f"[{name}] Upload .next/ -> {remote_dir}")
 
     # Permitir upload como debian, depois chown
     sudo(ssh, f"mkdir -p {remote_dir} && chown {VPS_USER}:{VPS_USER} {remote_dir}")
