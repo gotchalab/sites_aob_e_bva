@@ -618,9 +618,11 @@ public static class InscricaoConvoyagePdfGenerator
                 var destLine3 = av.DestinatarioNotas ?? "";
                 var destLine1T = TruncateToWidth(g, destLine1, fontReg, tc3 - 6);
                 var destLine2T = TruncateToWidth(g, destLine2, fontSmall, tc3 - 6);
-                var destLine3T = TruncateToWidth(g, destLine3, fontSmall, tc3 - 6);
                 bool hasNotes = !string.IsNullOrWhiteSpace(destLine3);
-                var rowHTransp = hasNotes ? 37.0 : 26.0;
+                var notesLines = hasNotes
+                    ? WrapToWidth(g, t.NotesPrefix + destLine3, fontSmall, tc3 - 6)
+                    : Array.Empty<string>();
+                var rowHTransp = hasNotes ? 26.0 + notesLines.Length * 11.0 : 26.0;
 
                 EnsureRowSpace(rowHTransp);
                 x = margin;
@@ -639,8 +641,8 @@ public static class InscricaoConvoyagePdfGenerator
                 g.DrawString(av.Anilha ?? "",  fontReg, ink, new XPoint(x + 3, y)); x += tc2;
                 g.DrawString(destLine1T,       fontReg,  ink, new XPoint(x + 3, y));
                 g.DrawString(destLine2T,       fontSmall, ink, new XPoint(x + 3, y + 11));
-                if (hasNotes)
-                    g.DrawString(t.NotesPrefix + destLine3T, fontSmall, grey, new XPoint(x + 3, y + 22));
+                for (int ln = 0; ln < notesLines.Length; ln++)
+                    g.DrawString(notesLines[ln], fontSmall, grey, new XPoint(x + 3, y + 22 + ln * 11));
 
                 g.DrawRectangle(borderPen, new XRect(margin, y - 11, tableW, rowHTransp));
                 y += rowHTransp;
