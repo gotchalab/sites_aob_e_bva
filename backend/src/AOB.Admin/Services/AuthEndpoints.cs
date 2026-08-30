@@ -291,6 +291,7 @@ public static class AuthEndpoints
             [FromQuery] int? status,
             [FromQuery] string? lang,
             [FromQuery] bool? includeCosts,
+            [FromQuery] bool? includeTransport,
             AppDbContext db,
             IConfiguration config,
             IHostEnvironment env,
@@ -306,6 +307,7 @@ public static class AuthEndpoints
                 ? AOB.Application.Forms.PdfLang.En
                 : AOB.Application.Forms.PdfLang.Pt;
             var withCosts = includeCosts ?? true;
+            var withTransport = includeTransport ?? true;
 
             var q = db.FormSubmissions.AsNoTracking()
                 .Where(f => f.FormType == FormType.InscricaoConvoyage && f.ConvoyageYearId == yearId);
@@ -319,7 +321,7 @@ public static class AuthEndpoints
                 foreach (var id in ids)
                 {
                     AOB.Application.Forms.ConvoyageInscricaoPdfResult? r;
-                    try { r = await AOB.Application.Forms.ConvoyageInscricaoPdfBuilder.BuildAsync(db, env, config, id, pdfLang, withCosts, ct); }
+                    try { r = await AOB.Application.Forms.ConvoyageInscricaoPdfBuilder.BuildAsync(db, env, config, id, pdfLang, withCosts, withTransport, ct); }
                     catch { continue; }
                     if (r is null) continue;
 
@@ -341,7 +343,7 @@ public static class AuthEndpoints
             }
             mem.Position = 0;
 
-            var zipName = BuildInscricoesZipName(year, yearId, pdfLang, withCosts);
+            var zipName = BuildInscricoesZipName(year, yearId, pdfLang, withCosts, withTransport);
             http.Response.Headers.ContentDisposition = ContentDispositionHeader("attachment", zipName);
             http.Response.ContentType = "application/zip";
             http.Response.Headers.CacheControl = "no-store, must-revalidate";
@@ -433,7 +435,7 @@ public static class AuthEndpoints
 
     private static string BuildInscricoesZipName(
         ConvoyageYear? year, int fallbackId,
-        AOB.Application.Forms.PdfLang lang, bool includeCosts)
+        AOB.Application.Forms.PdfLang lang, bool includeCosts, bool includeTransport)
     {
         var parts = new List<string> { "convoyage" };
         if (year is not null)
@@ -451,6 +453,7 @@ public static class AuthEndpoints
         parts.Add("inscricoes");
         parts.Add(lang == AOB.Application.Forms.PdfLang.En ? "en" : "pt");
         if (!includeCosts) parts.Add("sem-custos");
+        if (!includeTransport) parts.Add("sem-transporte");
         return string.Join("-", parts) + ".zip";
     }
 

@@ -24,6 +24,7 @@ public static class ConvoyageInscricaoPdfBuilder
         int submissionId,
         PdfLang lang,
         bool includeCosts,
+        bool includeTransport = true,
         CancellationToken ct = default)
     {
         var submission = await db.FormSubmissions.AsNoTracking()
@@ -79,7 +80,8 @@ public static class ConvoyageInscricaoPdfBuilder
         {
             bytes = InscricaoConvoyagePdfGenerator.Render(
                 submission.Site, req, submission.Id, localRecolhaLabel, convoyageYear,
-                logoBytes, lang, includeCosts);
+                logoBytes, lang, includeCosts,
+                includeTransport: includeTransport);
         }
         catch
         {

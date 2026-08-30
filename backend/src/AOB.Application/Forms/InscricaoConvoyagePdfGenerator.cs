@@ -137,7 +137,11 @@ public static class InscricaoConvoyagePdfGenerator
         // Aves oferecidas (isentas de pagamento) marcadas pelo admin ao editar.
         // Descontadas dos cálculos de gaiola/transporte no resumo de custos.
         int numAvesVendaOferecidas = 0,
-        int numAvesTransporteOferecidas = 0)
+        int numAvesTransporteOferecidas = 0,
+        // Quando false, omite completamente a secção "Aves para transporte"
+        // (título + aviso âmbar + tabela + total). Útil para enviar a ficha
+        // a parceiros que não estão envolvidos no transporte compra/venda.
+        bool includeTransport = true)
     {
         var t = L(lang);
         var doc = new PdfDocument();
@@ -487,7 +491,7 @@ public static class InscricaoConvoyagePdfGenerator
         }
 
         // ── Tabela de aves para transporte (compra/venda) ────────────────────
-        if (r.AvesTransporte is { Count: > 0 })
+        if (includeTransport && r.AvesTransporte is { Count: > 0 })
         {
             var hasVende = r.AvesTransporte.Any(a => a.Origem == OrigemAveTransporte.Vende);
             var hasCompra = r.AvesTransporte.Any(a => a.Origem == OrigemAveTransporte.Compra);
@@ -659,9 +663,12 @@ public static class InscricaoConvoyagePdfGenerator
         {
             var numAvesConcurso = avesConcurso.Count;
             var numAvesVenda2 = r.AvesVenda?.Count ?? 0;
-            var numAvesTransporte2 = r.AvesTransporte?.Count ?? 0;
-            var numAvesTransporteCompra = r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Compra) ?? 0;
-            var numAvesTransporteVende = r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Vende) ?? 0;
+            // Quando a secção de transporte é omitida, também zeramos os
+            // custos correspondentes para manter a ficha coerente (evita
+            // linhas "Transporte X × Y€" sem lista visível de aves).
+            var numAvesTransporte2 = includeTransport ? (r.AvesTransporte?.Count ?? 0) : 0;
+            var numAvesTransporteCompra = includeTransport ? (r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Compra) ?? 0) : 0;
+            var numAvesTransporteVende = includeTransport ? (r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Vende) ?? 0) : 0;
             var espacosTransporteTotais = ConvoyagePricing.EspacosTransporteAdquirido(
                 numAvesTransporteCompra, numAvesTransporteVende);
             var vendaOferecidas = Math.Clamp(numAvesVendaOferecidas, 0, numAvesVenda2);
