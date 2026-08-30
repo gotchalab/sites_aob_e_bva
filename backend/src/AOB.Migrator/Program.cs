@@ -1,7 +1,18 @@
+// AOB.Migrator - dois papeis:
+//   1. FLUXO CORRENTE (usado no deploy):
+//        db-update           - aplica migrations EF Core pendentes (chamado por deploy.py)
+//        nom-rename-group    - utilitario admin ad-hoc
+//        ping                - health check Postgres (+ Joomla se ainda configurado)
+//   2. BOOTSTRAP-ONLY (so na primeira passagem AOB / BVA legacy -> Postgres):
+//        seed, seed-socios, migrate *, redirects, sponsors, home-content-seed,
+//        patch-bva-home, articles-fix-external-images, seed-nomenclature-2026
+//      Implementados em AOB.Migrator.Commands.Bootstrap. NAO CORRER em prod
+//      corrente - sao destrutivos ou dependem de MariaDB Joomla que ja nao
+//      existe. Mantidos para referencia historica / disaster recovery.
 using AOB.Core.Entities;
 using AOB.Infrastructure.Persistence;
 using AOB.Migrator;
-using AOB.Migrator.Commands;
+using AOB.Migrator.Commands.Bootstrap;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -127,23 +138,28 @@ switch (cmd)
     }
     default:
         Console.WriteLine("""
-            Comandos disponiveis:
-              ping                    - testa conexao SSH + MariaDB VPS + Postgres local
-              db-update               - aplica migrações EF Core pendentes à BD Postgres local
-              seed                    - insere sites e user admin base
-              seed-socios             - cria sócios de teste (aob+bva) com user Identity + quotas
-              migrate categories      - migra categorias (aob+bva)
-              migrate articles        - migra artigos + sanitiza HTML
-              migrate downloads       - migra downloads + copia ficheiros
-              migrate menus           - migra estrutura de menus
-              migrate all             - corre categories + articles + downloads + menus
-              redirects               - gera infra/nginx/redirects.map
-              sponsors                - migra banners Joomla → tabela sponsors + copia logos
-              home-content-seed       - pré-popula Site.HomeConfig.mission a partir das categorias 'quem somos'
-              patch-bva-home          - força actualização das áreas e CTA do site BVA na BD
-              articles-fix-external-images - varre artigos, faz download de imagens externas para local e reescreve refs
-              seed-nomenclature-2026  - popula nomenclatura BVA INT 2026 (grupos + classes) para o site bva
-              nom-rename-group <de> <para> - renomeia display name de grupos de nomenclatura
+            AOB.Migrator - comandos disponiveis
+
+            Corrente (uso em producao):
+              db-update                       - aplica migrations EF Core pendentes
+                                                (chamado automaticamente por deploy.py)
+              ping                            - health check Postgres (+ Joomla se
+                                                configurado)
+              nom-rename-group <de> <para>    - renomeia display name de grupos de
+                                                nomenclatura
+
+            Bootstrap-only (ja corrido; NAO usar em prod corrente):
+              seed                            - insere sites + user admin base
+              seed-socios                     - cria socios de teste
+              seed-nomenclature-2026          - nomenclatura BVA INT 2026
+              home-content-seed               - Site.HomeConfig.mission das categorias
+                                                'quem somos'
+              patch-bva-home                  - actualiza areas/CTA do site BVA
+              migrate categories|articles|downloads|menus|images|all
+                                              - migra dados Joomla -> Postgres
+              redirects                       - gera nginx redirects.map do Joomla
+              sponsors                        - migra banners Joomla -> tabela sponsors
+              articles-fix-external-images    - baixa imagens externas para local
             """);
         break;
 }

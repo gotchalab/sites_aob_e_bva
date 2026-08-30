@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
 
-namespace AOB.Migrator.Commands;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 public class MigrateMenusCommand(
     AppDbContext db,

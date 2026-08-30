@@ -3,7 +3,7 @@ using AOB.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace AOB.Migrator.Commands;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 /// <summary>
 /// Força a actualização do HomeConfig do site BVA na BD:

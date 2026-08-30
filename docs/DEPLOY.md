@@ -1,6 +1,13 @@
 # Deploy — AOB / BVA
 
-Referência de deploy para produção (VPS OVH, Debian 11) via `infra/deploy/deploy.py`.
+Referência de deploy para produção (VPS OVH, Debian 11).
+
+O deploy vive em dois scripts distintos:
+
+| Script | Quando | Comportamento |
+|---|---|---|
+| **[`infra/deploy/deploy.py`](../infra/deploy/deploy.py)** | Deploy corrente do dia-a-dia | Publica binários / builds e recarrega serviços. Migrations correm dentro do target `api`. |
+| **[`infra/deploy/deploy_inicial.py`](../infra/deploy/deploy_inicial.py)** | **Só bootstrap** de um VPS novo (ou disaster recovery) | Instala dotnet/next, cria users/dirs/PG role, restaura BD dev → prod. **Destrutivo.** Recusa correr sem `AOB_ALLOW_BOOTSTRAP=1`. |
 
 Ver [CONTRIBUTING.md](../CONTRIBUTING.md) para o fluxo git (`dev` → `main` → tag → deploy).
 
@@ -20,11 +27,13 @@ Ver [CONTRIBUTING.md](../CONTRIBUTING.md) para o fluxo git (`dev` → `main` →
 - **`npm install`** feito em `frontends/aobarcelos/` e `frontends/bva-portugal/` (o deploy usa o `node_modules` local para o build).
 - Ficheiros `.env.production` populados em cada frontend (ver secção “Variáveis de ambiente”).
 
-### VPS (feito pelo target `setup` do `deploy.py` — **não repetir**)
+### VPS (feito pelo `deploy_inicial.py` — **não repetir**)
 
-Instala `.NET 10`, `next@15.5.4` global em `/usr/bin/next`, cria users `aob-api`, `aob-admin`, `aob-web`, diretórios em `/opt/aob/`, `/var/www/uploads/`, role e BD PostgreSQL. Ver `infra/deploy/deploy.py::setup`.
+Já foi feito em 2026-08 no VPS actual (`51.83.40.43`). Só voltar a correr se provisionar um VPS novo — ver secção “Bootstrap inicial” abaixo.
 
-Ficheiros `/etc/aob/*.env` (secrets prod) **têm de ser criados manualmente** a partir de `infra/deploy/env-samples/`.
+Instala `.NET 10`, `next@15.5.4` global em `/usr/bin/next`, cria users `aob-api`/`aob-admin`/`aob-web`, diretórios em `/opt/aob/`, `/var/www/uploads/`, role e BD PostgreSQL.
+
+Ficheiros `/etc/aob/*.env` (secrets prod) **têm de ser criados manualmente** a partir de `infra/deploy/env-samples/` — nenhum dos scripts de deploy os cria.
 
 ---
 
@@ -50,7 +59,7 @@ AOB_STRICT_BRANCH=1 python infra/deploy/deploy.py ...
 
 ---
 
-## Targets disponíveis
+## Targets disponíveis (`deploy.py` — fluxo corrente)
 
 Passar um ou mais como argumentos:
 
@@ -61,14 +70,14 @@ Passar um ou mais como argumentos:
 | `admin` | `dotnet publish AOB.Admin` → `/opt/aob/admin/` + restart `aob-admin`. |
 | `aobarcelos` | `npm run build` local → upload `.next/` + `public/` + `package.json` + `next.config.mjs` → `/opt/aob/aobarcelos/` + restart `aob-aobarcelos`. |
 | `bva` | Idem, para `bva-p.aobarcelos.pt`. |
-| `uploads` | Sincroniza `/uploads/` local → `/var/www/uploads/` (usa `--keep-newer-files`, nunca sobrescreve ficheiros mais recentes no VPS). Correr depois do `api` (que faz o Migrator). |
+| `uploads` | Sincroniza `/uploads/` local → `/var/www/uploads/` (usa `--keep-newer-files`, nunca sobrescreve ficheiros mais recentes no VPS). Raro — só quando se semeou algo local que não passa pela BD. |
 | `migrations` | Corre `AOB.Migrator db-update` sozinho. Raramente útil — o target `api` já o faz. Só usar quando queres aplicar migrations sem substituir os binários da API. |
 | `services` | Pára Apache2, arranca nginx + todos os `aob-*`. |
-| `setup` | Bootstrap do VPS (dotnet, next, users, dirs, PG). Idempotente mas **só correr no primeiro provisioning**. |
-| `db` | **DESTRUTIVO** — faz `pg_dump` da BD local e restaura em `aob_prod` no VPS (com `--clean --if-exists`). Só usar em bootstrap ou refresh consciente da BD. |
-| `all` | `setup db infra api admin uploads aobarcelos bva services` — só para primeiro provisioning. |
+| `all` | `infra api admin uploads aobarcelos bva services` (todos por esta ordem). |
 
-**Deploy corrente típico:** `infra api admin aobarcelos bva services` (sem `setup`, sem `db`; as migrations correm dentro de `api`).
+**Bootstrap-only** (`setup`, `db`) já não vive em `deploy.py` — foram para `deploy_inicial.py` para eliminar o risco de correr algo destrutivo por engano no dia-a-dia.
+
+**Deploy corrente típico:** `python infra/deploy/deploy.py infra api admin aobarcelos bva services` (as migrations correm dentro de `api`).
 
 ### Migrations automáticas
 
@@ -173,6 +182,35 @@ Ou, para reverter só um frontend rapidamente sem rebuild:
 git checkout <tag-anterior> -- frontends/<name>/
 python infra/deploy/deploy.py <aobarcelos|bva>
 ```
+
+---
+
+## Bootstrap inicial (VPS novo — não voltar aqui)
+
+Só se tiveres de reprovisionar do zero (novo VPS, disaster recovery). O `deploy_inicial.py` recusa-se a correr sem `AOB_ALLOW_BOOTSTRAP=1` para evitar acidentes.
+
+```bash
+# Contra VPS vazio
+AOB_ALLOW_BOOTSTRAP=1 python infra/deploy/deploy_inicial.py all
+```
+
+Targets do `deploy_inicial.py`:
+
+| Target | O que faz |
+|---|---|
+| `setup` | Instala `.NET 10` em `/opt/dotnet`, `next@15.5.4` global, cria users (`aob-api`/`aob-admin`/`aob-web`), diretórios em `/opt/aob/`, `/var/www/uploads/`, role `aobapp` e BD `aob_prod` em PostgreSQL, instala nginx. Idempotente. |
+| `db` | **DESTRUTIVO.** Faz `pg_dump` da BD local dev e restaura em `aob_prod` no VPS com `--clean --if-exists`. Só útil em bootstrap ou refresh consciente da BD prod. |
+| `all` | `setup db` |
+
+Passos manuais no VPS após o bootstrap:
+
+1. Criar `/etc/aob/api.env`, `/etc/aob/admin.env`, `/etc/aob/aobarcelos.env`, `/etc/aob/bva-portugal.env` (ver `infra/deploy/env-samples/*.env.sample`).
+2. `certbot --nginx -d aobarcelos.pt -d www.aobarcelos.pt -d bva-p.aobarcelos.pt -d api.aobarcelos.pt -d admin.aobarcelos.pt`.
+3. Correr o deploy corrente para pôr o código actual: `python infra/deploy/deploy.py infra api admin aobarcelos bva services` (migrations correm dentro de `api`).
+
+### Bootstrap-only no `AOB.Migrator`
+
+Os comandos do Migrator relacionados com a migração inicial de dados do Joomla estão em [`backend/src/AOB.Migrator/Commands/Bootstrap/`](../backend/src/AOB.Migrator/Commands/) e listados em `dotnet run --project AOB.Migrator -- help` como *Bootstrap-only*. Nunca precisam de correr novamente em produção corrente.
 
 ---
 

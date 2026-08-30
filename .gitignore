@@ -40,6 +40,11 @@ credenciais-local.md
 # Logs
 *.log
 logs/
+backend/logs-*.txt
+
+# Python bytecode (helpers em infra/deploy/)
+__pycache__/
+*.pyc
 
 # IDE
 .idea/

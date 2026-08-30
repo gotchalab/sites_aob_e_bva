@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 
-namespace AOB.Migrator.Commands;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 /// <summary>
 /// Copia as pastas /images/ de cada tar.gz para uploads-target/{site}/images/.

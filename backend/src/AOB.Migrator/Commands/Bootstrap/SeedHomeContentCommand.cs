@@ -4,7 +4,7 @@ using AOB.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace AOB.Migrator.Commands;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 /// <summary>
 /// Pré-popula <c>Site.Tagline</c> e <c>Site.HomeConfig</c> a partir do conteúdo já migrado.
