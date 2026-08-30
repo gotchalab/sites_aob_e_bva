@@ -74,6 +74,17 @@ public static class TransportExcelExporter
         wb.Properties.Title = $"Plano de transportes convoyage {year}";
         wb.Properties.Company = "AOB";
 
+        // Sem isto, ClosedXML escreve as fórmulas mas sem valor cache; algumas versões
+        // do Excel abrem o ficheiro (sobretudo em "Vista Protegida") e mostram as
+        // células vazias até o utilizador activar edição e premir F9.
+        //   1) RecalculateAllFormulas preenche a maioria da cache
+        //   2) FullCalculationOnLoad força o Excel a recalcular ao abrir (para os
+        //      casos em que ClosedXML não consegue avaliar — ex.: nomes definidos
+        //      dentro de IF).
+        wb.CalculateMode = XLCalculateMode.Auto;
+        wb.RecalculateAllFormulas();
+        wb.FullCalculationOnLoad = true;
+
         using var ms = new MemoryStream();
         wb.SaveAs(ms);
         return ms.ToArray();
