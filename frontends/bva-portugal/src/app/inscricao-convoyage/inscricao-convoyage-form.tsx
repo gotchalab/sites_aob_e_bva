@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, formatWaitTime, formatWaitTimeShort } from "@/lib/api";
 import type {
   ConvoyageActiveYearDto,
   EntryType,
@@ -1019,6 +1019,39 @@ export function InscricaoConvoyageForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string>();
+  // Quando o backend devolve 429, guardamos aqui o timestamp (ms) em que o
+  // rate-limit expira para mostrar contagem regressiva e desabilitar o botão.
+  const [rateLimitUntil, setRateLimitUntil] = useState<number | null>(null);
+  const [rateLimitTick, setRateLimitTick] = useState(0);
+  useEffect(() => {
+    if (rateLimitUntil === null) return;
+    if (Date.now() >= rateLimitUntil) {
+      setRateLimitUntil(null);
+      return;
+    }
+    const id = setInterval(() => {
+      if (Date.now() >= rateLimitUntil) {
+        setRateLimitUntil(null);
+        return;
+      }
+      setRateLimitTick((t) => t + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [rateLimitUntil]);
+  const rateLimitSecondsLeft =
+    rateLimitUntil !== null ? Math.max(0, Math.ceil((rateLimitUntil - Date.now()) / 1000)) : 0;
+  // rateLimitTick é usado apenas para forçar re-render — evitamos aviso do linter
+  void rateLimitTick;
+
+  // Scroll até à caixa de erro. Sem isto, em ecrãs pequenos ou com teclado
+  // móvel aberto a mensagem cai fora do viewport e o utilizador não a vê —
+  // era exactamente o cenário que fazia repetir o submit sem perceber porquê.
+  const errorBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (state === "error" && errorBoxRef.current) {
+      errorBoxRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [state, errorMsg, rateLimitUntil]);
   const [token, setToken] = useState<string>();
   const widgetContainer = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
@@ -1746,13 +1779,31 @@ export function InscricaoConvoyageForm({
         return;
       }
       setState("error");
-      setErrorMsg(res.error ?? "Erro desconhecido");
+      if (res.status === 429) {
+        // Rate-limit: mostramos contagem regressiva e desabilitamos o botão
+        // até expirar. Sem retryAfter (proxy sem header), assumimos 60s por
+        // segurança para o utilizador não ficar preso a clicar em loop.
+        const seconds = res.retryAfter && res.retryAfter > 0 ? res.retryAfter : 60;
+        setRateLimitUntil(Date.now() + seconds * 1000);
+        setErrorMsg(
+          res.error ??
+            `Foram feitas demasiadas submissões desta ligação nos últimos minutos. Aguarde ${formatWaitTime(seconds)} antes de tentar de novo.`
+        );
+      } else if (res.status && res.status >= 500) {
+        setErrorMsg(
+          "Não foi possível processar a inscrição neste momento. Tente novamente dentro de alguns minutos."
+        );
+      } else {
+        // 400 (validação backend): mostra a mensagem exacta do servidor —
+        // costuma ser específica (ex.: "Código postal deve ter formato 0000-000").
+        setErrorMsg(res.error ?? "Erro desconhecido");
+      }
     } catch (err) {
       setState("error");
       setErrorMsg(
         err instanceof Error && err.name === "AbortError"
-          ? "O servidor demorou demasiado tempo a responder. Verifica se a inscrição foi registada antes de submeter de novo."
-          : "Falha de ligação ao servidor. Verifica a tua Internet e tenta novamente."
+          ? "O servidor demorou demasiado tempo a responder. Verifique se a inscrição foi registada antes de submeter de novo."
+          : "Falha de ligação ao servidor. Verifique a sua Internet e tente novamente."
       );
     } finally {
       if (window.turnstile && widgetId.current) window.turnstile.reset(widgetId.current);
@@ -2512,17 +2563,40 @@ export function InscricaoConvoyageForm({
       )}
 
       {state === "error" && errorMsg && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          {errorMsg}
+        <div
+          ref={errorBoxRef}
+          className={
+            rateLimitSecondsLeft > 0
+              ? "rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+              : "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          }
+        >
+          <p className="font-semibold">
+            {rateLimitSecondsLeft > 0
+              ? "Demasiadas tentativas — aguarde alguns minutos"
+              : "Não foi possível submeter a inscrição"}
+          </p>
+          <p className="mt-1">{errorMsg}</p>
+          {rateLimitSecondsLeft > 0 && (
+            <p className="mt-2 text-xs">
+              Pode tentar novamente dentro de <strong>{formatWaitTime(rateLimitSecondsLeft)}</strong>.
+              Se partilha a ligação à Internet com outros criadores — por
+              exemplo, a mesma rede de casa — o limite é comum a todos.
+            </p>
+          )}
         </div>
       )}
 
       <button
         type="submit"
-        disabled={state === "sending"}
+        disabled={state === "sending" || rateLimitSecondsLeft > 0}
         className="rounded-full bg-brand-500 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {state === "sending" ? "A enviar..." : "Submeter inscrição"}
+        {state === "sending"
+          ? "A enviar..."
+          : rateLimitSecondsLeft > 0
+            ? `Aguarde ${formatWaitTimeShort(rateLimitSecondsLeft)}…`
+            : "Submeter inscrição"}
       </button>
 
       {contactEmail && (

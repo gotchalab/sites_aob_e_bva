@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, formatWaitTime, formatWaitTimeShort } from "@/lib/api";
 import { SignaturePad } from "./signature-pad";
 
 const IBAN = "PT50 0010 0000 3704 9640 0014 1";
@@ -62,6 +62,37 @@ export function InscricaoForm({
   const [token, setToken] = useState<string>();
   const widgetContainer = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
+  // Quando o backend devolve 429, guardamos aqui o timestamp (ms) em que o
+  // rate-limit expira para mostrar contagem regressiva e desabilitar o botão.
+  const [rateLimitUntil, setRateLimitUntil] = useState<number | null>(null);
+  const [rateLimitTick, setRateLimitTick] = useState(0);
+  useEffect(() => {
+    if (rateLimitUntil === null) return;
+    if (Date.now() >= rateLimitUntil) {
+      setRateLimitUntil(null);
+      return;
+    }
+    const id = setInterval(() => {
+      if (Date.now() >= rateLimitUntil) {
+        setRateLimitUntil(null);
+        return;
+      }
+      setRateLimitTick((t) => t + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [rateLimitUntil]);
+  const rateLimitSecondsLeft =
+    rateLimitUntil !== null ? Math.max(0, Math.ceil((rateLimitUntil - Date.now()) / 1000)) : 0;
+  void rateLimitTick;
+
+  // Scroll até à caixa de erro. Sem isto, em ecrãs pequenos ou com teclado
+  // móvel aberto a mensagem cai fora do viewport e o utilizador não a vê.
+  const errorBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (state === "error" && errorBoxRef.current) {
+      errorBoxRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [state, errorMsg, rateLimitUntil]);
 
   const totalDevido = useMemo(
     () => socioBvaPortugal ? QUOTA_ANUAL_BVA_PORTUGAL : QUOTA_ANUAL_AOB + JOIA_INSCRICAO,
@@ -178,7 +209,20 @@ export function InscricaoForm({
       return;
     }
     setState("error");
-    setErrorMsg(res.error ?? "Erro desconhecido");
+    if (res.status === 429) {
+      const seconds = res.retryAfter && res.retryAfter > 0 ? res.retryAfter : 60;
+      setRateLimitUntil(Date.now() + seconds * 1000);
+      setErrorMsg(
+        res.error ??
+          `Foram feitas demasiadas submissões desta ligação nos últimos minutos. Aguarde ${formatWaitTime(seconds)} antes de tentar de novo.`
+      );
+    } else if (res.status && res.status >= 500) {
+      setErrorMsg(
+        "Não foi possível processar a inscrição neste momento. Tente novamente dentro de alguns minutos."
+      );
+    } else {
+      setErrorMsg(res.error ?? "Erro desconhecido");
+    }
     if (window.turnstile && widgetId.current) window.turnstile.reset(widgetId.current);
     setToken(undefined);
   }
@@ -545,16 +589,39 @@ export function InscricaoForm({
       )}
 
       {state === "error" && errorMsg && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          {errorMsg}
+        <div
+          ref={errorBoxRef}
+          className={
+            rateLimitSecondsLeft > 0
+              ? "rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+              : "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          }
+        >
+          <p className="font-semibold">
+            {rateLimitSecondsLeft > 0
+              ? "Demasiadas tentativas — aguarde alguns minutos"
+              : "Não foi possível submeter a proposta"}
+          </p>
+          <p className="mt-1">{errorMsg}</p>
+          {rateLimitSecondsLeft > 0 && (
+            <p className="mt-2 text-xs">
+              Pode tentar novamente dentro de <strong>{formatWaitTime(rateLimitSecondsLeft)}</strong>.
+              Se partilha a ligação à Internet com outras pessoas — por
+              exemplo, a mesma rede de casa — o limite é comum a todos.
+            </p>
+          )}
         </div>
       )}
 
       <button
-        type="submit" disabled={state === "sending"}
+        type="submit" disabled={state === "sending" || rateLimitSecondsLeft > 0}
         className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {state === "sending" ? "A enviar..." : "Submeter proposta de admissão"}
+        {state === "sending"
+          ? "A enviar..."
+          : rateLimitSecondsLeft > 0
+            ? `Aguarde ${formatWaitTimeShort(rateLimitSecondsLeft)}…`
+            : "Submeter proposta de admissão"}
       </button>
 
       {contactEmail && (
