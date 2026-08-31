@@ -34,11 +34,17 @@ appsettings.Production.json
 *.pem
 *.key
 CREDENCIAIS-LOCAIS.md
+credenciais-local.md
 .local-postgres-password
 
 # Logs
 *.log
 logs/
+backend/logs-*.txt
+
+# Python bytecode (helpers em infra/deploy/)
+__pycache__/
+*.pyc
 
 # IDE
 .idea/
@@ -53,8 +59,13 @@ logs/
 *.sql
 *.bak
 
-# Test PDFs
+# Test PDFs (AOB.PdfTool: --grid/--calibrate, --convoyage, --etiquetas)
 pdf-test*.pdf
+pdf-test*.png
+pdf-convoyage-test*.pdf
+pdf-convoyage-test*.png
+pdf-etiquetas-test*.pdf
+pdf-etiquetas-test*.png
 
 # Test Excel output
 /excel-*-test*.xlsx

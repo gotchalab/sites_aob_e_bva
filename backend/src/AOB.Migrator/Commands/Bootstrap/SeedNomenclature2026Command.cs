@@ -3,7 +3,7 @@ using AOB.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace AOB.Migrator.Commands;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 // Seeds the BVA INT 2026 nomenclature (source: bvamasters.com/pdf/nomINT.pdf).
 // Idempotent: refuses to run if the target year already has groups.

@@ -707,7 +707,10 @@ public static class FormEndpoints
         var aves = req.Aves ?? new List<AveConvoyageDto>();
         var avesVenda = req.AvesVenda ?? new List<AveVendaDto>();
         var avesTransporte = req.AvesTransporte ?? new List<AveTransporteDto>();
-        var custos = ConvoyagePricing.Compute(aves.Count, avesVenda.Count, avesTransporte.Count, req.SocioBvaStatus);
+        var nCompra = avesTransporte.Count(a => a.Origem == OrigemAveTransporte.Compra);
+        var nVende = avesTransporte.Count(a => a.Origem == OrigemAveTransporte.Vende);
+        var custos = ConvoyagePricing.Compute(aves.Count, avesVenda.Count, avesTransporte.Count, req.SocioBvaStatus,
+            numAvesTransporteCompra: nCompra, numAvesTransporteVende: nVende);
         var stored = new
         {
             req.NomeCompleto, req.Email, req.Telefone, req.Pais,

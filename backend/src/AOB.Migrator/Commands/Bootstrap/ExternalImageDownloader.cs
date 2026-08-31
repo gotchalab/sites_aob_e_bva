@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 
-namespace AOB.Migrator.Commands;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 /// <summary>
 /// Faz download de imagens externas (URLs http/https em artigos vindos do Joomla) para

@@ -100,6 +100,30 @@ try
     builder.Services.AddRateLimiter(opt =>
     {
         opt.RejectionStatusCode = 429;
+
+        // Limite formulários: partilhado por IP. A janela é fixa, portanto o
+        // "Retry-After" real é o resto da janela — devolvemos-lho no header e
+        // no corpo JSON para o frontend poder mostrar contagem regressiva em
+        // vez de um "HTTP 429" mudo.
+        var formsWindow = TimeSpan.FromMinutes(10);
+        opt.OnRejected = async (ctx, ct) =>
+        {
+            var retryAfter = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var ra)
+                ? (int)Math.Ceiling(ra.TotalSeconds)
+                : (int)Math.Ceiling(formsWindow.TotalSeconds);
+            ctx.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+            ctx.HttpContext.Response.ContentType = "application/json; charset=utf-8";
+            // Mensagem em minutos (arredondada para cima) — o utilizador não pensa em
+            // segundos quando o intervalo passa de 1 minuto. Frase pensada para tocar
+            // no cenário mais comum (NAT partilhado, ex.: pai e filho no mesmo router).
+            string tempoRestante = retryAfter >= 60
+                ? $"cerca de {(int)Math.Ceiling(retryAfter / 60.0)} minutos"
+                : $"cerca de {retryAfter} segundos";
+            var msg = $"Foram feitas demasiadas submissões desta ligação nos últimos minutos. Aguarde {tempoRestante} antes de tentar de novo.";
+            await ctx.HttpContext.Response.WriteAsync(
+                $"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(msg)},\"retryAfter\":{retryAfter}}}", ct);
+        };
+
         opt.AddPolicy("public", ctx => RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
             factory: _ => new FixedWindowRateLimiterOptions
@@ -107,14 +131,19 @@ try
                 PermitLimit = 120,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
+                AutoReplenishment = true,
             }));
+        // 15/10min: dá margem para NAT partilhado (várias pessoas na mesma
+        // rede) e para correcções após rejeições 400 de validação, sem abrir
+        // porta a spam automatizado.
         opt.AddPolicy("forms", ctx => RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(10),
+                PermitLimit = 15,
+                Window = formsWindow,
                 QueueLimit = 0,
+                AutoReplenishment = true,
             }));
     });
 

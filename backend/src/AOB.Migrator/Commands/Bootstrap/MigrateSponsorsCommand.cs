@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
 
-namespace AOB.Migrator.Commands;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 /// <summary>
 /// Migra os banners da tabela Joomla <c>{prefix}banners</c> para a nova entidade Sponsor.

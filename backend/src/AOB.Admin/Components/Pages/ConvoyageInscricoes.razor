@@ -152,8 +152,21 @@
                             Incluir zona de custos e aviso de pagamento
                         </label>
                     </div>
-                    <div class="form-text">
+                    <div class="form-text mb-3">
                         Desactiva para enviar aos parceiros sem revelar valores.
+                    </div>
+
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="pdfIncludeTransport"
+                               checked="@PdfBulkIncludeTransport"
+                               @onchange="@((ChangeEventArgs e) => PdfBulkIncludeTransport = (bool)(e.Value ?? true))" />
+                        <label class="form-check-label" for="pdfIncludeTransport">
+                            Incluir aves de transporte (compra/venda)
+                        </label>
+                    </div>
+                    <div class="form-text">
+                        Desactiva para omitir a secção de aves de transporte na ficha.
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -257,6 +270,15 @@ else
                             @if (f.HasPdf)
                             {
                                 <a class="btn btn-outline-primary" href="@($"/formularios/{f.Id}/pdf")" target="_blank">PDF</a>
+                            }
+                            @if (SelectedYearId > 0 && f.TotalAves > 0)
+                            {
+                                <a class="btn btn-outline-danger"
+                                   href="@($"/convoyage/{SelectedYearId}/inscricoes/{f.Id}/etiquetas.pdf")"
+                                   download
+                                   title="Descarregar PDF Avery 3421 com uma etiqueta por ave desta inscrição">
+                                    Etiquetas
+                                </a>
                             }
                             @if (f.HasSignature && TracesReadyForCurrentYear)
                             {
@@ -471,12 +493,14 @@ else
     private bool ShowPdfBulkModal;
     private string PdfBulkLang = "pt";
     private bool PdfBulkIncludeCosts = true;
+    private bool PdfBulkIncludeTransport = true;
 
     private void OpenPdfBulkModal()
     {
         ShowExportMenu = false;
         PdfBulkLang = "pt";
         PdfBulkIncludeCosts = true;
+        PdfBulkIncludeTransport = true;
         ShowPdfBulkModal = true;
     }
 
@@ -490,6 +514,7 @@ else
             {
                 $"lang={PdfBulkLang}",
                 $"includeCosts={(PdfBulkIncludeCosts ? "true" : "false")}",
+                $"includeTransport={(PdfBulkIncludeTransport ? "true" : "false")}",
             };
             if (int.TryParse(StatusFilter, out var st)) qs.Add($"status={st}");
             return $"/convoyage/{SelectedYearId}/inscricoes/zip?{string.Join('&', qs)}";
@@ -508,7 +533,9 @@ else
             var r = doc.RootElement;
             string S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? (v.GetString() ?? "") : "";
             int I(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number ? v.GetInt32() : 0;
-            return new ConvoyageMeta(S("NomeCompleto"), S("Email"), S("Pais"), S("LocalRecolha"), I("TotalAves"));
+            // Total = concurso + venda + transporte (mesma soma que o TransportPlanner usa para carga).
+            var totalAves = I("TotalAves") + I("TotalAvesVenda") + I("TotalAvesTransporte");
+            return new ConvoyageMeta(S("NomeCompleto"), S("Email"), S("Pais"), S("LocalRecolha"), totalAves);
         }
         catch
         {

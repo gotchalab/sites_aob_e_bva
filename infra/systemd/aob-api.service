@@ -17,7 +17,12 @@ SyslogIdentifier=aob-api
 Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+# Ordem importante: api.env primeiro (base), smtp.env DEPOIS (override).
+# No systemd, EnvironmentFile posterior sobrepoe anterior para a mesma
+# variavel - assim o smtp.env e a fonte da verdade dos Smtp__* mesmo que
+# api.env ainda tenha alguma linha herdada.
 EnvironmentFile=-/etc/aob/api.env
+EnvironmentFile=-/etc/aob/smtp.env
 
 # Hardening
 NoNewPrivileges=true

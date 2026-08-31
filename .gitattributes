@@ -1,0 +1,62 @@
+# Normalizacao de line endings.
+# Sem isto, o Windows converte LF -> CRLF ao fazer checkout e vice-versa
+# ao commitar, o que gera diffs enganosos (whole-file rewrites) sempre
+# que um dev Windows e um Linux tocam no mesmo ficheiro.
+#
+# Regra geral: tudo em LF (Unix) — o Windows lida bem com LF nos editores
+# modernos e a maioria dos ficheiros deste repo corre em Linux (VPS).
+
+* text=auto eol=lf
+
+# Codigo fonte — LF explicito para nao depender do auto-detect.
+*.cs        text eol=lf
+*.csproj    text eol=lf
+*.sln       text eol=lf
+*.razor     text eol=lf
+*.cshtml    text eol=lf
+
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+
+*.html      text eol=lf
+*.css       text eol=lf
+*.scss      text eol=lf
+
+# Scripts shell — obrigatoriamente LF (Linux recusa CRLF em bash).
+*.sh        text eol=lf
+*.env       text eol=lf
+*.env.sample text eol=lf
+
+# Scripts Python
+*.py        text eol=lf
+
+# SQL
+*.sql       text eol=lf
+
+# Ficheiros binarios — nao aplicar conversao (senao corrompem).
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.webp      binary
+*.pdf       binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.eot       binary
+*.dump      binary
+*.mp4       binary

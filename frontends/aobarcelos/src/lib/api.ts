@@ -90,6 +90,38 @@ export function parseAnnouncement(site: Site | null | undefined): Announcement |
   }
 }
 
+// Devolve o tempo de espera humanizado em pt-PT. Acima de um minuto usa
+// minutos arredondados para cima (o utilizador nunca deve ver "573 segundos");
+// abaixo de um minuto mostra "menos de 1 minuto" para não passar sensação
+// de "quase pronto" quando ainda pode faltar meio minuto.
+export function formatWaitTime(seconds: number): string {
+  if (seconds >= 60) {
+    const mins = Math.ceil(seconds / 60);
+    return `${mins} ${mins === 1 ? "minuto" : "minutos"}`;
+  }
+  if (seconds >= 20) return "menos de 1 minuto";
+  return `${seconds} segundos`;
+}
+
+// Versão compacta para o botão. Mantém o feedback vivo mas curto.
+export function formatWaitTimeShort(seconds: number): string {
+  if (seconds >= 60) return `~${Math.ceil(seconds / 60)} min`;
+  return `${seconds} s`;
+}
+
+function parseRetryAfter(res: Response, json: unknown): number | undefined {
+  const bodyValue = (json as { retryAfter?: unknown } | null)?.retryAfter;
+  if (typeof bodyValue === "number" && Number.isFinite(bodyValue) && bodyValue > 0) {
+    return Math.ceil(bodyValue);
+  }
+  const header = res.headers.get("Retry-After");
+  if (header) {
+    const seconds = Number.parseInt(header, 10);
+    if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  }
+  return undefined;
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_URL}/api/sites/${SITE_SLUG}${path}`, {
     method: "POST",
@@ -99,9 +131,14 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { ok: false, error: (json as { error?: string }).error ?? `HTTP ${res.status}` } as T;
+    return {
+      ok: false,
+      error: (json as { error?: string }).error ?? `HTTP ${res.status}`,
+      status: res.status,
+      retryAfter: parseRetryAfter(res, json),
+    } as T;
   }
-  return json as T;
+  return { ...(json as object), status: res.status } as T;
 }
 
 async function postForm<T>(path: string, body: FormData): Promise<T> {
@@ -113,9 +150,14 @@ async function postForm<T>(path: string, body: FormData): Promise<T> {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { ok: false, error: (json as { error?: string }).error ?? `HTTP ${res.status}` } as T;
+    return {
+      ok: false,
+      error: (json as { error?: string }).error ?? `HTTP ${res.status}`,
+      status: res.status,
+      retryAfter: parseRetryAfter(res, json),
+    } as T;
   }
-  return json as T;
+  return { ...(json as object), status: res.status } as T;
 }
 
 const HTML_ENTITIES: Record<string, string> = {

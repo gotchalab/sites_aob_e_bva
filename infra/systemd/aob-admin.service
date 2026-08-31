@@ -17,7 +17,12 @@ SyslogIdentifier=aob-admin
 Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5001
+# Ordem importante: admin.env primeiro (base), smtp.env DEPOIS (override).
+# No systemd, EnvironmentFile posterior sobrepoe anterior para a mesma
+# variavel - assim o smtp.env e a fonte da verdade dos Smtp__* mesmo que
+# admin.env ainda tenha alguma linha herdada.
 EnvironmentFile=-/etc/aob/admin.env
+EnvironmentFile=-/etc/aob/smtp.env
 
 NoNewPrivileges=true
 PrivateTmp=true

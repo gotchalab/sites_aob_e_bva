@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, formatWaitTime, formatWaitTimeShort } from "@/lib/api";
 import type {
   ConvoyageActiveYearDto,
   EntryType,
@@ -209,9 +209,7 @@ function validateTransportGroup(g: TransportGroupState): {
 } {
   const groupErrors: Record<string, string> = {};
   if (!g.origem) groupErrors.origem = "Selecione se é uma compra ou uma venda";
-  // Para Compra, o destinatário é o próprio criador (dados auto-preenchidos no envio);
-  // só se pedem os campos de destinatário quando é uma Venda.
-  if (g.origem === "Vende") {
+  if (g.origem === "Vende" || g.origem === "Compra") {
     if (!g.destinatarioNome.trim()) groupErrors.destinatarioNome = "Campo obrigatório";
     if (!g.destinatarioWhatsapp.trim()) groupErrors.destinatarioWhatsapp = "Campo obrigatório";
   }
@@ -883,58 +881,73 @@ function TransportGroupCard({
         {groupErrors.origem && <p className={errCls}>{groupErrors.origem}</p>}
       </div>
 
-      {group.origem === "Compra" && (
-        <div className="mb-4 rounded-lg border-l-4 border-sky-400 bg-sky-50/60 px-3 py-2 text-xs text-ink-700">
-          <b>Compra:</b> as aves vão viajar da Bélgica para Portugal e serão entregues a si
-          <b> juntamente com as suas aves de concurso</b>, no regresso da convoyage.
-        </div>
-      )}
-
-      {group.origem === "Vende" && (
-        <div className="mb-4">
-          <div className="mb-3 rounded-lg border-l-4 border-orange-400 bg-orange-50/60 px-3 py-2 text-xs text-ink-700">
-            <b>Venda:</b> as aves vão viajar de Portugal para a Bélgica e serão entregues à pessoa
-            indicada abaixo, que <b>tem de estar presente na chegada (12h hora belga)</b>.
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <span className={labelCls}>Nome do destinatário na Bélgica *</span>
-              <input
-                type="text"
-                value={group.destinatarioNome}
-                onChange={(e) => onUpdateGroup({ destinatarioNome: e.target.value })}
-                placeholder="Ex: Jan Peeters"
-                className={`${inputCls} ${inputBorder(!!groupErrors.destinatarioNome)}`}
-              />
-              {groupErrors.destinatarioNome && <p className={errCls}>{groupErrors.destinatarioNome}</p>}
-            </div>
-            <div>
-              <span className={labelCls}>WhatsApp do destinatário *</span>
-              <input
-                type="tel"
-                inputMode="tel"
-                value={group.destinatarioWhatsapp}
-                onChange={(e) => onUpdateGroup({ destinatarioWhatsapp: e.target.value })}
-                placeholder="+32 470 123 456"
-                className={`${inputCls} font-mono ${inputBorder(!!groupErrors.destinatarioWhatsapp)}`}
-              />
-              {groupErrors.destinatarioWhatsapp && (
-                <p className={errCls}>{groupErrors.destinatarioWhatsapp}</p>
+      {(group.origem === "Compra" || group.origem === "Vende") && (() => {
+        const isCompra = group.origem === "Compra";
+        const role = isCompra ? "remetente" : "destinatário";
+        const alertClasses = "border-orange-400 bg-orange-50/60";
+        return (
+          <div className="mb-4">
+            <div className={`mb-3 rounded-lg border-l-4 px-3 py-2 text-xs text-ink-700 ${alertClasses}`}>
+              {isCompra ? (
+                <>
+                  <b>Compra:</b> as aves vão viajar da Bélgica para Portugal e serão entregues a si
+                  <b> juntamente com as suas aves de concurso</b>, no regresso da convoyage. Indique
+                  abaixo os dados do <b>remetente na Bélgica</b> (quem entrega as aves à convoyage portuguesa).
+                  <div className="mt-2">
+                    <b>Importante:</b> o remetente tem de entregar as aves à convoyage portuguesa no <b>domingo de manhã</b>.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <b>Venda:</b> as aves vão viajar de Portugal para a Bélgica e serão entregues à pessoa
+                  indicada abaixo, que <b>tem de estar presente na chegada (12h hora belga)</b>.
+                </>
               )}
             </div>
-            <div className="sm:col-span-2">
-              <span className={labelCls}>Notas do destinatário (opcional)</span>
-              <textarea
-                value={group.destinatarioNotas}
-                onChange={(e) => onUpdateGroup({ destinatarioNotas: e.target.value })}
-                placeholder="Notas adicionais sobre o destinatário (ex.: instruções de entrega)"
-                rows={2}
-                className={`${inputCls} ${inputBorder(false)}`}
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <span className={labelCls}>Nome do {role} na Bélgica *</span>
+                <input
+                  type="text"
+                  value={group.destinatarioNome}
+                  onChange={(e) => onUpdateGroup({ destinatarioNome: e.target.value })}
+                  placeholder="Ex: Jan Peeters"
+                  className={`${inputCls} ${inputBorder(!!groupErrors.destinatarioNome)}`}
+                />
+                {groupErrors.destinatarioNome && <p className={errCls}>{groupErrors.destinatarioNome}</p>}
+              </div>
+              <div>
+                <span className={labelCls}>WhatsApp do {role} *</span>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={group.destinatarioWhatsapp}
+                  onChange={(e) => onUpdateGroup({ destinatarioWhatsapp: e.target.value })}
+                  placeholder="+32 470 123 456"
+                  className={`${inputCls} font-mono ${inputBorder(!!groupErrors.destinatarioWhatsapp)}`}
+                />
+                {groupErrors.destinatarioWhatsapp && (
+                  <p className={errCls}>{groupErrors.destinatarioWhatsapp}</p>
+                )}
+              </div>
+              <div className="sm:col-span-2">
+                <span className={labelCls}>Notas do {role} (opcional)</span>
+                <textarea
+                  value={group.destinatarioNotas}
+                  onChange={(e) => onUpdateGroup({ destinatarioNotas: e.target.value })}
+                  placeholder={
+                    isCompra
+                      ? "Notas adicionais sobre o remetente (ex.: local/hora de recolha, referência do vendedor)"
+                      : "Notas adicionais sobre o destinatário (ex.: instruções de entrega)"
+                  }
+                  rows={2}
+                  className={`${inputCls} ${inputBorder(false)}`}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="flex flex-col gap-3">
         {group.birds.map((b, i) => (
@@ -956,7 +969,7 @@ function TransportGroupCard({
         className="mt-3 inline-flex items-center gap-2 rounded-full border border-teal-500/40 bg-white px-3.5 py-1.5 text-xs font-medium text-teal-700 shadow-sm transition hover:bg-teal-500/10"
       >
         <span className="text-base leading-none">+</span>
-        Adicionar outra ave para este destinatário
+        Adicionar outra ave {group.origem === "Compra" ? "deste remetente" : "para este destinatário"}
       </button>
     </div>
   );
@@ -988,6 +1001,10 @@ export function InscricaoConvoyageForm({
     Record<number, { group: Record<string, string>; birds: Record<number, Record<string, string>> }>
   >({});
   const transportBirdsCount = transportGroups.reduce((n, g) => n + g.birds.length, 0);
+  const hasCompraTransport = transportGroups.some((g) => g.origem === "Compra");
+  const hasVendaTransport = transportGroups.some((g) => g.origem === "Vende");
+  const [aceitouTransporteCompra, setAceitouTransporteCompra] = useState(false);
+  const [aceitouTransporteVenda, setAceitouTransporteVenda] = useState(false);
   const [socioBvaStatus, setSocioBvaStatus] = useState<SocioBvaStatus | "">("");
   const socioBva = socioBvaStatus !== "NaoSocio";
   const signaturePadRef = useRef<SignaturePadHandle>(null);
@@ -1002,6 +1019,39 @@ export function InscricaoConvoyageForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string>();
+  // Quando o backend devolve 429, guardamos aqui o timestamp (ms) em que o
+  // rate-limit expira para mostrar contagem regressiva e desabilitar o botão.
+  const [rateLimitUntil, setRateLimitUntil] = useState<number | null>(null);
+  const [rateLimitTick, setRateLimitTick] = useState(0);
+  useEffect(() => {
+    if (rateLimitUntil === null) return;
+    if (Date.now() >= rateLimitUntil) {
+      setRateLimitUntil(null);
+      return;
+    }
+    const id = setInterval(() => {
+      if (Date.now() >= rateLimitUntil) {
+        setRateLimitUntil(null);
+        return;
+      }
+      setRateLimitTick((t) => t + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [rateLimitUntil]);
+  const rateLimitSecondsLeft =
+    rateLimitUntil !== null ? Math.max(0, Math.ceil((rateLimitUntil - Date.now()) / 1000)) : 0;
+  // rateLimitTick é usado apenas para forçar re-render — evitamos aviso do linter
+  void rateLimitTick;
+
+  // Scroll até à caixa de erro. Sem isto, em ecrãs pequenos ou com teclado
+  // móvel aberto a mensagem cai fora do viewport e o utilizador não a vê —
+  // era exactamente o cenário que fazia repetir o submit sem perceber porquê.
+  const errorBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (state === "error" && errorBoxRef.current) {
+      errorBoxRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [state, errorMsg, rateLimitUntil]);
   const [token, setToken] = useState<string>();
   const widgetContainer = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
@@ -1437,8 +1487,8 @@ export function InscricaoConvoyageForm({
         anilha: b.anilha.trim(),
       })),
       avesTransporte: transportGroups.flatMap((g) => {
-        const destNome = g.origem === "Compra" ? String(raw.get("nomeCompleto") ?? "").trim() : g.destinatarioNome.trim();
-        const destWa = g.origem === "Compra" ? String(raw.get("telefone") ?? "").trim() : g.destinatarioWhatsapp.trim();
+        const destNome = g.destinatarioNome.trim();
+        const destWa = g.destinatarioWhatsapp.trim();
         return g.birds.map((b) => ({
           especie: b.species,
           origem: (g.origem || "Vende") as "Compra" | "Vende",
@@ -1517,6 +1567,10 @@ export function InscricaoConvoyageForm({
     if (!socioBvaStatus) newFieldErrors["socioBvaStatus"] = "Escolha uma das opções";
     if (!raw.get("aceitouRegulamento")) newFieldErrors["aceitouRegulamento"] = "Campo obrigatório";
     if (!raw.get("declaraArt59")) newFieldErrors["declaraArt59"] = "Campo obrigatório";
+    if (hasVendaTransport && !aceitouTransporteVenda)
+      newFieldErrors["aceitouTransporteVenda"] = "Campo obrigatório";
+    if (hasCompraTransport && !aceitouTransporteCompra)
+      newFieldErrors["aceitouTransporteCompra"] = "Campo obrigatório";
     const assinaturaEmpty = signaturePadRef.current?.isEmpty() ?? true;
     if (assinaturaEmpty) newFieldErrors["assinatura"] = "Assinatura obrigatória";
     if (birds.length === 0 && teams.length === 0 && saleBirds.length === 0 && transportBirdsCount === 0)
@@ -1634,6 +1688,10 @@ export function InscricaoConvoyageForm({
         targetEl = document.querySelector(`[name="aceitouRegulamento"]`) as HTMLElement | null;
       } else if ("declaraArt59" in newFieldErrors) {
         targetEl = document.querySelector(`[name="declaraArt59"]`) as HTMLElement | null;
+      } else if ("aceitouTransporteVenda" in newFieldErrors) {
+        targetEl = document.getElementById("field-aceitouTransporteVenda");
+      } else if ("aceitouTransporteCompra" in newFieldErrors) {
+        targetEl = document.getElementById("field-aceitouTransporteCompra");
       } else if ("assinatura" in newFieldErrors) {
         targetEl = document.getElementById("field-assinatura");
       }
@@ -1695,10 +1753,9 @@ export function InscricaoConvoyageForm({
         anilha: b.anilha.trim(),
       })),
       avesTransporte: transportGroups.flatMap((g) => {
-        // Para Compra, o destinatário é o próprio criador (auto-preenchido).
-        const destNome = g.origem === "Compra" ? nomeCompleto : g.destinatarioNome.trim();
-        const destWa = g.origem === "Compra" ? telefone : g.destinatarioWhatsapp.trim();
-        const destNotas = g.origem === "Compra" ? undefined : g.destinatarioNotas.trim() || undefined;
+        const destNome = g.destinatarioNome.trim();
+        const destWa = g.destinatarioWhatsapp.trim();
+        const destNotas = g.destinatarioNotas.trim() || undefined;
         return g.birds.map((b) => ({
           especie: b.species,
           origem: g.origem as "Compra" | "Vende",
@@ -1722,13 +1779,31 @@ export function InscricaoConvoyageForm({
         return;
       }
       setState("error");
-      setErrorMsg(res.error ?? "Erro desconhecido");
+      if (res.status === 429) {
+        // Rate-limit: mostramos contagem regressiva e desabilitamos o botão
+        // até expirar. Sem retryAfter (proxy sem header), assumimos 60s por
+        // segurança para o utilizador não ficar preso a clicar em loop.
+        const seconds = res.retryAfter && res.retryAfter > 0 ? res.retryAfter : 60;
+        setRateLimitUntil(Date.now() + seconds * 1000);
+        setErrorMsg(
+          res.error ??
+            `Foram feitas demasiadas submissões desta ligação nos últimos minutos. Aguarde ${formatWaitTime(seconds)} antes de tentar de novo.`
+        );
+      } else if (res.status && res.status >= 500) {
+        setErrorMsg(
+          "Não foi possível processar a inscrição neste momento. Tente novamente dentro de alguns minutos."
+        );
+      } else {
+        // 400 (validação backend): mostra a mensagem exacta do servidor —
+        // costuma ser específica (ex.: "Código postal deve ter formato 0000-000").
+        setErrorMsg(res.error ?? "Erro desconhecido");
+      }
     } catch (err) {
       setState("error");
       setErrorMsg(
         err instanceof Error && err.name === "AbortError"
-          ? "O servidor demorou demasiado tempo a responder. Verifica se a inscrição foi registada antes de submeter de novo."
-          : "Falha de ligação ao servidor. Verifica a tua Internet e tenta novamente."
+          ? "O servidor demorou demasiado tempo a responder. Verifique se a inscrição foi registada antes de submeter de novo."
+          : "Falha de ligação ao servidor. Verifique a sua Internet e tente novamente."
       );
     } finally {
       if (window.turnstile && widgetId.current) window.turnstile.reset(widgetId.current);
@@ -2119,22 +2194,30 @@ export function InscricaoConvoyageForm({
         <h2 className={sectionTitleCls}>4. Aves para transporte (compra/venda)</h2>
         <p className="mt-1 text-sm text-ink-500">
           Aves que <b>compra ou vende</b> e que <b>não entram no concurso BVA Masters nem vão para a sala
-          de vendas da BVA</b>. Cada ave ocupa um espaço na transportadora (reservado para ida e volta).
+          de vendas da BVA</b>. Cada ave ocupa um espaço na transportadora — o transporte é cobrado
+          por <b>espaço</b>, e cada espaço pode ir (PT→BE), voltar (BE→PT) ou ambos.
         </p>
         <div className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-ink-800">
           <p className="mb-2"><b>Importante — leia com atenção:</b></p>
           <ul className="mb-0 list-disc space-y-1 pl-5">
             <li>
-              <b>Chegada prevista à Bélgica: 12h (hora local belga).</b> O
-              destinatário indicado <b>tem obrigatoriamente de estar presente no
-              local a essa hora</b> para receber as aves — <b>não temos condições
-              para as guardar por mais tempo</b>.
+              <b>Chegada prevista à Bélgica: 12h (hora belga).</b> O destinatário
+              indicado <b>tem de estar presente a essa hora</b> para receber as aves —
+              não temos condições para lhes dar água e alimentação e{" "}
+              <b>não nos responsabilizamos por eventuais mortes</b>.
             </li>
             <li>
-              <b>Sujeito a validação de espaço:</b> capacidade máxima total é de
-              <b> 400 aves para transporte</b>. Prioridade para as <b>aves de exposição</b>
-              (concurso e sala de vendas BVA); as aves de compra/venda só são aceites
-              se restar espaço. Enviaremos email a confirmar <b>após o fecho das inscrições</b>.
+              <b>Se comprou aves na Bélgica:</b> o remetente indicado tem de entregar as aves
+              à convoyage portuguesa <b>no domingo de manhã</b>, e não antes. Entregas antecipadas
+              não são aceites — sem condições para dar água e alimentação,{" "}
+              <b>não nos responsabilizamos por eventuais mortes</b>.
+            </li>
+            <li>
+              <b>Sujeito a validação de espaço:</b> capacidade máxima de{" "}
+              <b>400 aves para transporte</b>. Prioridade para as{" "}
+              <b>aves de exposição</b> (concurso e sala de vendas BVA); as aves de
+              compra/venda só são aceites se restar espaço. Confirmação por email{" "}
+              <b>após o fecho das inscrições</b>.
             </li>
           </ul>
         </div>
@@ -2182,7 +2265,16 @@ export function InscricaoConvoyageForm({
       {(() => {
         const nConcurso = birds.length + teams.length * 4;
         const nVenda = saleBirds.length;
-        const nTransporte = transportBirdsCount;
+        // Espaços = max(nº compra, nº vende) — um espaço/gaiola pode ser usado
+        // numa direção (só ida ou só volta) ou nas duas (ida + volta) e conta
+        // como 1 pagamento apenas.
+        const nCompra = transportGroups
+          .filter((g) => g.origem === "Compra")
+          .reduce((n, g) => n + g.birds.length, 0);
+        const nVendeTr = transportGroups
+          .filter((g) => g.origem === "Vende")
+          .reduce((n, g) => n + g.birds.length, 0);
+        const nEspacosTr = Math.max(nCompra, nVendeTr);
         const totalAvesC = nConcurso + nVenda;
         const tarifa = socioBva ? 5.5 : 15.5;
         const tarifaAdq = socioBva ? 15.5 : 20.5;
@@ -2190,7 +2282,7 @@ export function InscricaoConvoyageForm({
         const cAves = 3.0 * nConcurso;
         const cGaiolas = 3.0 * totalAvesC;
         const cTransporte = tarifa * totalAvesC;
-        const cTransporteAdq = tarifaAdq * nTransporte;
+        const cTransporteAdq = tarifaAdq * nEspacosTr;
         const cQuota = socioBvaStatus === "PagaComInscricao" ? 40.0 : 0.0;
         const cTotal = cInscricao + cAves + cGaiolas + cTransporte + cTransporteAdq + cQuota;
         return (
@@ -2232,10 +2324,13 @@ export function InscricaoConvoyageForm({
                       </tr>
                     </>
                   )}
-                  {nTransporte > 0 && (
+                  {nEspacosTr > 0 && (
                     <tr>
                       <td className="px-4 py-2 text-ink-700">
-                        Transporte de aves adquiridas/cedidas {socioBva ? "(sócio BVA)" : "(não-sócio)"} · {nTransporte} × {tarifaAdq.toFixed(2)} €
+                        Transporte de aves adquiridas/cedidas {socioBva ? "(sócio BVA)" : "(não-sócio)"} · {nEspacosTr} espaço{nEspacosTr === 1 ? "" : "s"} × {tarifaAdq.toFixed(2)} €
+                        <span className="ml-1 text-xs text-ink-500">
+                          (max de {nCompra} compra e {nVendeTr} venda)
+                        </span>
                       </td>
                       <td className="px-4 py-2 text-right font-mono text-ink-900">{cTransporteAdq.toFixed(2)} €</td>
                     </tr>
@@ -2339,6 +2434,54 @@ export function InscricaoConvoyageForm({
           {err("declaraArt59")}
         </div>
 
+        {hasVendaTransport && (
+          <div id="field-aceitouTransporteVenda" className="mt-3">
+            <label className="inline-flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                name="aceitouTransporteVenda"
+                checked={aceitouTransporteVenda}
+                onChange={(e) => {
+                  setAceitouTransporteVenda(e.currentTarget.checked);
+                  if (e.currentTarget.checked) clearField("aceitouTransporteVenda");
+                }}
+                className="mt-1 h-4 w-4 accent-brand-500"
+              />
+              <span className="font-medium text-ink-900">
+                Confirmo que o <b>destinatário na Bélgica</b> estará presente às{" "}
+                <b>12h (hora belga)</b> para receber as aves. Sem condições para dar
+                água e alimentação após essa hora, a BVA{" "}
+                <b>não se responsabiliza por mortes</b>. *
+              </span>
+            </label>
+            {err("aceitouTransporteVenda")}
+          </div>
+        )}
+
+        {hasCompraTransport && (
+          <div id="field-aceitouTransporteCompra" className="mt-3">
+            <label className="inline-flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                name="aceitouTransporteCompra"
+                checked={aceitouTransporteCompra}
+                onChange={(e) => {
+                  setAceitouTransporteCompra(e.currentTarget.checked);
+                  if (e.currentTarget.checked) clearField("aceitouTransporteCompra");
+                }}
+                className="mt-1 h-4 w-4 accent-brand-500"
+              />
+              <span className="font-medium text-ink-900">
+                Confirmo que o <b>remetente na Bélgica</b> só entrega as aves à convoyage{" "}
+                <b>no domingo de manhã</b>. Entregas antecipadas não são aceites — sem
+                condições para dar água e alimentação, a BVA{" "}
+                <b>não se responsabiliza por mortes</b>. *
+              </span>
+            </label>
+            {err("aceitouTransporteCompra")}
+          </div>
+        )}
+
         <div id="field-assinatura" className="mt-6">
           <span className={labelCls}>Assinatura *</span>
           <p className="mt-1 text-xs text-ink-500">
@@ -2420,17 +2563,40 @@ export function InscricaoConvoyageForm({
       )}
 
       {state === "error" && errorMsg && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          {errorMsg}
+        <div
+          ref={errorBoxRef}
+          className={
+            rateLimitSecondsLeft > 0
+              ? "rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+              : "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          }
+        >
+          <p className="font-semibold">
+            {rateLimitSecondsLeft > 0
+              ? "Demasiadas tentativas — aguarde alguns minutos"
+              : "Não foi possível submeter a inscrição"}
+          </p>
+          <p className="mt-1">{errorMsg}</p>
+          {rateLimitSecondsLeft > 0 && (
+            <p className="mt-2 text-xs">
+              Pode tentar novamente dentro de <strong>{formatWaitTime(rateLimitSecondsLeft)}</strong>.
+              Se partilha a ligação à Internet com outros criadores — por
+              exemplo, a mesma rede de casa — o limite é comum a todos.
+            </p>
+          )}
         </div>
       )}
 
       <button
         type="submit"
-        disabled={state === "sending"}
+        disabled={state === "sending" || rateLimitSecondsLeft > 0}
         className="rounded-full bg-brand-500 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {state === "sending" ? "A enviar..." : "Submeter inscrição"}
+        {state === "sending"
+          ? "A enviar..."
+          : rateLimitSecondsLeft > 0
+            ? `Aguarde ${formatWaitTimeShort(rateLimitSecondsLeft)}…`
+            : "Submeter inscrição"}
       </button>
 
       {contactEmail && (

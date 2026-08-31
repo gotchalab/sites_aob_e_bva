@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Renci.SshNet;
 
-namespace AOB.Migrator;
+namespace AOB.Migrator.Commands.Bootstrap;
 
 /// <summary>
 /// Abre um túnel SSH que expõe a porta 3306 do VPS na localhost:3307 do dev.

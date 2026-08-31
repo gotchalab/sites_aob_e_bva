@@ -162,7 +162,12 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
         string? CodigoPostal = null,
         string? Localidade = null,
         string? AssinaturaPath = null,
-        bool DeclaraArt59 = false);
+        bool DeclaraArt59 = false,
+        // Aves oferecidas pelo criador (isentas de pagamento). Marcadas apenas no
+        // backoffice. Fisicamente ocupam espaço no camião mas não entram no cálculo
+        // de gaiolas/transporte. Valor entre 0 e a contagem total da respectiva lista.
+        int NumAvesVendaOferecidas = 0,
+        int NumAvesTransporteOferecidas = 0);
 
     // Actualiza (ou cria) a assinatura de uma inscrição de convoyage a partir
     // de um dataURL PNG. Escreve o PNG em disco (mesmo caminho relativo do
@@ -265,7 +270,8 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
 
         var existing = ParseEdit(f.DataJson) ?? new ConvoyageEditModel(
             "", "", null, "", null, "", false, "NaoSocio", new(), new(), new(),
-            Morada: null, CodigoPostal: null, Localidade: null, AssinaturaPath: null, DeclaraArt59: false);
+            Morada: null, CodigoPostal: null, Localidade: null, AssinaturaPath: null, DeclaraArt59: false,
+            NumAvesVendaOferecidas: 0, NumAvesTransporteOferecidas: 0);
 
         // Preservar campos que não editamos aqui.
         int convoyageYear = 0;
@@ -295,10 +301,21 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
         var numAves = aves.Count;
         var numVenda = vendaList.Count;
         var numTransporte = transporteList.Count;
+        var numTransporteCompra = transporteList.Count(a => (a.Origem ?? "") is "Compra" or "Adquirida");
+        var numTransporteVende = transporteList.Count(a => (a.Origem ?? "") is "Vende" or "Cedida");
+        var espacosTransporte = ConvoyagePricing.EspacosTransporteAdquirido(numTransporteCompra, numTransporteVende);
+        var vendaOferecidas = Math.Clamp(model.NumAvesVendaOferecidas, 0, numVenda);
+        var espacosOferecidos = Math.Clamp(model.NumAvesTransporteOferecidas, 0, espacosTransporte);
+        if (model.NumAvesVendaOferecidas < 0 || model.NumAvesVendaOferecidas > numVenda)
+            return $"Nº de aves de venda oferecidas ({model.NumAvesVendaOferecidas}) inválido — tem de estar entre 0 e {numVenda}.";
+        if (model.NumAvesTransporteOferecidas < 0 || model.NumAvesTransporteOferecidas > espacosTransporte)
+            return $"Nº de espaços de transporte oferecidos ({model.NumAvesTransporteOferecidas}) inválido — tem de estar entre 0 e {espacosTransporte}.";
         var statusEnum = Enum.TryParse<SocioBvaStatus>(model.SocioBvaStatus, out var st)
             ? st
             : (model.SocioBva ? SocioBvaStatus.JaSocio : SocioBvaStatus.NaoSocio);
-        var custos = ConvoyagePricing.Compute(numAves, numVenda, numTransporte, statusEnum);
+        var custos = ConvoyagePricing.Compute(numAves, numVenda, numTransporte, statusEnum,
+            vendaOferecidas, espacosOferecidos,
+            numTransporteCompra, numTransporteVende);
         var tarifa = ConvoyagePricing.TransportePorAve(model.SocioBva);
         var tarifaAdq = ConvoyagePricing.TransporteAdquiridaPorAve(model.SocioBva);
 
@@ -365,7 +382,9 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
         {
             pdfBytes = InscricaoConvoyagePdfGenerator.Render(
                 site, pdfReq, f.Id, localRecolhaLabel,
-                convYear?.Year ?? convoyageYear, logoBytes);
+                convYear?.Year ?? convoyageYear, logoBytes,
+                numAvesVendaOferecidas: vendaOferecidas,
+                numAvesTransporteOferecidas: espacosOferecidos);
         }
         catch (Exception ex)
         {
@@ -427,12 +446,18 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
                 a.EquipaId, a.PosicaoEquipa,
             }),
             TotalAvesVenda = numVenda,
+            NumAvesVendaOferecidas = vendaOferecidas,
             AvesVenda = vendaList.Select(a => new
             {
                 a.Especie, a.TipoClasse, a.EspecieMutacao, a.EspecieLivre,
                 a.DataNascimento, a.Sexo, a.Preco, a.Anilha
             }),
             TotalAvesTransporte = numTransporte,
+            NumAvesTransporteCompra = numTransporteCompra,
+            NumAvesTransporteVende = numTransporteVende,
+            EspacosTransporteAdquirido = espacosTransporte,
+            // Semanticamente: nº de espaços isentos de pagamento (não nº de aves).
+            NumAvesTransporteOferecidas = espacosOferecidos,
             AvesTransporte = transporteList.Select(a => new
             {
                 a.Especie,
@@ -525,7 +550,8 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
                     await email.SendAsync(
                         site.ContactEmail,
                         $"[{site.Name}] Inscrição convoyage actualizada — {model.NomeCompleto}",
-                        ConvoyageEmailRenderer.RenderAssociacao(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail),
+                        ConvoyageEmailRenderer.RenderAssociacao(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail,
+                            vendaOferecidas, espacosOferecidos),
                         attachmentsArray,
                         replyTo: model.Email,
                         fromEmail: fromEmailA,
@@ -545,7 +571,8 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
                     await email.SendAsync(
                         model.Email,
                         $"[{site.Name}] Inscrição convoyage actualizada",
-                        ConvoyageEmailRenderer.RenderCriador(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail),
+                        ConvoyageEmailRenderer.RenderCriador(site, pdfReq, f.Id, localRecolhaLabel, yearForEmail,
+                            vendaOferecidas, espacosOferecidos),
                         attachmentsArray,
                         replyTo: site.ContactEmail,
                         fromEmail: fromEmailC,
@@ -577,6 +604,7 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
 
             string? S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             bool B(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.True;
+            int I(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : 0;
 
             var aves = new List<ConvoyageAveEdit>();
             if (r.TryGetProperty("Aves", out var avesEl) && avesEl.ValueKind == JsonValueKind.Array)
@@ -635,7 +663,9 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
                 CodigoPostal: S("CodigoPostal"),
                 Localidade: S("Localidade"),
                 AssinaturaPath: S("AssinaturaPath"),
-                DeclaraArt59: B("DeclaraArt59"));
+                DeclaraArt59: B("DeclaraArt59"),
+                NumAvesVendaOferecidas: I("NumAvesVendaOferecidas"),
+                NumAvesTransporteOferecidas: I("NumAvesTransporteOferecidas"));
         }
         catch { return null; }
     }

@@ -167,4 +167,10 @@ export type FormSubmissionResponse = {
   error?: string | null;
   submissionId?: number | null;
   downloadToken?: string | null;
+  // HTTP status devolvido pelo servidor (429, 400, 500…). O cliente usa-o
+  // para diferenciar rate-limit de erro de validação e mostrar UI adequada.
+  status?: number;
+  // Segundos até o rate-limit expirar (só definido em 429). Vem do header
+  // Retry-After ou do corpo JSON do rate-limiter do backend.
+  retryAfter?: number;
 };
