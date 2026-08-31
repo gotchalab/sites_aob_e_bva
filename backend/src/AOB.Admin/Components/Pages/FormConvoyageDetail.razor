@@ -1,5 +1,6 @@
 @page "/formularios/{Id:int}"
 @attribute [Authorize]
+@using AOB.Application.Contracts
 @inject FormAdminService Forms
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -262,56 +263,82 @@ else
     }
 
     @* ── Resumo de custos ── *@
+    var cs = ComputeCostSummary();
     <div class="card mb-4 shadow-sm">
         <div class="card-header fw-semibold bg-primary text-white d-flex justify-content-between align-items-center">
             <span>@CustosIdx. Resumo de custos</span>
-            <span class="badge bg-light text-primary fs-6">@($"{CustoTotal:0.00}") €</span>
+            <span class="badge bg-light text-primary fs-6">@($"{cs.Total:0.00}") €</span>
         </div>
         <div class="card-body p-0">
             <table class="table mb-0">
                 <tbody>
-                    @if (CustoInscricao > 0m)
+                    @if (cs.Fixa > 0m)
                     {
                         <tr>
                             <td>Inscrição na exposição</td>
-                            <td class="text-end font-monospace">@($"{CustoInscricao:0.00}") €</td>
+                            <td class="text-end font-monospace">@($"{cs.Fixa:0.00}") €</td>
                         </tr>
                     }
-                    @if (_data.Aves.Count > 0)
+                    @if (cs.NConcurso > 0)
                     {
                         <tr>
-                            <td>Inscrição por ave · @_data.Aves.Count × 3,00 €</td>
-                            <td class="text-end font-monospace">@($"{CustoAves:0.00}") €</td>
+                            <td>Inscrição por ave · @cs.NConcurso × @ConvoyagePricing.InscricaoPorAve.ToString("0.00") €</td>
+                            <td class="text-end font-monospace">@($"{cs.Inscricoes:0.00}") €</td>
                         </tr>
                     }
-                    @if (TotalAvesConcursoVenda > 0)
+                    @if (cs.TotalAvesBruto > 0)
                     {
                         <tr>
-                            <td>Aluguer de gaiola · @TotalAvesConcursoVenda × 3,00 €</td>
-                            <td class="text-end font-monospace">@($"{CustoGaiolas:0.00}") €</td>
+                            <td>Aluguer de gaiola · @cs.TotalAvesBruto × @ConvoyagePricing.GaiolaPorAve.ToString("0.00") €</td>
+                            <td class="text-end font-monospace">@($"{cs.GaiolasBruto:0.00}") €</td>
                         </tr>
                         <tr>
-                            <td>Transporte @(_data.SocioBva ? "(sócio BVA)" : "(não-sócio)") · @TotalAvesConcursoVenda × @($"{Tarifa:0.00}") €</td>
-                            <td class="text-end font-monospace">@($"{CustoTransporte:0.00}") €</td>
+                            <td>Transporte @cs.SocioLabel · @cs.TotalAvesBruto × @($"{cs.Tarifa:0.00}") €</td>
+                            <td class="text-end font-monospace">@($"{cs.TransporteBruto:0.00}") €</td>
                         </tr>
                     }
-                    @if (_data.AvesTransporte.Count > 0)
+                    @if (cs.EspacosTransporte > 0)
                     {
                         <tr>
-                            <td>Transporte de aves adquiridas/cedidas @(_data.SocioBva ? "(sócio BVA)" : "(não-sócio)") · @_data.AvesTransporte.Count × @($"{TarifaAdquiridas:0.00}") €</td>
-                            <td class="text-end font-monospace">@($"{CustoTransporteAdquiridas:0.00}") €</td>
+                            <td>
+                                Transporte de aves adquiridas/cedidas @cs.SocioLabel · @cs.EspacosTransporte espaço@(cs.EspacosTransporte == 1 ? "" : "s") × @($"{cs.TarifaAdq:0.00}") €
+                                <span class="text-muted small">(max de @cs.NTransporteCompra compra e @cs.NTransporteVende venda)</span>
+                            </td>
+                            <td class="text-end font-monospace">@($"{cs.TransporteAdquiridasBruto:0.00}") €</td>
                         </tr>
                     }
-                    @if (CustoQuota > 0m)
+                    @if (cs.Quota > 0m)
                     {
                         <tr>
                             <td>Quota BVA Portugal</td>
-                            <td class="text-end font-monospace">@($"{CustoQuota:0.00}") €</td>
+                            <td class="text-end font-monospace">@($"{cs.Quota:0.00}") €</td>
+                        </tr>
+                    }
+                    @if (cs.VendaOferecidas > 0 || cs.EspacosOferecidos > 0)
+                    {
+                        <tr class="table-success">
+                            <td>
+                                <i class="bi bi-gift"></i>
+                                Oferta (isento de pagamento):
+                                @if (cs.VendaOferecidas > 0)
+                                {
+                                    <span>@cs.VendaOferecidas ave@(cs.VendaOferecidas == 1 ? "" : "s") de venda</span>
+                                }
+                                @if (cs.VendaOferecidas > 0 && cs.EspacosOferecidos > 0)
+                                {
+                                    <span> + </span>
+                                }
+                                @if (cs.EspacosOferecidos > 0)
+                                {
+                                    <span>@cs.EspacosOferecidos espaço@(cs.EspacosOferecidos == 1 ? "" : "s") de transporte</span>
+                                }
+                            </td>
+                            <td class="text-end font-monospace fw-semibold text-success">−@($"{cs.DescontoOferta:0.00}") €</td>
                         </tr>
                     }
                     <tr class="table-light fw-bold">
                         <td>TOTAL a pagar</td>
-                        <td class="text-end font-monospace">@($"{CustoTotal:0.00}") €</td>
+                        <td class="text-end font-monospace">@($"{cs.Total:0.00}") €</td>
                     </tr>
                 </tbody>
             </table>
@@ -370,17 +397,67 @@ else
     private string _statusLabel = "";
     private string _statusCls = "";
 
-    private int TotalAvesConcursoVenda => (_data?.Aves.Count ?? 0) + (_data?.AvesVenda.Count ?? 0);
     private int NumAvesTransporte => _data?.AvesTransporte.Count ?? 0;
-    private decimal Tarifa => (_data?.SocioBva ?? false) ? 5.50m : 15.50m;
-    private decimal TarifaAdquiridas => (_data?.SocioBva ?? false) ? 15.50m : 20.50m;
-    private decimal CustoInscricao => TotalAvesConcursoVenda > 0 ? 8.00m : 0m;
-    private decimal CustoAves => 3.00m * (_data?.Aves.Count ?? 0);
-    private decimal CustoGaiolas => 3.00m * TotalAvesConcursoVenda;
-    private decimal CustoTransporte => Tarifa * TotalAvesConcursoVenda;
-    private decimal CustoTransporteAdquiridas => TarifaAdquiridas * NumAvesTransporte;
-    private decimal CustoQuota => _data?.SocioBvaStatus == "PagaComInscricao" ? 40.00m : 0m;
-    private decimal CustoTotal => CustoInscricao + CustoAves + CustoGaiolas + CustoTransporte + CustoTransporteAdquiridas + CustoQuota;
+
+    // Snapshot com todos os valores da tabela — mesma fórmula do Edit e do PDF.
+    // Aves oferecidas descontam de gaiolas e transporte; espaço adquirido =
+    // max(compra, vende). Total já vem líquido do desconto de oferta.
+    private record CostSummary(
+        int NConcurso, int NVenda, int NTransporteCompra, int NTransporteVende, int EspacosTransporte,
+        int VendaOferecidas, int EspacosOferecidos,
+        int TotalAvesBruto, string SocioLabel,
+        decimal Tarifa, decimal TarifaAdq,
+        decimal Fixa, decimal Inscricoes,
+        decimal GaiolasBruto, decimal TransporteBruto, decimal TransporteAdquiridasBruto,
+        decimal DescontoOferta, decimal Quota, decimal Total);
+
+    private CostSummary ComputeCostSummary()
+    {
+        var d = _data;
+        var nConcurso = d?.Aves.Count ?? 0;
+        var nVenda = d?.AvesVenda.Count ?? 0;
+        var nTransporte = d?.AvesTransporte.Count ?? 0;
+        var nCompra = d?.AvesTransporte.Count(a => a.Origem is "Compra" or "Adquirida") ?? 0;
+        var nVendeTr = d?.AvesTransporte.Count(a => a.Origem is "Vende" or "Cedida") ?? 0;
+        var espacos = ConvoyagePricing.EspacosTransporteAdquirido(nCompra, nVendeTr);
+        var vendaOferecidas = Math.Clamp(d?.NumAvesVendaOferecidas ?? 0, 0, nVenda);
+        var espacosOferecidos = Math.Clamp(d?.NumAvesTransporteOferecidas ?? 0, 0, espacos);
+        var statusEnum = Enum.TryParse<SocioBvaStatus>(d?.SocioBvaStatus ?? "NaoSocio", out var st)
+            ? st
+            : ((d?.SocioBva ?? false) ? SocioBvaStatus.JaSocio : SocioBvaStatus.NaoSocio);
+        var socioBva = statusEnum != SocioBvaStatus.NaoSocio;
+        var tarifa = ConvoyagePricing.TransportePorAve(socioBva);
+        var tarifaAdq = ConvoyagePricing.TransporteAdquiridaPorAve(socioBva);
+        var custos = ConvoyagePricing.Compute(nConcurso, nVenda, nTransporte, statusEnum,
+            vendaOferecidas, espacosOferecidos, nCompra, nVendeTr);
+        var totalAvesBruto = nConcurso + nVenda;
+        var gaiolasBruto = ConvoyagePricing.GaiolaPorAve * totalAvesBruto;
+        var transporteBruto = tarifa * totalAvesBruto;
+        var transporteAdqBruto = tarifaAdq * espacos;
+        var descontoOferta = (gaiolasBruto - custos.gaiolas)
+                             + (transporteBruto - custos.transporte)
+                             + (transporteAdqBruto - custos.transporteAdquiridas);
+        return new CostSummary(
+            NConcurso: nConcurso,
+            NVenda: nVenda,
+            NTransporteCompra: nCompra,
+            NTransporteVende: nVendeTr,
+            EspacosTransporte: espacos,
+            VendaOferecidas: vendaOferecidas,
+            EspacosOferecidos: espacosOferecidos,
+            TotalAvesBruto: totalAvesBruto,
+            SocioLabel: socioBva ? "(sócio BVA)" : "(não-sócio)",
+            Tarifa: tarifa,
+            TarifaAdq: tarifaAdq,
+            Fixa: custos.fixa,
+            Inscricoes: custos.inscricoes,
+            GaiolasBruto: gaiolasBruto,
+            TransporteBruto: transporteBruto,
+            TransporteAdquiridasBruto: transporteAdqBruto,
+            DescontoOferta: descontoOferta,
+            Quota: custos.quota,
+            Total: custos.total);
+    }
 
     private int SectionsBeforeCustos =>
         2 + ((_data?.AvesVenda.Count ?? 0) > 0 ? 1 : 0) + (NumAvesTransporte > 0 ? 1 : 0);
@@ -451,6 +528,7 @@ else
         "agapornis_canus"       or "Canus"       => "A. canus",
         "agapornis_pullarius"   or "Pullarius"   => "A. pullarius",
         "agapornis_swindernianus" or "Swindernianus" => "A. swindernianus",
+        "forpus_coelestis"      or "Coelestis"   => "F. coelestis",
         _ => raw?.Replace('_', ' ') ?? "—"
     };
 
@@ -524,7 +602,9 @@ else
             return new ConvoyageData(
                 S("NomeCompleto"), S("Email"), S("Telefone"), S("Pais"),
                 S("NumeroStam"), S("LocalRecolha"),
-                I("ConvoyageYear"), S("PdfPath"), B("SocioBva"), S("SocioBvaStatus"), aves, avesVenda, avesTransporte);
+                I("ConvoyageYear"), S("PdfPath"), B("SocioBva"), S("SocioBvaStatus"),
+                I("NumAvesVendaOferecidas"), I("NumAvesTransporteOferecidas"),
+                aves, avesVenda, avesTransporte);
         }
         catch { return null; }
     }
@@ -563,5 +643,6 @@ else
         string? NomeCompleto, string? Email, string? Telefone, string? Pais,
         string? NumeroStam, string? LocalRecolha,
         int ConvoyageYear, string? PdfPath, bool SocioBva, string? SocioBvaStatus,
+        int NumAvesVendaOferecidas, int NumAvesTransporteOferecidas,
         List<AveData> Aves, List<AveVendaData> AvesVenda, List<AveTransporteData> AvesTransporte);
 }

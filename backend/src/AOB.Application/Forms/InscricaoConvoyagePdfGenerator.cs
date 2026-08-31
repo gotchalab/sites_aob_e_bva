@@ -439,7 +439,9 @@ public static class InscricaoConvoyagePdfGenerator
             double vc0 = 65;                                  // Data Nasc.
             double vc1 = 40;                                  // Sexo
             double vc3 = 60;                                  // Preço
-            double vc4 = 165;                                 // Anilha (mesma largura de concurso)
+            // Aqui a anilha é um código curto do criador (ex.: "156P 08 2025")
+            // — 95pt chegam de sobra e libertam espaço para a mutação.
+            double vc4 = 95;                                  // Anilha
             double vc2 = tableW - vc0 - vc1 - vc3 - vc4;      // Espécie/Mutação (resto)
             double vTableW = tableW;
 
@@ -462,26 +464,31 @@ public static class InscricaoConvoyagePdfGenerator
             {
                 var av = r.AvesVenda[i];
                 bool shade = i % 2 == 0;
-                EnsureRowSpace(15);
-                x = margin;
-
-                if (shade)
-                    g.DrawRectangle(lightGrey, new XRect(margin, y - 11, vTableW, 15));
 
                 var data = string.IsNullOrWhiteSpace(av.DataNascimento) ? "—" : av.DataNascimento;
                 var sexo = av.Sexo switch { SexoAve.Macho => t.SexMale, SexoAve.Femea => t.SexFemale, _ => t.SexUndef };
-                var esp  = TruncateToWidth(g, ComposeSpeciesMutation(av.Especie, av.EspecieMutacao), fontReg, vc2 - 6);
+                var espText = ComposeSpeciesMutation(av.Especie, av.EspecieMutacao);
+                var espLines = WrapToWidth(g, espText, fontReg, vc2 - 6);
                 var pre  = $"{av.Preco:0.00} €";
+
+                var rowHVenda = RowPaddingV + espLines.Length * RowLineHeight;
+                EnsureRowSpace(rowHVenda);
+                x = margin;
+
+                if (shade)
+                    g.DrawRectangle(lightGrey, new XRect(margin, y - 11, vTableW, rowHVenda));
 
                 g.DrawString(data,               fontReg, ink, new XPoint(x + 3, y)); x += vc0;
                 g.DrawString(sexo,               fontReg, ink, new XPoint(x + 3, y)); x += vc1;
-                g.DrawString(esp,                fontReg, ink, new XPoint(x + 3, y)); x += vc2;
+                for (int ln = 0; ln < espLines.Length; ln++)
+                    g.DrawString(espLines[ln], fontReg, ink, new XPoint(x + 3, y + ln * RowLineHeight));
+                x += vc2;
                 g.DrawString(pre,                fontReg, ink, new XPoint(x + 3, y)); x += vc3;
                 g.DrawString(av.Anilha ?? "",    fontReg, ink, new XPoint(x + 3, y));
 
                 x = margin;
-                g.DrawRectangle(borderPen, new XRect(x, y - 11, vTableW, 15));
-                y += 15;
+                g.DrawRectangle(borderPen, new XRect(x, y - 11, vTableW, rowHVenda));
+                y += rowHVenda;
             }
 
             currentTableHeader = null;

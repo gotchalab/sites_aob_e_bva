@@ -17,6 +17,23 @@ namespace AOB.Application.Convoyage;
 /// carga a carga na página `/convoyage/{id}/transportes`.
 public static class TransportPlanner
 {
+    // Modo de dimensionamento das cargas.
+    //   Total : conta TODAS as aves (concurso + venda + transp PT→BE + transp BE→PT).
+    //           Upper bound conservador — o número de "aves ocupadas" pode ser maior
+    //           do que o espaço físico realmente necessário no camião, pois uma
+    //           gaiola conta como 1 lugar mesmo que vá cheia numa direção e volte
+    //           cheia na outra.
+    //   PtBe  : só conta as aves que ocupam o camião na IDA (concurso + venda +
+    //           transporte de aves que o criador PT VENDE para BE).
+    //   BePt  : só conta as aves que ocupam o camião na VOLTA (concurso + venda +
+    //           transporte de aves que o criador PT COMPRA em BE).
+    //
+    // Nota sobre "venda": nem todas as aves de venda são vendidas — as que sobram
+    // regressam. Por segurança assumimos que TODAS as aves de venda ocupam espaço
+    // em ambos os sentidos. Fase 2 pode marcar "vendida" por ave e libertar espaço
+    // na volta.
+    public enum PlanMode { Total, PtBe, BePt }
+
     public record SubmissionInput(
         int SubmissionId,
         string NomeCriador,
@@ -24,9 +41,23 @@ public static class TransportPlanner
         string ZonaNome,
         int NumAvesConcurso,
         int NumAvesVenda,
-        int NumAvesTransporte = 0)
+        int NumAvesTransportePtBe = 0,
+        int NumAvesTransporteBePt = 0)
     {
+        public int NumAvesTransporte => NumAvesTransportePtBe + NumAvesTransporteBePt;
         public int TotalAves => NumAvesConcurso + NumAvesVenda + NumAvesTransporte;
+
+        // Aves que ocupam espaço em cada direção do camião.
+        // Venda conta em ambos: as não vendidas regressam (ver nota no enum PlanMode).
+        public int AvesPtBe => NumAvesConcurso + NumAvesVenda + NumAvesTransportePtBe;
+        public int AvesBePt => NumAvesConcurso + NumAvesVenda + NumAvesTransporteBePt;
+
+        public int AvesParaModo(PlanMode mode) => mode switch
+        {
+            PlanMode.PtBe => AvesPtBe,
+            PlanMode.BePt => AvesBePt,
+            _             => TotalAves,
+        };
     }
 
     public record ZoneInput(int CollectionPointId, string Nome, string? Location, int SortOrder)
@@ -37,7 +68,8 @@ public static class TransportPlanner
     public record PlannerConfig(
         int CapacidadePorCarga = 20,
         int MinPorCarga = 16,
-        int NumCargasAlvo = 23);
+        int NumCargasAlvo = 23,
+        PlanMode Mode = PlanMode.Total);
 
     public record CargaPlan(
         string Codigo,
@@ -89,11 +121,15 @@ public static class TransportPlanner
 
             // Processa submissão a submissão (maiores primeiro), dando prioridade
             // absoluta a juntar todas as partes do mesmo criador na mesma carga.
+            // No modo direccional (PT→BE / BE→PT), quem tem 0 aves nesse sentido
+            // é ignorado — não ocupa espaço na carga desse sentido.
             var openCargas = new List<CargaPlan>();
 
-            foreach (var sub in zoneSubs.OrderByDescending(s => s.TotalAves))
+            foreach (var sub in zoneSubs
+                .Where(s => s.AvesParaModo(config.Mode) > 0)
+                .OrderByDescending(s => s.AvesParaModo(config.Mode)))
             {
-                var parts = SplitSubmission(sub, config.CapacidadePorCarga)
+                var parts = SplitSubmission(sub, config.CapacidadePorCarga, config.Mode)
                     .OrderByDescending(p => p.Tamanho)
                     .ToList();
 
@@ -169,24 +205,47 @@ public static class TransportPlanner
     // Se a submissão excede a capacidade, divide-a em unidades preservando a
     // preferência de separar aves de concurso das aves de venda; se um dos tipos
     // por si só ainda exceder `cap`, parte em blocos de tamanho `cap`.
-    private static IEnumerable<PackUnit> SplitSubmission(SubmissionInput s, int cap)
+    //
+    // Em modos direccionais só se contam as aves que ocupam espaço nesse sentido:
+    //   PtBe → concurso + venda + transporte "vende" (PT→BE)
+    //   BePt → concurso + venda + transporte "compra" (BE→PT)
+    // Concurso e venda contam sempre em ambos sentidos (venda porque as não vendidas
+    // regressam — ver nota no enum PlanMode).
+    // As aves ignoradas ficam a zero no PackUnit (não são persistidas nesta carga).
+    private static IEnumerable<PackUnit> SplitSubmission(SubmissionInput s, int cap, PlanMode mode)
     {
-        if (s.TotalAves <= cap)
+        var contaConcurso = true;                              // sempre — ocupa ambos sentidos
+        var contaVenda    = true;                              // sempre — não vendidas regressam
+        var contaPtBe  = mode != PlanMode.BePt;                // transporte PT→BE
+        var contaBePt  = mode != PlanMode.PtBe;                // transporte BE→PT
+
+        var concurso = contaConcurso ? s.NumAvesConcurso        : 0;
+        var venda    = contaVenda    ? s.NumAvesVenda           : 0;
+        var trPtBe   = contaPtBe     ? s.NumAvesTransportePtBe  : 0;
+        var trBePt   = contaBePt     ? s.NumAvesTransporteBePt  : 0;
+
+        var totalEfectivo = concurso + venda + trPtBe + trBePt;
+        if (totalEfectivo == 0) yield break;
+
+        if (totalEfectivo <= cap)
         {
+            // Guardamos os componentes de transporte no bucket `NumAvesTransporte`
+            // do PackUnit — o snapshot persistido não distingue direção, e no modo
+            // direccional só um dos dois tem valor.
             yield return new PackUnit(s.NomeCriador, s,
-                s.NumAvesConcurso, s.NumAvesVenda, s.NumAvesTransporte, s.TotalAves);
+                concurso, venda, trPtBe + trBePt, totalEfectivo);
             yield break;
         }
 
-        foreach (var part in SplitByType(s.NumAvesConcurso, cap))
+        foreach (var part in SplitByType(concurso, cap))
             yield return new PackUnit(s.NomeCriador, s,
                 NumAvesConcurso: part, NumAvesVenda: 0, NumAvesTransporte: 0, Tamanho: part);
 
-        foreach (var part in SplitByType(s.NumAvesVenda, cap))
+        foreach (var part in SplitByType(venda, cap))
             yield return new PackUnit(s.NomeCriador, s,
                 NumAvesConcurso: 0, NumAvesVenda: part, NumAvesTransporte: 0, Tamanho: part);
 
-        foreach (var part in SplitByType(s.NumAvesTransporte, cap))
+        foreach (var part in SplitByType(trPtBe + trBePt, cap))
             yield return new PackUnit(s.NomeCriador, s,
                 NumAvesConcurso: 0, NumAvesVenda: 0, NumAvesTransporte: part, Tamanho: part);
     }

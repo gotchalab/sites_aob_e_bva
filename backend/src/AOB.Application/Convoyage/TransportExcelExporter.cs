@@ -49,7 +49,7 @@ public static class TransportExcelExporter
     public record AveRow(
         int SubmissionId, string Criador, string Serie, string Especie,
         string Mutacao, string Anilha, string Equipa, string Posicao,
-        string CargaAtribuida);
+        string Tipo, string CargaAtribuida);
 
     // ── Layout da folha "Preços" ─────────────────────────────────────────────
     // Coluna B contém os valores editáveis. Named ranges facilitam as fórmulas.
@@ -384,7 +384,7 @@ public static class TransportExcelExporter
     {
         var ws = wb.Worksheets.Add("Aves");
 
-        var headers = new[] { "Inscrição #", "Criador", "Espécie", "Anilha", "Transportadora" };
+        var headers = new[] { "Inscrição #", "Criador", "Espécie", "Anilha", "Tipo", "Transportadora" };
         for (int i = 0; i < headers.Length; i++)
             ws.Cell(1, i + 1).Value = headers[i];
 
@@ -400,7 +400,8 @@ public static class TransportExcelExporter
             ws.Cell(r, 2).Value = row.Criador;
             ws.Cell(r, 3).Value = EspecieLabel(row.Especie);
             ws.Cell(r, 4).Value = row.Anilha;
-            ws.Cell(r, 5).Value = row.CargaAtribuida;
+            ws.Cell(r, 5).Value = row.Tipo;
+            ws.Cell(r, 6).Value = row.CargaAtribuida;
             r++;
         }
 

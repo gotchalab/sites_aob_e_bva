@@ -19,18 +19,58 @@ public static class TransportEndpoints
                 .Include(y => y.Site)
                 .FirstOrDefaultAsync(y => y.Id == yearId);
 
-            var name = BuildFileName(year, yearId);
+            var name = BuildFileName(year, yearId, "transportes", "xlsx");
             return Results.File(bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 name);
         }).RequireAuthorization();
 
+        // Etiquetas Avery 3421 (33 por folha, 70×25.4 mm) — por ponto de recolha.
+        // Enviamos Content-Disposition: attachment para forçar download em vez
+        // de o browser abrir o PDF numa tab nova.
+        app.MapGet("/convoyage/{yearId:int}/pontos/{pointId:int}/etiquetas.pdf", async (
+            int yearId, int pointId, TransportPlanAdminService svc, AppDbContext db, HttpContext http) =>
+        {
+            var res = await svc.ExportEtiquetasPorPontoAsync(yearId, pointId);
+            if (res is null) return Results.NotFound();
+
+            var year = await db.ConvoyageYears.AsNoTracking()
+                .Include(y => y.Site)
+                .FirstOrDefaultAsync(y => y.Id == yearId);
+
+            var suffix = string.IsNullOrEmpty(res.ScopeSlug)
+                ? "avery3421"
+                : $"{res.ScopeSlug}-avery3421";
+            var name = BuildFileName(year, yearId, $"etiquetas-{suffix}", "pdf");
+            http.Response.Headers.ContentDisposition = $"attachment; filename=\"{name}\"";
+            return Results.File(res.Bytes, "application/pdf", name);
+        }).RequireAuthorization();
+
+        // Etiquetas Avery 3421 por inscrição individual.
+        app.MapGet("/convoyage/{yearId:int}/inscricoes/{submissionId:int}/etiquetas.pdf", async (
+            int yearId, int submissionId, TransportPlanAdminService svc, AppDbContext db, HttpContext http) =>
+        {
+            var res = await svc.ExportEtiquetasPorInscricaoAsync(yearId, submissionId);
+            if (res is null) return Results.NotFound();
+
+            var year = await db.ConvoyageYears.AsNoTracking()
+                .Include(y => y.Site)
+                .FirstOrDefaultAsync(y => y.Id == yearId);
+
+            var suffix = string.IsNullOrEmpty(res.ScopeSlug)
+                ? $"insc-{submissionId}-avery3421"
+                : $"{res.ScopeSlug}-avery3421";
+            var name = BuildFileName(year, yearId, $"etiquetas-{suffix}", "pdf");
+            http.Response.Headers.ContentDisposition = $"attachment; filename=\"{name}\"";
+            return Results.File(res.Bytes, "application/pdf", name);
+        }).RequireAuthorization();
+
         return app;
     }
 
-    private static string BuildFileName(ConvoyageYear? year, int fallbackId)
+    private static string BuildFileName(ConvoyageYear? year, int fallbackId, string kind, string ext)
     {
-        if (year is null) return $"convoyage-{fallbackId}-transportes.xlsx";
+        if (year is null) return $"convoyage-{fallbackId}-{kind}.{ext}";
 
         var parts = new List<string> { "convoyage" };
         var siteSlug = Slugify(year.Site?.Slug ?? year.Site?.Name);
@@ -38,8 +78,8 @@ public static class TransportEndpoints
         parts.Add(year.Year.ToString());
         var desc = Slugify(year.Description);
         if (!string.IsNullOrEmpty(desc)) parts.Add(desc);
-        parts.Add("transportes");
-        return string.Join("-", parts) + ".xlsx";
+        parts.Add(kind);
+        return string.Join("-", parts) + "." + ext;
     }
 
     private static string Slugify(string? value)

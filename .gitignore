@@ -59,8 +59,13 @@ __pycache__/
 *.sql
 *.bak
 
-# Test PDFs
+# Test PDFs (AOB.PdfTool: --grid/--calibrate, --convoyage, --etiquetas)
 pdf-test*.pdf
+pdf-test*.png
+pdf-convoyage-test*.pdf
+pdf-convoyage-test*.png
+pdf-etiquetas-test*.pdf
+pdf-etiquetas-test*.png
 
 # Test Excel output
 /excel-*-test*.xlsx

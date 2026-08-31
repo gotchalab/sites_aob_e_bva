@@ -61,6 +61,7 @@ void AddAves(int sub, string criador, int n, string carga)
             Serie: $"S{i+1:00}", Especie: "Roseicollis",
             Mutacao: "verde", Anilha: $"P-{sub}-{i:00}",
             Equipa: "—", Posicao: "—",
+            Tipo: "Concurso",
             CargaAtribuida: carga));
 }
 AddAves(101, "João Sócio",       5,  "T01");

@@ -14,8 +14,15 @@ public class TransportPlanAdminService(AppDbContext db)
         int SubmissionId, string NomeCriador, string Email, string Telefone, string Pais,
         int? CollectionPointId, string ZonaNome, string? ZonaLocation,
         int NumAvesConcurso, int NumAvesVenda, int NumAvesTransporte,
+        int NumAvesTransportePtBe, int NumAvesTransporteBePt,
         string SocioBva, decimal TotalPago,
-        int? CargaId, string? CargaCodigo);
+        int? CargaId, string? CargaCodigo)
+    {
+        // Aves que ocupam o camião em cada sentido (o mesmo cálculo usado pelo planner).
+        // Venda conta em ambos: as não vendidas regressam.
+        public int AvesPtBe => NumAvesConcurso + NumAvesVenda + NumAvesTransportePtBe;
+        public int AvesBePt => NumAvesConcurso + NumAvesVenda + NumAvesTransporteBePt;
+    }
 
     public record CargaRow(
         int Id, string Codigo, string TransportadoraNome, string ZonasLabel,
@@ -34,6 +41,21 @@ public class TransportPlanAdminService(AppDbContext db)
         int CollectionPointId, string Nome, string? Location, int SortOrder,
         int NumInscricoes, int TotalAves, int CargasNecessarias);
 
+    // Totais de ocupação do camião em cada sentido.
+    //   AvesPtBe = concurso + venda + transporte "vende" (PT→BE)
+    //   AvesBePt = concurso + venda + transporte "compra" (BE→PT)
+    //              (venda conta em ambos: não vendidas regressam)
+    //   AvesMax  = MAX(PtBe, BePt) por inscrição, somado — corresponde ao número
+    //              mínimo real de gaiolas para servir ambos sentidos.
+    public record DirectionTotals(int AvesPtBe, int AvesBePt, int AvesMax, int AvesSoma)
+    {
+        public int CargasPtBe(int cap) => Ceil(AvesPtBe, cap);
+        public int CargasBePt(int cap) => Ceil(AvesBePt, cap);
+        public int CargasMax(int cap)  => Ceil(AvesMax, cap);
+        public int CargasSoma(int cap) => Ceil(AvesSoma, cap);
+        private static int Ceil(int n, int cap) => n <= 0 || cap <= 0 ? 0 : (int)Math.Ceiling(n / (double)cap);
+    }
+
     public record PlanOverview(
         YearConfig Config,
         List<ConvoyageCollectionPoint> Zones,
@@ -43,7 +65,8 @@ public class TransportPlanAdminService(AppDbContext db)
         List<SubmissionRow> SubmissoesSemPontoRecolha,
         int TotalInscricoes,
         int TotalAves,
-        Dictionary<int, int> TotalAvesPorSubmissao);
+        Dictionary<int, int> TotalAvesPorSubmissao,
+        DirectionTotals Totais);
 
     // ── Config do ano ─────────────────────────────────────────────────────────
 
@@ -139,6 +162,7 @@ public class TransportPlanAdminService(AppDbContext db)
                 s.Id, m.Nome, m.Email, m.Telefone, m.Pais,
                 pointId, zonaNome, zonaLocation,
                 m.NumAvesConcurso, m.NumAvesVenda, m.NumAvesTransporte,
+                m.NumAvesTransportePtBe, m.NumAvesTransporteBePt,
                 m.SocioBvaLabel, m.TotalPago,
                 firstAssignment?.TransportCargaId, firstAssignment?.CargaCodigo);
         }).ToList();
@@ -195,16 +219,26 @@ public class TransportPlanAdminService(AppDbContext db)
             r => r.SubmissionId,
             r => r.NumAvesConcurso + r.NumAvesVenda + r.NumAvesTransporte);
 
+        var elegiveis = submissionRows.Where(r => r.CollectionPointId is not null).ToList();
+        var totais = new DirectionTotals(
+            AvesPtBe: elegiveis.Sum(r => r.AvesPtBe),
+            AvesBePt: elegiveis.Sum(r => r.AvesBePt),
+            AvesMax:  elegiveis.Sum(r => Math.Max(r.AvesPtBe, r.AvesBePt)),
+            AvesSoma: elegiveis.Sum(r => r.NumAvesConcurso + r.NumAvesVenda + r.NumAvesTransporte));
+
         return new PlanOverview(
             config, zones, sugestoes, cargaRows, semCarga, semPonto,
             submissionRows.Count,
             submissionRows.Sum(r => r.NumAvesConcurso + r.NumAvesVenda + r.NumAvesTransporte),
-            totalAvesPorSubmissao);
+            totalAvesPorSubmissao,
+            totais);
     }
 
     // ── Gerar / limpar plano ─────────────────────────────────────────────────
 
-    public async Task<string?> GeneratePlanAsync(int yearId)
+    public async Task<string?> GeneratePlanAsync(
+        int yearId,
+        TransportPlanner.PlanMode mode = TransportPlanner.PlanMode.Total)
     {
         var y = await db.ConvoyageYears
             .Include(x => x.CollectionPoints)
@@ -228,7 +262,8 @@ public class TransportPlanAdminService(AppDbContext db)
             var pointName = point?.Name ?? "(desconhecido)";
             return new TransportPlanner.SubmissionInput(
                 s.Id, m.Nome, s.LocalRecolhaId!.Value, pointName,
-                m.NumAvesConcurso, m.NumAvesVenda, m.NumAvesTransporte);
+                m.NumAvesConcurso, m.NumAvesVenda,
+                m.NumAvesTransportePtBe, m.NumAvesTransporteBePt);
         }).ToList();
 
         var zoneInputs = zonesSorted
@@ -236,7 +271,7 @@ public class TransportPlanAdminService(AppDbContext db)
             .ToList();
 
         var config = new TransportPlanner.PlannerConfig(
-            y.CapacidadePorCarga, y.MinPorCarga, y.NumCargasAlvo);
+            y.CapacidadePorCarga, y.MinPorCarga, y.NumCargasAlvo, mode);
 
         var plan = TransportPlanner.Plan(plannerSubs, zoneInputs, config);
 
@@ -566,6 +601,54 @@ public class TransportPlanAdminService(AppDbContext db)
                 ? string.Join(" + ", cs.Select(c => c.Codigo))
                 : "—";
 
+        // Filas por (submissionId, tipo) com uma entrada de código T por cada ave —
+        // consumidas por ordem quando montamos as linhas da folha "Aves". Isto dá
+        // uma atribuição determinística das anilhas às cargas específicas, mesmo
+        // quando a inscrição está partida (ex.: 18c em T06, 5v em T07).
+        var cargasPorAve = new Dictionary<(int SubId, string Tipo), Queue<string>>();
+        foreach (var (subId, cargas) in cargasBySubmissionId)
+        {
+            foreach (var tipo in new[] { "concurso", "venda", "transporte" })
+            {
+                var q = new Queue<string>();
+                foreach (var c in cargas)
+                {
+                    var s = c.Submissoes.FirstOrDefault(x => x.SubmissionId == subId);
+                    if (s is null) continue;
+                    var n = tipo switch
+                    {
+                        "concurso"   => s.NumAvesConcurso,
+                        "venda"      => s.NumAvesVenda,
+                        "transporte" => s.NumAvesTransporte,
+                        _            => 0,
+                    };
+                    for (int i = 0; i < n; i++) q.Enqueue(c.Codigo);
+                }
+                cargasPorAve[(subId, tipo)] = q;
+            }
+        }
+
+        string CargaParaAve(int subId, string tipo)
+        {
+            if (cargasPorAve.TryGetValue((subId, tipo), out var q) && q.Count > 0)
+                return q.Dequeue();
+            return CargaLabelFor(subId);
+        }
+
+        // Descreve as aves de uma inscrição atribuídas a UMA carga, agrupadas por
+        // tipo (18 concurso, 5 venda, ...). Serve para clarificar splits na folha
+        // "Transportes" — quando uma inscrição está partida por várias cargas,
+        // cada linha mostra apenas as aves dessa carga.
+        static string DescribeParte(CargaSubmissionRow s)
+        {
+            var parts = new List<string>();
+            if (s.NumAvesConcurso   > 0) parts.Add($"{s.NumAvesConcurso} concurso");
+            if (s.NumAvesVenda      > 0) parts.Add($"{s.NumAvesVenda} venda");
+            if (s.NumAvesTransporte > 0) parts.Add($"{s.NumAvesTransporte} transporte");
+            var detalhe = parts.Count == 0 ? "0" : string.Join(" + ", parts);
+            return $"{s.NomeCriador.ToUpperInvariant()} ({detalhe})";
+        }
+
         var transportes = overview.Cargas
             .OrderBy(c => c.SortOrder)
             .Select(c => new TransportExcelExporter.TransporteRow(
@@ -573,8 +656,7 @@ public class TransportPlanAdminService(AppDbContext db)
                 Codigo: c.Codigo,
                 NumAves: c.TotalAves,
                 Zonas: c.ZonasLabel,
-                CriadoresLabel: string.Join(", ", c.Submissoes
-                    .Select(s => $"{s.NomeCriador.ToUpperInvariant()} ({s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte})")),
+                CriadoresLabel: string.Join(", ", c.Submissoes.Select(DescribeParte)),
                 Tipo: "Agapornis",
                 Sobras: Math.Max(0, overview.Config.CapacidadePorCarga - c.TotalAves)))
             .ToList();
@@ -619,20 +701,28 @@ public class TransportPlanAdminService(AppDbContext db)
         foreach (var s in submissoes)
         {
             var m = ParseSubmission(s.DataJson);
-            var cargaLabel = CargaLabelFor(s.Id);
-            foreach (var a in m.Aves)
+
+            void AddAves(IEnumerable<AveMeta> lista, string tipo, string tipoLabel)
             {
-                aves.Add(new TransportExcelExporter.AveRow(
-                    SubmissionId: s.Id,
-                    Criador: m.Nome,
-                    Serie: a.Serie,
-                    Especie: a.Especie,
-                    Mutacao: a.Mutacao,
-                    Anilha: a.Anilha,
-                    Equipa: string.IsNullOrEmpty(a.EquipaId) ? "—" : "T",
-                    Posicao: a.Posicao ?? "—",
-                    CargaAtribuida: cargaLabel));
+                foreach (var a in lista)
+                {
+                    aves.Add(new TransportExcelExporter.AveRow(
+                        SubmissionId: s.Id,
+                        Criador: m.Nome,
+                        Serie: a.Serie,
+                        Especie: a.Especie,
+                        Mutacao: a.Mutacao,
+                        Anilha: a.Anilha,
+                        Equipa: string.IsNullOrEmpty(a.EquipaId) ? "—" : "T",
+                        Posicao: a.Posicao ?? "—",
+                        Tipo: tipoLabel,
+                        CargaAtribuida: CargaParaAve(s.Id, tipo)));
+                }
             }
+
+            AddAves(m.Aves,           "concurso",   "Concurso");
+            AddAves(m.AvesVenda,      "venda",      "Venda");
+            AddAves(m.AvesTransporte, "transporte", "Transporte");
         }
 
         var pricing = new TransportExcelExporter.Pricing(
@@ -646,6 +736,152 @@ public class TransportPlanAdminService(AppDbContext db)
             transportes, inscricoes, aves);
     }
 
+    // ── Exportação de etiquetas Avery 3421 ───────────────────────────────────
+    // Devolve o PDF pronto + um slug curto do âmbito para compor o nome do
+    // ficheiro no endpoint (ex.: "pacos-de-ferreira", "filipe-lopes-99").
+
+    public record EtiquetasResult(byte[] Bytes, string ScopeSlug);
+
+    public async Task<EtiquetasResult?> ExportEtiquetasPorPontoAsync(int yearId, int pointId)
+    {
+        var point = await db.ConvoyageCollectionPoints.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == pointId && p.ConvoyageYearId == yearId);
+        if (point is null) return null;
+
+        var subs = await db.FormSubmissions.AsNoTracking()
+            .Where(f => f.ConvoyageYearId == yearId
+                     && f.FormType == FormType.InscricaoConvoyage
+                     && f.LocalRecolhaId == pointId)
+            .OrderBy(f => f.SubmittedAt)
+            .ToListAsync();
+
+        var labels = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+        foreach (var s in subs)
+            labels.AddRange(BuildLabelsFromJson(s.DataJson));
+
+        var bytes = EtiquetasAvery3421PdfGenerator.Render(labels);
+        return new EtiquetasResult(bytes, Slugify(point.Name));
+    }
+
+    public async Task<EtiquetasResult?> ExportEtiquetasPorInscricaoAsync(int yearId, int submissionId)
+    {
+        var sub = await db.FormSubmissions.AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == submissionId
+                                   && f.ConvoyageYearId == yearId
+                                   && f.FormType == FormType.InscricaoConvoyage);
+        if (sub is null) return null;
+
+        var labels = BuildLabelsFromJson(sub.DataJson);
+        var bytes = EtiquetasAvery3421PdfGenerator.Render(labels);
+
+        var meta = ParseSubmission(sub.DataJson);
+        var slug = Slugify(meta.Nome);
+        if (string.IsNullOrEmpty(slug)) slug = $"insc-{submissionId}";
+        else slug = $"{slug}-{submissionId}";
+        return new EtiquetasResult(bytes, slug);
+    }
+
+    // Constrói a lista de etiquetas de UMA inscrição pela ordem visual esperada:
+    // Concurso → Venda → Transporte. Só se emite etiqueta para aves com anilha.
+    private static List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel> BuildLabelsFromJson(string json)
+    {
+        var result = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var r = doc.RootElement;
+
+            string nome = GetStr(r, "NomeCompleto");
+            if (string.IsNullOrWhiteSpace(nome)) return result;
+
+            // Concurso — Serie + EspecieMutacao + Anilha
+            foreach (var a in EnumerateArray(r, "Aves"))
+            {
+                var anilha = GetStr(a, "Anilha");
+                if (string.IsNullOrWhiteSpace(anilha)) continue;
+                var mutacao = GetStr(a, "EspecieMutacao");
+                var serie   = GetStr(a, "Serie");
+                result.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
+                    Nome: nome,
+                    Anilha: anilha,
+                    LinhaDescricao: mutacao,
+                    LinhaTipoOuSerie: serie,
+                    Tipo: EtiquetasAvery3421PdfGenerator.EtiquetaTipo.Concurso));
+            }
+
+            // Venda — EspecieMutacao + Anilha, rótulo "VENDAS"
+            foreach (var a in EnumerateArray(r, "AvesVenda"))
+            {
+                var anilha = GetStr(a, "Anilha");
+                if (string.IsNullOrWhiteSpace(anilha)) continue;
+                var mutacao = GetStr(a, "EspecieMutacao");
+                result.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
+                    Nome: nome,
+                    Anilha: anilha,
+                    LinhaDescricao: mutacao,
+                    LinhaTipoOuSerie: "VENDAS",
+                    Tipo: EtiquetasAvery3421PdfGenerator.EtiquetaTipo.Venda));
+            }
+
+            // Transporte — "Entregar a: X" + Anilha, rótulo "TRANSPORTE"
+            foreach (var a in EnumerateArray(r, "AvesTransporte"))
+            {
+                var anilha = GetStr(a, "Anilha");
+                if (string.IsNullOrWhiteSpace(anilha)) continue;
+                var destinatario = GetStr(a, "DestinatarioNome");
+                var linhaDesc = string.IsNullOrWhiteSpace(destinatario)
+                    ? ""
+                    : $"Entregar a: {destinatario}";
+                result.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
+                    Nome: nome,
+                    Anilha: anilha,
+                    LinhaDescricao: linhaDesc,
+                    LinhaTipoOuSerie: "TRANSPORTE",
+                    Tipo: EtiquetasAvery3421PdfGenerator.EtiquetaTipo.Transporte));
+            }
+        }
+        catch
+        {
+            // JSON corrompido: retorna lista parcial ou vazia.
+        }
+        return result;
+    }
+
+    // Helpers de leitura tolerantes ao casing (Pascal vs camel) usados no JSON
+    // — mesma abordagem que ParseSubmission.
+    private static string GetStr(JsonElement el, string key)
+    {
+        foreach (var candidate in new[] { key, Camel(key) })
+            if (el.TryGetProperty(candidate, out var v) && v.ValueKind == JsonValueKind.String)
+                return v.GetString() ?? "";
+        return "";
+    }
+
+    private static IEnumerable<JsonElement> EnumerateArray(JsonElement el, string key)
+    {
+        foreach (var candidate in new[] { key, Camel(key) })
+            if (el.TryGetProperty(candidate, out var v) && v.ValueKind == JsonValueKind.Array)
+                return v.EnumerateArray();
+        return Array.Empty<JsonElement>();
+    }
+
+    // Slug estilo kebab-case ascii — usado apenas para compor nomes de ficheiro.
+    private static string Slugify(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var norm = value.Trim().ToLowerInvariant()
+            .Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(norm.Length);
+        foreach (var c in norm)
+        {
+            var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (uc != System.Globalization.UnicodeCategory.NonSpacingMark) sb.Append(c);
+        }
+        var s = sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+        s = System.Text.RegularExpressions.Regex.Replace(s, "[^a-z0-9]+", "-").Trim('-');
+        return s;
+    }
+
     // ── Parse do DataJson ────────────────────────────────────────────────────
 
     private record AveMeta(string Serie, string Especie, string Mutacao, string Anilha, string? EquipaId, string? Posicao);
@@ -654,7 +890,9 @@ public class TransportPlanAdminService(AppDbContext db)
         int NumAvesConcurso, int NumAvesVenda, int NumAvesTransporte,
         int NumAvesTransportePtBe, int NumAvesTransporteBePt,
         string SocioBvaLabel, string SocioBvaStatus, decimal TotalPago,
-        List<AveMeta> Aves);
+        List<AveMeta> Aves,
+        List<AveMeta> AvesVenda,
+        List<AveMeta> AvesTransporte);
 
     private static SubmissionMeta ParseSubmission(string json)
     {
@@ -712,13 +950,21 @@ public class TransportPlanAdminService(AppDbContext db)
 
             var numConcurso = aves.Count;
 
-            int numVenda = 0;
-            if (r.TryGetProperty("AvesVenda", out var vEl) && vEl.ValueKind == JsonValueKind.Array)
-                numVenda = vEl.GetArrayLength();
-            else if (r.TryGetProperty("avesVenda", out var vEl2) && vEl2.ValueKind == JsonValueKind.Array)
-                numVenda = vEl2.GetArrayLength();
+            var avesVenda = new List<AveMeta>();
+            JsonElement vendaEl = default;
+            if ((r.TryGetProperty("AvesVenda", out vendaEl) && vendaEl.ValueKind == JsonValueKind.Array)
+                || (r.TryGetProperty("avesVenda", out vendaEl) && vendaEl.ValueKind == JsonValueKind.Array))
+            {
+                foreach (var a in vendaEl.EnumerateArray())
+                {
+                    avesVenda.Add(new AveMeta(
+                        S("Serie", a), S("Especie", a), S("EspecieMutacao", a),
+                        S("Anilha", a), null, null));
+                }
+            }
+            int numVenda = avesVenda.Count;
 
-            int numTransporte = 0;
+            var avesTransporte = new List<AveMeta>();
             int numTransporteVende = 0;   // PT→BE
             int numTransporteCompra = 0;  // BE→PT
             JsonElement transporteArr = default;
@@ -726,9 +972,11 @@ public class TransportPlanAdminService(AppDbContext db)
                              || (r.TryGetProperty("avesTransporte", out transporteArr) && transporteArr.ValueKind == JsonValueKind.Array);
             if (hasTransporte)
             {
-                numTransporte = transporteArr.GetArrayLength();
                 foreach (var a in transporteArr.EnumerateArray())
                 {
+                    avesTransporte.Add(new AveMeta(
+                        S("Serie", a), S("Especie", a), S("EspecieMutacao", a),
+                        S("Anilha", a), null, null));
                     var origem = S("Origem", a);
                     if (string.Equals(origem, "Vende", StringComparison.OrdinalIgnoreCase))
                         numTransporteVende++;
@@ -736,6 +984,7 @@ public class TransportPlanAdminService(AppDbContext db)
                         numTransporteCompra++;
                 }
             }
+            int numTransporte = avesTransporte.Count;
 
             var totalAves = I("TotalAves", r);
             if (totalAves > numConcurso) numConcurso = totalAves;
@@ -765,11 +1014,13 @@ public class TransportPlanAdminService(AppDbContext db)
                 S("Pais", r), S("LocalRecolha", r),
                 numConcurso, numVenda, numTransporte,
                 numTransporteVende, numTransporteCompra,
-                socioLabel, socioStatus, totalPago, aves);
+                socioLabel, socioStatus, totalPago,
+                aves, avesVenda, avesTransporte);
         }
         catch
         {
-            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, 0, 0, "—", "NaoSocio", 0m, new());
+            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, 0, 0, "—", "NaoSocio", 0m,
+                new(), new(), new());
         }
     }
 

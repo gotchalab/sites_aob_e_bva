@@ -271,6 +271,15 @@ else
                             {
                                 <a class="btn btn-outline-primary" href="@($"/formularios/{f.Id}/pdf")" target="_blank">PDF</a>
                             }
+                            @if (SelectedYearId > 0 && f.TotalAves > 0)
+                            {
+                                <a class="btn btn-outline-danger"
+                                   href="@($"/convoyage/{SelectedYearId}/inscricoes/{f.Id}/etiquetas.pdf")"
+                                   download
+                                   title="Descarregar PDF Avery 3421 com uma etiqueta por ave desta inscrição">
+                                    Etiquetas
+                                </a>
+                            }
                             @if (f.HasSignature && TracesReadyForCurrentYear)
                             {
                                 <a class="btn btn-outline-success" href="@($"/formularios/{f.Id}/traces")" target="_blank"

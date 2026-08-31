@@ -1,5 +1,6 @@
 ﻿@page "/convoyage/{YearId:int}/transportes"
 @attribute [Authorize]
+@using AOB.Application.Convoyage
 @inject TransportPlanAdminService Plans
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -67,10 +68,76 @@ else
         </div>
     </div>
 
-    <div class="d-flex gap-2 mb-3 flex-wrap">
-        <button class="btn btn-primary" @onclick="GenerateAsync" disabled="@_busy">
-            <i class="bi bi-magic"></i> Gerar plano automático
-        </button>
+    var cap  = _overview.Config.CapacidadePorCarga;
+    var dt   = _overview.Totais;
+    var poupanca = dt.CargasSoma(cap) - dt.CargasMax(cap);
+
+    @* ── Análise por sentido do camião ─────────────────────────────────
+       Cada gaiola no camião conta como 1 lugar mesmo que vá cheia numa
+       direção e volte cheia noutra. Por isso o número REAL de gaiolas
+       necessárias é MAX(PT→BE, BE→PT). O modo "Total" (soma tudo) é
+       apenas um upper bound conservador. *@
+    <div class="card mb-3 border-info">
+        <div class="card-header bg-info-subtle py-2 fw-semibold d-flex justify-content-between">
+            <span><i class="bi bi-arrow-left-right"></i> Ocupação por sentido do camião</span>
+            <span class="text-muted small">Cada gaiola conta 1 lugar — MAX(ida, volta) é o mínimo real</span>
+        </div>
+        <div class="card-body py-3">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div class="small text-muted text-uppercase">PT→BE (ida)</div>
+                    <div class="h4 mb-0">@dt.AvesPtBe <span class="text-muted small">aves</span></div>
+                    <div class="small text-muted">≈ @dt.CargasPtBe(cap) transportadoras</div>
+                    <div class="small text-muted">concurso + venda + transp. "vende"</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted text-uppercase">BE→PT (volta)</div>
+                    <div class="h4 mb-0">@dt.AvesBePt <span class="text-muted small">aves</span></div>
+                    <div class="small text-muted">≈ @dt.CargasBePt(cap) transportadoras</div>
+                    <div class="small text-muted">concurso + venda + transp. "compra"</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted text-uppercase">MAX (ida, volta) por criador</div>
+                    <div class="h4 mb-0 text-success">@dt.AvesMax <span class="text-muted small">aves</span></div>
+                    <div class="small text-muted">≈ @dt.CargasMax(cap) transportadoras</div>
+                    <div class="small text-success">← mínimo real de gaiolas</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted text-uppercase">Soma tudo</div>
+                    <div class="h4 mb-0 text-warning">@dt.AvesSoma <span class="text-muted small">aves</span></div>
+                    <div class="small text-muted">≈ @dt.CargasSoma(cap) transportadoras</div>
+                    <div class="small text-warning">← conservador (sobre-aloca)</div>
+                </div>
+            </div>
+            @if (poupanca > 0)
+            {
+                <div class="alert alert-success py-2 small mt-3 mb-0">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>Otimização possível:</strong>
+                    o modo "Soma tudo" (atual) usa <strong>@dt.CargasSoma(cap)</strong> transportadoras;
+                    o modo direccional MAX(ida, volta) precisaria apenas de <strong>@dt.CargasMax(cap)</strong> —
+                    poupança de <strong>@poupanca transportadora(s)</strong> quando aves só ocupam um sentido
+                    (transporte "vende" só ida, "compra" só volta).
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+        <div class="btn-group" role="group">
+            <button class="btn btn-primary" @onclick="@(() => GenerateAsync(TransportPlanner.PlanMode.Total))" disabled="@_busy"
+                    title="Soma concurso + venda + transporte (ambos sentidos). Upper bound conservador.">
+                <i class="bi bi-magic"></i> Gerar plano — soma tudo
+            </button>
+            <button class="btn btn-outline-primary" @onclick="@(() => GenerateAsync(TransportPlanner.PlanMode.PtBe))" disabled="@_busy"
+                    title="Só aves que ocupam o camião na ida (concurso + venda + transporte vende).">
+                <i class="bi bi-arrow-right"></i> PT→BE (ida)
+            </button>
+            <button class="btn btn-outline-primary" @onclick="@(() => GenerateAsync(TransportPlanner.PlanMode.BePt))" disabled="@_busy"
+                    title="Só aves que ocupam o camião na volta (concurso + venda + transporte compra). Venda conta porque as não vendidas regressam.">
+                <i class="bi bi-arrow-left"></i> BE→PT (volta)
+            </button>
+        </div>
         <a class="btn btn-success"
            href="@($"/convoyage/{YearId}/transportes/export")"
            target="_blank">
@@ -89,6 +156,13 @@ else
             Limpar plano
         </button>
     </div>
+    @if (_lastMode is not null)
+    {
+        <div class="small text-muted mb-3">
+            <i class="bi bi-info-circle"></i>
+            Plano gerado no modo: <strong>@ModeLabel(_lastMode.Value)</strong>
+        </div>
+    }
 
     @if (_error is not null)
     {
@@ -117,6 +191,7 @@ else
                         <th class="text-end" style="width:100px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "insc"))">Inscrições @SortIcon("sug", "insc")</th>
                         <th class="text-end" style="width:80px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "aves"))">Aves @SortIcon("sug", "aves")</th>
                         <th class="text-end" style="width:150px; cursor:pointer;" @onclick="@(() => ToggleSort("sug", "cargas"))">Transportadoras necessárias @SortIcon("sug", "cargas")</th>
+                        <th class="text-end" style="width:120px;">Etiquetas</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -138,6 +213,21 @@ else
                                     <span class="badge bg-primary">@s.CargasNecessarias</span>
                                 }
                             </td>
+                            <td class="text-end">
+                                @if (s.TotalAves > 0)
+                                {
+                                    <a class="btn btn-sm btn-outline-danger"
+                                       href="@($"/convoyage/{YearId}/pontos/{s.CollectionPointId}/etiquetas.pdf")"
+                                       download
+                                       title="Descarregar PDF Avery 3421 (33/folha)">
+                                        <i class="bi bi-file-earmark-pdf"></i> PDF
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -149,6 +239,7 @@ else
                         <td class="text-end">
                             <span class="badge bg-primary">@totalCargasNecessarias</span>
                         </td>
+                        <td></td>
                     </tr>
                 </tfoot>
             </table>
@@ -437,6 +528,14 @@ else
     private Dictionary<int, string> _editZonas = new();
     private HashSet<int> _splitSubmissionIds = new();
     private Dictionary<int, int> _moveQty = new();
+    private TransportPlanner.PlanMode? _lastMode;
+
+    private static string ModeLabel(TransportPlanner.PlanMode m) => m switch
+    {
+        TransportPlanner.PlanMode.PtBe => "PT→BE (só ida)",
+        TransportPlanner.PlanMode.BePt => "BE→PT (só volta)",
+        _                              => "Soma tudo (upper bound)",
+    };
 
     private int GetMoveQty(int assignmentId, int defaultTotal)
         => _moveQty.TryGetValue(assignmentId, out var v) ? v : defaultTotal;
@@ -584,17 +683,22 @@ else
         => _editZonas.TryGetValue(cid, out var v) ? v : current;
     private void SetEditZonas(int cid, string v) => _editZonas[cid] = v;
 
-    private async Task GenerateAsync()
+    private async Task GenerateAsync(TransportPlanner.PlanMode mode = TransportPlanner.PlanMode.Total)
     {
         var confirm = _overview is { Cargas.Count: > 0 }
-            ? await JS.InvokeAsync<bool>("confirm", "Vai substituir o plano existente. Continuar?")
+            ? await JS.InvokeAsync<bool>("confirm",
+                $"Vai substituir o plano existente por um plano no modo \"{ModeLabel(mode)}\". Continuar?")
             : true;
         if (!confirm) return;
 
         _busy = true; _error = null; _info = null;
-        _error = await Plans.GeneratePlanAsync(YearId);
+        _error = await Plans.GeneratePlanAsync(YearId, mode);
         _busy = false;
-        if (_error is null) _info = "Plano gerado.";
+        if (_error is null)
+        {
+            _lastMode = mode;
+            _info = $"Plano gerado no modo: {ModeLabel(mode)}.";
+        }
         await ReloadAsync();
     }
 
