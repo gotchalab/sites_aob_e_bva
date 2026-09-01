@@ -159,7 +159,6 @@ public static class InscricaoConvoyagePdfGenerator
         var fontBold   = new XFont("Arial", 10, XFontStyleEx.Bold);
         var fontReg    = new XFont("Arial", 9,  XFontStyleEx.Regular);
         var fontSmall  = new XFont("Arial", 8,  XFontStyleEx.Regular);
-        var fontItalic = new XFont("Arial", 8,  XFontStyleEx.Italic);
         var fontTitle  = new XFont("Arial", 16, XFontStyleEx.Bold);
         var fontSub    = new XFont("Arial", 11, XFontStyleEx.Bold);
         var fontHeader = new XFont("Arial", 8,  XFontStyleEx.Bold);
@@ -168,7 +167,6 @@ public static class InscricaoConvoyagePdfGenerator
         var grey     = new XSolidBrush(XColor.FromArgb(100, 100, 100));
         var lightGrey= new XSolidBrush(XColor.FromArgb(245, 247, 250));
         var darkBlue = new XSolidBrush(XColor.FromArgb(26, 67, 128));
-        var amber    = new XSolidBrush(XColor.FromArgb(180, 83, 9));
         var accentBlue = new XSolidBrush(XColor.FromArgb(46, 96, 168));
         var totalBlue = new XSolidBrush(XColor.FromArgb(234, 241, 251));
         var white    = XBrushes.White;
@@ -286,19 +284,25 @@ public static class InscricaoConvoyagePdfGenerator
         DrawRow(t.Country,            r.Pais);
         DrawRow(t.Email,              r.Email, shaded: true);
         DrawRow(t.Phone,              r.Telefone);
-        var socioBvaLabel = r.SocioBvaStatus switch
-        {
-            SocioBvaStatus.JaSocio          => t.BvaMember,
-            SocioBvaStatus.PagaComInscricao => t.BvaPayWithReg,
-            _                                => t.BvaNonMember,
-        };
-        DrawRow(t.BvaStatus,         socioBvaLabel, shaded: true);
-        DrawRow(t.StamNumber,        r.NumeroStam);
-        DrawRow(t.CollectionPoint,   localRecolha, shaded: true);
+        DrawRow(t.StamNumber,         r.NumeroStam, shaded: true);
 
-        g.DrawRectangle(borderPen, new XRect(margin, y - 11, pageW - 2 * margin, rowH));
-        g.DrawString(t.CollectionPointNote, fontItalic, amber, new XPoint(margin + labelW, y));
-        y += rowH;
+        var countConcurso  = r.Aves?.Count ?? 0;
+        var countVenda     = r.AvesVenda?.Count ?? 0;
+        var countTransporte = includeTransport ? (r.AvesTransporte?.Count ?? 0) : 0;
+        var countTranspCompra = includeTransport
+            ? (r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Compra) ?? 0) : 0;
+        var countTranspVende = includeTransport
+            ? (r.AvesTransporte?.Count(a => a.Origem == OrigemAveTransporte.Vende) ?? 0) : 0;
+
+        DrawRow(t.BirdsForContest, countConcurso.ToString());
+        DrawRow(t.BirdsForSale,    countVenda.ToString(), shaded: true);
+        if (includeTransport)
+        {
+            var transpValue = (countTranspCompra > 0 || countTranspVende > 0)
+                ? $"{countTransporte}  ({t.Buy}: {countTranspCompra} · {t.Sell}: {countTranspVende})"
+                : countTransporte.ToString();
+            DrawRow(t.BirdsForTransport, transpValue);
+        }
 
         y += 10;
 

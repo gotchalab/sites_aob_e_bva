@@ -331,6 +331,21 @@ public class FormAdminService(AppDbContext db, IConfiguration config, IHostEnvir
                 .FirstOrDefaultAsync(y => y.Id == cyId);
         }
 
+        // A UI grava sempre `model.LocalRecolha` no formato "Nome (Location)" (ou só "Nome").
+        // Se coincidir com um ponto conhecido do ano, sincroniza a FK — sem isto o painel
+        // "Sugestão de transportadoras por ponto" continua a ver a zona antiga (agrupa por FK).
+        if (convYear is not null && !string.IsNullOrWhiteSpace(model.LocalRecolha))
+        {
+            var target = model.LocalRecolha.Trim();
+            var matched = convYear.CollectionPoints.FirstOrDefault(p =>
+                string.Equals(
+                    string.IsNullOrWhiteSpace(p.Location) ? p.Name : $"{p.Name} ({p.Location})",
+                    target,
+                    StringComparison.OrdinalIgnoreCase));
+            if (matched is not null && f.LocalRecolhaId != matched.Id)
+                f.LocalRecolhaId = matched.Id;
+        }
+
         var point = convYear?.CollectionPoints
             .FirstOrDefault(p => p.Id == (f.LocalRecolhaId ?? 0));
         var localRecolhaLabel = point is not null

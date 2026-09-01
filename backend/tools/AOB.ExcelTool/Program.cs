@@ -27,16 +27,19 @@ var inscricoes = new List<TransportExcelExporter.InscricaoRow>
         Pais: "Portugal", LocalRecolha: "Vilela",
         NumAvesConcurso: 5, NumAvesVenda: 0,
         NumAvesTransportePtBe: 0, NumAvesTransporteBePt: 0,
+        NumAvesVendaOferecidas: 0, NumAvesEspacosOferecidos: 0,
         SocioBva: "Sócio",
         TotalPago: 0m, CargaAtribuida: "T01"),
     new(
         // Maria: 2 aves PT→BE + 2 aves BE→PT. Ocupam 2 espaços (não 4) porque
         // as gaiolas vão cheias PT→BE e voltam cheias BE→PT — MAX(2,2)=2.
+        // 1 ave de venda oferecida + 1 espaço de transporte oferecido → descontos.
         SubmissionId: 102, SubmittedAt: submittedAt,
         Nome: "Maria PagaAgora", Email: "maria@test.local", Telefone: "922222222",
         Pais: "Portugal", LocalRecolha: "Vilela",
         NumAvesConcurso: 8, NumAvesVenda: 4,
         NumAvesTransportePtBe: 2, NumAvesTransporteBePt: 2,
+        NumAvesVendaOferecidas: 1, NumAvesEspacosOferecidos: 1,
         SocioBva: "Paga na inscrição",
         TotalPago: 0m, CargaAtribuida: "T01"),
     new(
@@ -46,6 +49,7 @@ var inscricoes = new List<TransportExcelExporter.InscricaoRow>
         Pais: "Portugal", LocalRecolha: "Barcelos",
         NumAvesConcurso: 8, NumAvesVenda: 0,
         NumAvesTransportePtBe: 0, NumAvesTransporteBePt: 3,
+        NumAvesVendaOferecidas: 0, NumAvesEspacosOferecidos: 0,
         SocioBva: "Não sócio",
         TotalPago: 0m, CargaAtribuida: "T02"),
 };
@@ -102,41 +106,45 @@ Console.WriteLine($"  TOTAL          {trans.Cell(4,5).GetDouble(),8:F0} {trans.C
 Console.WriteLine();
 Console.WriteLine("── Folha 'Inscrições' (custos derivados + BVA split) ───────");
 var ins = wb.Worksheet("Inscrições");
-// Layout: col 12 = Sócio, col 17 = Transp. adq., col 19 = Total, 20 = Portugal, 21 = Masters.
+// Layout: col 14 = Sócio, col 19 = Transp. adq., col 21 = Total, 22 = Portugal, 23 = Masters.
 Console.WriteLine($"  {"Nome",-18} {"Sócio",-20} {"Adq.",8} {"TOTAL",8} {"BVA Port.",10} {"BVA Mstr.",10}");
 for (int r = 2; r <= 4; r++)
 {
-    Console.WriteLine($"  {ins.Cell(r,3).GetString(),-18} {ins.Cell(r,12).GetString(),-20} " +
-                      $"{ins.Cell(r,17).GetDouble(),8:F2} " +
+    Console.WriteLine($"  {ins.Cell(r,3).GetString(),-18} {ins.Cell(r,14).GetString(),-20} " +
                       $"{ins.Cell(r,19).GetDouble(),8:F2} " +
-                      $"{ins.Cell(r,20).GetDouble(),10:F2} " +
-                      $"{ins.Cell(r,21).GetDouble(),10:F2}");
+                      $"{ins.Cell(r,21).GetDouble(),8:F2} " +
+                      $"{ins.Cell(r,22).GetDouble(),10:F2} " +
+                      $"{ins.Cell(r,23).GetDouble(),10:F2}");
 }
 Console.WriteLine($"  {"TOTAL",-18} {"",-20} " +
-                  $"{ins.Cell(5,17).GetDouble(),8:F2} " +
                   $"{ins.Cell(5,19).GetDouble(),8:F2} " +
-                  $"{ins.Cell(5,20).GetDouble(),10:F2} " +
-                  $"{ins.Cell(5,21).GetDouble(),10:F2}");
+                  $"{ins.Cell(5,21).GetDouble(),8:F2} " +
+                  $"{ins.Cell(5,22).GetDouble(),10:F2} " +
+                  $"{ins.Cell(5,23).GetDouble(),10:F2}");
 
 Console.WriteLine();
-Console.WriteLine("── Valores esperados (regra do formulário) ─────────────────");
-static void Expected(string nome, int nC, int nV, int nPtBe, int nBePt, string estatuto)
+Console.WriteLine("── Valores esperados (regra do formulário, com ofertas) ─────");
+static void Expected(string nome, int nC, int nV, int nPtBe, int nBePt, string estatuto,
+    int vendaOferec = 0, int espacosOferec = 0)
 {
     double totalCV = nC + nV;
+    int vendaFat = Math.Max(0, nV - vendaOferec);
+    double totalCVFat = nC + vendaFat;
     double espacos = Math.Max(nPtBe, nBePt); // regra do site: MAX, não soma
+    double espacosFat = Math.Max(0, espacos - espacosOferec);
     double tarifa = estatuto == "NaoSocio" ? 15.5 : 5.5;
     double tarifaAdq = estatuto == "NaoSocio" ? 20.5 : 15.5;
     double insc = totalCV > 0 ? 8.0 : 0;
     double aves = 3.0 * nC;
-    double gai  = 3.0 * totalCV;
-    double tr   = tarifa * totalCV;
-    double trAdq= tarifaAdq * espacos;
+    double gai  = 3.0 * totalCVFat;
+    double tr   = tarifa * totalCVFat;
+    double trAdq= tarifaAdq * espacosFat;
     double quo  = estatuto == "PagaComInscricao" ? 40.0 : 0;
     Console.WriteLine($"  {nome,-18} insc={insc:F2} aves={aves:F2} gai={gai:F2} " +
                       $"tr={tr:F2} adq={trAdq:F2} quo={quo:F2} TOTAL={insc+aves+gai+tr+trAdq+quo:F2}");
 }
 Expected("João Sócio",      5, 0, 0, 0, "JaSocio");
-Expected("Maria PagaAgora", 8, 4, 2, 2, "PagaComInscricao");
+Expected("Maria PagaAgora", 8, 4, 2, 2, "PagaComInscricao", vendaOferec: 1, espacosOferec: 1);
 Expected("Pedro NãoSócio",  8, 0, 0, 3, "NaoSocio");
 
 Console.WriteLine();

@@ -138,6 +138,13 @@ else
                 <i class="bi bi-arrow-left"></i> BE→PT (volta)
             </button>
         </div>
+        <div class="form-check ms-2" title="Se desligado, cada zona só usa cargas próprias — sem partilha entre zonas adjacentes (ex.: Centro deixa de poder ser completado com aves de Cantanhede).">
+            <input class="form-check-input" type="checkbox" id="chkCruzaZonas"
+                   @bind="_cruzaZonas" disabled="@_busy" />
+            <label class="form-check-label small text-muted" for="chkCruzaZonas">
+                Partilha entre zonas
+            </label>
+        </div>
         <a class="btn btn-success"
            href="@($"/convoyage/{YearId}/transportes/export")"
            target="_blank">
@@ -365,12 +372,28 @@ else
                 @foreach (var c in _overview.Cargas)
                 {
                     var cid = c.Id;
-                    var over = c.TotalAves > _overview.Config.CapacidadePorCarga;
-                    var sobras = Math.Max(0, _overview.Config.CapacidadePorCarga - c.TotalAves);
+                    var cargaCap = _overview.Config.CapacidadePorCarga;
+                    var over = c.TotalAves > cargaCap;
+                    var sobras = Math.Max(0, cargaCap - c.TotalAves);
+                    // Ocupação em cada sentido (independente): PT→BE conta as
+                    // aves que ocupam gaiola só à ida (concurso + venda + trPtBe),
+                    // BE→PT conta as que ocupam à volta (concurso + venda + trBePt).
+                    var loadPtBe = c.Submissoes.Sum(s => s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransportePtBe);
+                    var loadBePt = c.Submissoes.Sum(s => s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporteBePt);
+                    var sobrasPtBe = Math.Max(0, cargaCap - loadPtBe);
+                    var sobrasBePt = Math.Max(0, cargaCap - loadBePt);
+                    var sobrasTitle = $"Gaiolas livres por direção:\nPT→BE (ida): {sobrasPtBe}\nBE→PT (volta): {sobrasBePt}";
                     <tr @key="@($"carga-{cid}")" class="@(over ? "table-danger" : "")">
                         <td class="fw-bold">@c.Codigo</td>
                         <td class="text-end @(over ? "text-danger fw-bold" : "")">@c.TotalAves</td>
-                        <td class="text-end @(sobras > 4 ? "text-warning fw-bold" : "text-muted")">@sobras</td>
+                        <td class="text-end @(sobras > 4 ? "text-warning fw-bold" : "text-muted")"
+                            title="@sobrasTitle" style="cursor:help;">
+                            @sobras
+                            <div class="small text-muted" style="line-height:1.1;">
+                                <span title="Ida">→@sobrasPtBe</span>
+                                <span title="Volta">←@sobrasBePt</span>
+                            </div>
+                        </td>
                         <td>
                             <div class="d-flex align-items-center gap-2">
                                 <input class="form-control form-control-sm"
@@ -413,7 +436,11 @@ else
                             {
                                 var s = c.Submissoes[i];
                                 var sid = s.SubmissionId;
-                                var partAves = s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte;
+                                // Ocupação = gaiolas efectivas do criador nesta carga
+                                // (concurso + venda + max(PtBe, BePt) porque as gaiolas
+                                // que levam Vende trazem Compra do mesmo criador).
+                                var partAves = s.Ocupacao;
+                                var partAvesFisicas = s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte;
                                 var totalDaInscricao = _overview.TotalAvesPorSubmissao.TryGetValue(sid, out var t) ? t : partAves;
                                 var isSplit = IsPartOfSplit(sid);
                                 var tipoLabel = FormatTipoLabel(s.NumAvesConcurso, s.NumAvesVenda, s.NumAvesTransporte);
@@ -427,46 +454,68 @@ else
                                     <div class="flex-grow-1 min-w-0">
                                         <div class="d-flex align-items-center gap-2 flex-wrap">
                                             <span class="badge bg-light text-secondary border fw-normal">#@sid</span>
-                                            <span class="fw-semibold text-body">@s.NomeCriador.ToUpperInvariant()</span>
+                                            @{
+                                                var partesEstaLinha = FormatParcela(
+                                                    s.NumAvesConcurso, s.NumAvesVenda,
+                                                    s.NumAvesTransportePtBe, s.NumAvesTransporteBePt);
+                                                var todasAsPartes = isSplit
+                                                    ? PartesDaSubmissao(sid, cid)
+                                                    : null;
+                                            }
+                                            <span class="aob-tooltip">
+                                                <span class="fw-semibold text-body">@s.NomeCriador.ToUpperInvariant()</span>
+                                                <span class="aob-tooltip-content">
+                                                    <span class="aob-tooltip-title">Conteúdo desta linha</span>
+                                                    <div class="mb-1">
+                                                        <strong>@partAves</strong> gaiolas — @partesEstaLinha
+                                                    </div>
+                                                    @if (s.NumAvesTransporte > 0)
+                                                    {
+                                                        var dirLabels = new List<string>();
+                                                        if (s.NumAvesTransportePtBe > 0)
+                                                            dirLabels.Add($"PT→BE: {s.NumAvesTransportePtBe} aves");
+                                                        if (s.NumAvesTransporteBePt > 0)
+                                                            dirLabels.Add($"BE→PT: {s.NumAvesTransporteBePt} aves");
+                                                        <div class="mb-1 text-info">
+                                                            <i class="bi bi-arrow-left-right me-1"></i>@string.Join(" · ", dirLabels)
+                                                        </div>
+                                                    }
+                                                    @if (isSplit && todasAsPartes is not null)
+                                                    {
+                                                        <span class="aob-tooltip-title mt-2">Dividida em @todasAsPartes.Count transportadoras</span>
+                                                        <ul class="aob-tooltip-list">
+                                                            @foreach (var o in todasAsPartes)
+                                                            {
+                                                                <li class="@(o.IsAtual ? "aob-tooltip-current" : null)">
+                                                                    <strong>@o.Codigo</strong>
+                                                                    <span class="text-secondary"> · @o.Zona</span>
+                                                                    @if (o.IsAtual)
+                                                                    {
+                                                                        <span class="aob-tooltip-current-tag">esta transportadora</span>
+                                                                    }
+                                                                    <br />
+                                                                    <span>@o.Parcela</span>
+                                                                </li>
+                                                            }
+                                                        </ul>
+                                                    }
+                                                </span>
+                                            </span>
                                             @if (isSplit)
                                             {
-                                                var outrasPartes = OutrasPartes(sid, cid);
-                                                <span class="aob-tooltip">
-                                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
-                                                        <i class="bi bi-diagram-2 me-1"></i>dividida
-                                                    </span>
-                                                    <span class="aob-tooltip-content">
-                                                        <span class="aob-tooltip-title">Restantes aves deste criador</span>
-                                                        @if (outrasPartes.Count == 0)
-                                                        {
-                                                            <span class="aob-tooltip-empty">— nenhuma outra parte atribuída —</span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <ul class="aob-tooltip-list">
-                                                                @foreach (var o in outrasPartes)
-                                                                {
-                                                                    <li>
-                                                                        <strong>@o.Codigo</strong>
-                                                                        <span class="text-secondary"> · @o.Zona</span>
-                                                                        <br />
-                                                                        <span>@o.Parcela</span>
-                                                                    </li>
-                                                                }
-                                                            </ul>
-                                                        }
-                                                    </span>
+                                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                                                    <i class="bi bi-diagram-2 me-1"></i>dividida
                                                 </span>
                                             }
                                         </div>
                                         <div class="text-muted small mt-1">
                                             @if (isSplit)
                                             {
-                                                <span><strong class="text-body">@partAves</strong>/@totalDaInscricao aves · @tipoLabel</span>
+                                                <span><strong class="text-body">@partAves</strong>/@totalDaInscricao gaiolas · @tipoLabel</span>
                                             }
                                             else
                                             {
-                                                <span><strong class="text-body">@partAves</strong> aves</span>
+                                                <span><strong class="text-body">@partAves</strong> gaiolas</span>
                                             }
                                             @if (cargaMista && !string.IsNullOrWhiteSpace(s.ZonaNome))
                                             {
@@ -479,14 +528,14 @@ else
                                     <div class="input-group input-group-sm flex-shrink-0" style="width:230px;">
                                         <input type="number" class="form-control"
                                                style="max-width:60px;"
-                                               title="Quantas aves mover (máx: @partAves)"
-                                               min="1" max="@partAves"
-                                               value="@GetMoveQty(s.Id, partAves)"
+                                               title="Quantas aves mover (máx: @partAvesFisicas)"
+                                               min="1" max="@partAvesFisicas"
+                                               value="@GetMoveQty(s.Id, partAvesFisicas)"
                                                @oninput="e => SetMoveQty(s.Id, e.Value?.ToString())" />
                                         <span class="input-group-text">aves →</span>
                                         <select class="form-select"
                                                 value=""
-                                                @onchange="e => MoveAssignmentAsync(s.Id, partAves, e.Value?.ToString())">
+                                                @onchange="e => MoveAssignmentAsync(s.Id, partAvesFisicas, e.Value?.ToString())">
                                             <option value="" selected>transportadora…</option>
                                             @foreach (var target in _overview.Cargas.Where(x => x.Id != cid))
                                             {
@@ -529,6 +578,7 @@ else
     private HashSet<int> _splitSubmissionIds = new();
     private Dictionary<int, int> _moveQty = new();
     private TransportPlanner.PlanMode? _lastMode;
+    private bool _cruzaZonas = true;
 
     private static string ModeLabel(TransportPlanner.PlanMode m) => m switch
     {
@@ -638,29 +688,34 @@ else
     private bool IsPartOfSplit(int submissionId)
         => _splitSubmissionIds.Contains(submissionId);
 
-    private record OutraParte(string Codigo, string Zona, string Parcela);
+    private record ParteSubmissao(string Codigo, string Zona, string Parcela, bool IsAtual);
 
-    private List<OutraParte> OutrasPartes(int submissionId, int currentCargaId)
+    private List<ParteSubmissao> PartesDaSubmissao(int submissionId, int currentCargaId)
     {
         if (_overview is null) return new();
         return _overview.Cargas
-            .Where(c => c.Id != currentCargaId)
             .SelectMany(c => c.Submissoes
                 .Where(s => s.SubmissionId == submissionId)
-                .Select(s => new OutraParte(
+                .Select(s => new ParteSubmissao(
                     c.Codigo,
                     string.IsNullOrWhiteSpace(s.ZonaLocation)
                         ? s.ZonaNome
                         : $"{s.ZonaNome} ({s.ZonaLocation})",
-                    FormatParcela(s.NumAvesConcurso, s.NumAvesVenda, s.NumAvesTransporte))))
+                    FormatParcela(s.NumAvesConcurso, s.NumAvesVenda,
+                                  s.NumAvesTransportePtBe, s.NumAvesTransporteBePt),
+                    c.Id == currentCargaId)))
             .ToList();
     }
 
-    private static string FormatParcela(int concurso, int venda, int transporte)
+    // Transporte usa max(PtBe, BePt) porque as gaiolas que levam Vende
+    // trazem Compra do mesmo criador — o rótulo mostra gaiolas ocupadas,
+    // não aves físicas. O detalhe físico por direção fica na linha PT→BE/BE→PT.
+    private static string FormatParcela(int concurso, int venda, int transportePtBe, int transporteBePt)
     {
         var partes = new List<string>();
         if (concurso > 0) partes.Add($"{concurso} concurso");
         if (venda > 0) partes.Add($"{venda} venda");
+        var transporte = Math.Max(transportePtBe, transporteBePt);
         if (transporte > 0) partes.Add($"{transporte} transporte");
         return partes.Count == 0 ? "0 aves" : string.Join(" + ", partes);
     }
@@ -692,12 +747,13 @@ else
         if (!confirm) return;
 
         _busy = true; _error = null; _info = null;
-        _error = await Plans.GeneratePlanAsync(YearId, mode);
+        _error = await Plans.GeneratePlanAsync(YearId, mode, _cruzaZonas);
         _busy = false;
         if (_error is null)
         {
             _lastMode = mode;
-            _info = $"Plano gerado no modo: {ModeLabel(mode)}.";
+            var zonaTxt = _cruzaZonas ? "com partilha entre zonas" : "sem partilha entre zonas";
+            _info = $"Plano gerado no modo: {ModeLabel(mode)} ({zonaTxt}).";
         }
         await ReloadAsync();
     }

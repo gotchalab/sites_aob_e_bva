@@ -1,17 +1,28 @@
 namespace AOB.Application.Convoyage;
 
 /// Serviço puro que agrupa inscrições de convoyage em cargas de transporte.
-/// Regras:
-///   1. Cada carga tem capacidade-alvo (default 20 aves).
-///   2. Se um criador tem mais aves do que a capacidade, a submissão divide-se
-///      em unidades — preferencialmente aves de concurso numa carga e aves de
-///      venda noutra. Se um dos tipos por si só ainda exceder a capacidade, é
-///      partido em blocos de tamanho `cap`.
-///   3. Zonas (pontos de recolha) são processadas sul→norte por SortOrder.
-///   4. Cada carga só transporta criadores da MESMA zona — não há merge entre
-///      zonas mesmo quando a última carga da zona fica abaixo do mínimo.
-///   5. Por zona: unidades individuais de tamanho >= capacidade enchem cargas
-///      próprias. Resto vai a First-Fit Decreasing.
+/// Regras por ordem de prioridade:
+///   1. **Cap estrita**: soma de aves numa carga ≤ CapacidadePorCarga.
+///      Cada ave física ocupa 1 unidade — sem sharing de gaiolas entre
+///      direções (o UI conta aves totais e um valor > cap é erro).
+///   2. **Split mínimo por submissão** (regra dominante — tem prioridade
+///      sobre clustering de tipo): cada inscrição divide-se em
+///      ceil(totalAves / cap) partes. Ex.: 34 aves com cap 20 → 2 partes
+///      (20 + 14), NUNCA 3. As partes são preenchidas gulosamente a partir
+///      do tipo com maior contagem restante — parte a parte fica o mais
+///      "pura" de tipo possível, mas o número de partes é sagrado.
+///   3. **Zonas** (pontos de recolha) processadas sul→norte por SortOrder.
+///   4. **Multi-zona**: cargas podem servir MÚLTIPLAS zonas para minimizar
+///      o número total de transportadoras. Uma carga aberta em "Centro"
+///      pode receber aves de "Cantanhede" — o mesmo camião passa nas duas
+///      zonas em sequência.
+///   5. **Placement**: para cada part já produzido (com número mínimo por
+///      submissão fixado), a ordem de escolha da carga é:
+///        a) Afinidade de tipo: carga onde já há aves do MESMO tipo
+///           dominante do part.
+///        b) FFD por ordem de criação (encaixa em cargas de zonas
+///           anteriores para aproveitar o mesmo camião).
+///        c) Abrir carga nova.
 ///
 /// O nome da transportadora NÃO é atribuído aqui — é o admin que preenche
 /// carga a carga na página `/convoyage/{id}/transportes`.
@@ -45,7 +56,17 @@ public static class TransportPlanner
         int NumAvesTransporteBePt = 0)
     {
         public int NumAvesTransporte => NumAvesTransportePtBe + NumAvesTransporteBePt;
-        public int TotalAves => NumAvesConcurso + NumAvesVenda + NumAvesTransporte;
+
+        // Ocupação de gaiolas para ESTE criador: concurso e venda ocupam
+        // sempre uma gaiola cheia em cada sentido (mesma gaiola dá as duas
+        // idas), e o transporte usa max(PtBe, BePt) porque as gaiolas que
+        // levam Vende trazem Compra do MESMO criador — não somam.
+        public int Ocupacao => NumAvesConcurso + NumAvesVenda
+            + Math.Max(NumAvesTransportePtBe, NumAvesTransporteBePt);
+
+        // Total físico de aves (sem sharing) — só para relatórios.
+        public int TotalAvesFisicas =>
+            NumAvesConcurso + NumAvesVenda + NumAvesTransportePtBe + NumAvesTransporteBePt;
 
         // Aves que ocupam espaço em cada direção do camião.
         // Venda conta em ambos: as não vendidas regressam (ver nota no enum PlanMode).
@@ -56,7 +77,7 @@ public static class TransportPlanner
         {
             PlanMode.PtBe => AvesPtBe,
             PlanMode.BePt => AvesBePt,
-            _             => TotalAves,
+            _             => Ocupacao,
         };
     }
 
@@ -69,7 +90,11 @@ public static class TransportPlanner
         int CapacidadePorCarga = 20,
         int MinPorCarga = 16,
         int NumCargasAlvo = 23,
-        PlanMode Mode = PlanMode.Total);
+        PlanMode Mode = PlanMode.Total,
+        // Se true (default), uma carga aberta em zona anterior pode receber
+        // aves de zonas posteriores. Se false, cada zona só usa cargas
+        // próprias (comportamento clássico, sem partilha entre zonas).
+        bool CruzaZonas = true);
 
     public record CargaPlan(
         string Codigo,
@@ -78,188 +103,277 @@ public static class TransportPlanner
         int SortOrder,
         List<CargaSubmissao> Submissoes)
     {
-        public int TotalAves => Submissoes.Sum(s => s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte);
-        public int Sobras(int capacidade) => Math.Max(0, capacidade - TotalAves);
+        // Ocupação efectiva de gaiolas — é isto que compara com CapacidadePorCarga.
+        public int Ocupacao => Submissoes.Sum(s => s.Ocupacao);
+        public int Sobras(int capacidade) => Math.Max(0, capacidade - Ocupacao);
     }
 
     public record CargaSubmissao(
         int SubmissionId, string NomeCriador,
-        int NumAvesConcurso, int NumAvesVenda, int NumAvesTransporte = 0);
+        int NumAvesConcurso, int NumAvesVenda,
+        int NumAvesTransportePtBe = 0, int NumAvesTransporteBePt = 0)
+    {
+        public int NumAvesTransporte => NumAvesTransportePtBe + NumAvesTransporteBePt;
+        public int Ocupacao => NumAvesConcurso + NumAvesVenda
+            + Math.Max(NumAvesTransportePtBe, NumAvesTransporteBePt);
+    }
 
     public static List<CargaPlan> Plan(
         IEnumerable<SubmissionInput> submissions,
         IEnumerable<ZoneInput> zones,
         PlannerConfig config)
     {
+        var cap = config.CapacidadePorCarga;
+
         var subsByZone = submissions
             .GroupBy(s => s.CollectionPointId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var zoneList = zones.OrderBy(z => z.SortOrder).ToList();
-        var result = new List<CargaPlan>();
 
-        int seq = 0;
-        int NextSeq() => ++seq;
-
-        CargaPlan OpenCarga(string zonaNome)
-        {
-            var order = NextSeq();
-            var carga = new CargaPlan(
-                Codigo: $"T{order:00}",
-                TransportadoraNome: "",
-                ZonasLabel: zonaNome,
-                SortOrder: order,
-                Submissoes: new());
-            result.Add(carga);
-            return carga;
-        }
+        // Rascunhos mutáveis durante o packing; materializados em CargaPlan no
+        // fim. Se CruzaZonas=true (default) as cargas vivem entre iterações
+        // de zona (uma carga aberta em zona A pode receber aves de B).
+        // Se false, `activeDrafts` é limpo a cada zona — cargas antigas
+        // ficam preservadas em `sealed` (só para materialização final).
+        var drafts = new List<DraftCarga>();          // ordem final
+        var activeDrafts = new List<DraftCarga>();    // candidatas para FFD
 
         foreach (var zone in zoneList)
         {
+            if (!config.CruzaZonas) activeDrafts.Clear();
+
             var zoneSubs = subsByZone.TryGetValue(zone.CollectionPointId, out var list)
                 ? list : new List<SubmissionInput>();
 
-            // Processa submissão a submissão (maiores primeiro), dando prioridade
-            // absoluta a juntar todas as partes do mesmo criador na mesma carga.
-            // No modo direccional (PT→BE / BE→PT), quem tem 0 aves nesse sentido
-            // é ignorado — não ocupa espaço na carga desse sentido.
-            var openCargas = new List<CargaPlan>();
-
-            foreach (var sub in zoneSubs
+            // Achatamos as partes de todas as submissões desta zona e
+            // processamos maiores primeiro (FFD clássico). Cada part já
+            // é single-type (SplitSubmission divide sempre).
+            var parts = zoneSubs
                 .Where(s => s.AvesParaModo(config.Mode) > 0)
-                .OrderByDescending(s => s.AvesParaModo(config.Mode)))
+                .SelectMany(s => SplitSubmission(s, cap, config.Mode))
+                .OrderByDescending(p => p.Tamanho)
+                .ToList();
+
+            foreach (var part in parts)
             {
-                var parts = SplitSubmission(sub, config.CapacidadePorCarga, config.Mode)
-                    .OrderByDescending(p => p.Tamanho)
-                    .ToList();
-
-                foreach (var part in parts)
+                void Place(DraftCarga c)
                 {
-                    void Place(CargaPlan c) => c.Submissoes.Add(new CargaSubmissao(
+                    c.Submissoes.Add(new CargaSubmissao(
                         part.Sub.SubmissionId, part.NomeCriador,
-                        part.NumAvesConcurso, part.NumAvesVenda, part.NumAvesTransporte));
-
-                    // Preferência 1 — carga onde já existe outra parte deste criador.
-                    var samecarga = openCargas.FirstOrDefault(c =>
-                        c.TotalAves + part.Tamanho <= config.CapacidadePorCarga
-                        && c.Submissoes.Any(x => x.SubmissionId == sub.SubmissionId));
-
-                    if (samecarga is not null)
-                    {
-                        Place(samecarga);
-                        continue;
-                    }
-
-                    // Preferência 2 — FFD normal na mesma zona.
-                    var fitted = openCargas.FirstOrDefault(c =>
-                        c.TotalAves + part.Tamanho <= config.CapacidadePorCarga);
-
-                    if (fitted is not null)
-                    {
-                        Place(fitted);
-                        continue;
-                    }
-
-                    // Preferência 3 — abrir nova carga (só desta zona).
-                    var nova = OpenCarga(zone.Label);
-                    Place(nova);
-                    openCargas.Add(nova);
+                        part.NumAvesConcurso, part.NumAvesVenda,
+                        part.NumAvesTransportePtBe, part.NumAvesTransporteBePt));
+                    if (!c.Zonas.Contains(zone.Label))
+                        c.Zonas.Add(zone.Label);
                 }
+
+                // Fit em gaiolas efectivas: para cada criador (incluindo esta
+                // submissão se já estiver na carga), soma concurso + venda +
+                // max(ptbe, bept). Cada criador partilha as gaiolas dele mas
+                // criadores diferentes não partilham entre si.
+                bool Fits(DraftCarga c)
+                {
+                    int total = 0;
+                    bool placedSubHere = false;
+                    foreach (var g in c.Submissoes.GroupBy(s => s.SubmissionId))
+                    {
+                        int gc = g.Sum(x => x.NumAvesConcurso);
+                        int gv = g.Sum(x => x.NumAvesVenda);
+                        int gPtBe = g.Sum(x => x.NumAvesTransportePtBe);
+                        int gBePt = g.Sum(x => x.NumAvesTransporteBePt);
+                        if (g.Key == part.Sub.SubmissionId)
+                        {
+                            gc += part.NumAvesConcurso;
+                            gv += part.NumAvesVenda;
+                            gPtBe += part.NumAvesTransportePtBe;
+                            gBePt += part.NumAvesTransporteBePt;
+                            placedSubHere = true;
+                        }
+                        total += gc + gv + Math.Max(gPtBe, gBePt);
+                    }
+                    if (!placedSubHere)
+                    {
+                        total += part.NumAvesConcurso + part.NumAvesVenda
+                              + Math.Max(part.NumAvesTransportePtBe, part.NumAvesTransporteBePt);
+                    }
+                    return total <= cap;
+                }
+
+                // Preferência 1 — afinidade de tipo dominante: cargas activas
+                // onde já há aves do MESMO tipo maioritário deste part
+                // (ordenadas por quantidade DESC). Empata pela ordem de criação.
+                var byAffinity = activeDrafts
+                    .Where(c => Fits(c) && TypeAffinity(c, part) > 0)
+                    .OrderByDescending(c => TypeAffinity(c, part))
+                    .FirstOrDefault();
+
+                if (byAffinity is not null) { Place(byAffinity); continue; }
+
+                // Preferência 2 — FFD entre cargas activas por ordem de criação.
+                var fitted = activeDrafts.FirstOrDefault(Fits);
+
+                if (fitted is not null) { Place(fitted); continue; }
+
+                // Preferência 3 — abrir carga nova.
+                var nova = new DraftCarga();
+                drafts.Add(nova);
+                activeDrafts.Add(nova);
+                Place(nova);
             }
         }
 
-        // Consolida partes da mesma submissão que tenham calhado na mesma carga
-        // (ex.: 10 concurso + 5 venda do mesmo criador no mesmo transporte).
-        // Necessário para não violar o unique (TransportCargaId, FormSubmissionId).
-        foreach (var carga in result)
+        // Reordena cargas para agrupar visualmente splits do mesmo criador —
+        // quando uma inscrição aparece em várias cargas, essas cargas ficam
+        // consecutivas. Passe estável e greedy: para cada carga na ordem
+        // original, insere-a logo a seguir à última carga já reordenada que
+        // partilhe algum submissionId. Mantém a ordem sul→norte quando não
+        // há conflito, e agrupa splits quando há.
+        drafts = ReordenarParaAgruparSplits(drafts);
+
+        // Materializa DraftCarga → CargaPlan, consolidando partes da mesma
+        // submissão que tenham calhado na mesma carga (ex.: 10 concurso + 5
+        // venda do mesmo criador). Necessário para não violar o unique
+        // (TransportCargaId, FormSubmissionId).
+        var result = new List<CargaPlan>(drafts.Count);
+        for (int i = 0; i < drafts.Count; i++)
         {
-            var grouped = carga.Submissoes
+            var d = drafts[i];
+            var grouped = d.Submissoes
                 .GroupBy(s => s.SubmissionId)
                 .Select(g => new CargaSubmissao(
                     g.First().SubmissionId,
                     g.First().NomeCriador,
                     g.Sum(x => x.NumAvesConcurso),
                     g.Sum(x => x.NumAvesVenda),
-                    g.Sum(x => x.NumAvesTransporte)))
+                    g.Sum(x => x.NumAvesTransportePtBe),
+                    g.Sum(x => x.NumAvesTransporteBePt)))
                 .ToList();
-            if (grouped.Count != carga.Submissoes.Count)
-            {
-                carga.Submissoes.Clear();
-                carga.Submissoes.AddRange(grouped);
-            }
-        }
 
-        // Renumera T01..Tnn por ordem de emissão (sul→norte).
-        for (int i = 0; i < result.Count; i++)
-        {
-            result[i] = result[i] with
-            {
-                Codigo = $"T{(i + 1):00}",
-                SortOrder = i + 1,
-            };
+            result.Add(new CargaPlan(
+                Codigo: $"T{(i + 1):00}",
+                TransportadoraNome: "",
+                ZonasLabel: d.Zonas.Count == 0 ? "—" : string.Join(" + ", d.Zonas),
+                SortOrder: i + 1,
+                Submissoes: grouped));
         }
 
         return result;
     }
 
-    // Se a submissão excede a capacidade, divide-a em unidades preservando a
-    // preferência de separar aves de concurso das aves de venda; se um dos tipos
-    // por si só ainda exceder `cap`, parte em blocos de tamanho `cap`.
-    //
-    // Em modos direccionais só se contam as aves que ocupam espaço nesse sentido:
-    //   PtBe → concurso + venda + transporte "vende" (PT→BE)
-    //   BePt → concurso + venda + transporte "compra" (BE→PT)
-    // Concurso e venda contam sempre em ambos sentidos (venda porque as não vendidas
-    // regressam — ver nota no enum PlanMode).
-    // As aves ignoradas ficam a zero no PackUnit (não são persistidas nesta carga).
-    private static IEnumerable<PackUnit> SplitSubmission(SubmissionInput s, int cap, PlanMode mode)
+    private static List<DraftCarga> ReordenarParaAgruparSplits(List<DraftCarga> drafts)
     {
-        var contaConcurso = true;                              // sempre — ocupa ambos sentidos
-        var contaVenda    = true;                              // sempre — não vendidas regressam
-        var contaPtBe  = mode != PlanMode.BePt;                // transporte PT→BE
-        var contaBePt  = mode != PlanMode.PtBe;                // transporte BE→PT
-
-        var concurso = contaConcurso ? s.NumAvesConcurso        : 0;
-        var venda    = contaVenda    ? s.NumAvesVenda           : 0;
-        var trPtBe   = contaPtBe     ? s.NumAvesTransportePtBe  : 0;
-        var trBePt   = contaBePt     ? s.NumAvesTransporteBePt  : 0;
-
-        var totalEfectivo = concurso + venda + trPtBe + trBePt;
-        if (totalEfectivo == 0) yield break;
-
-        if (totalEfectivo <= cap)
+        var reordered = new List<DraftCarga>(drafts.Count);
+        foreach (var carga in drafts)
         {
-            // Guardamos os componentes de transporte no bucket `NumAvesTransporte`
-            // do PackUnit — o snapshot persistido não distingue direção, e no modo
-            // direccional só um dos dois tem valor.
-            yield return new PackUnit(s.NomeCriador, s,
-                concurso, venda, trPtBe + trBePt, totalEfectivo);
-            yield break;
+            var subIds = new HashSet<int>(carga.Submissoes.Select(s => s.SubmissionId));
+
+            // Encontra a última carga já reordenada que partilhe algum criador
+            // — a nova entra logo a seguir para ficarem consecutivas.
+            int insertAt = reordered.Count;   // default: append
+            for (int i = reordered.Count - 1; i >= 0; i--)
+            {
+                if (reordered[i].Submissoes.Any(s => subIds.Contains(s.SubmissionId)))
+                {
+                    insertAt = i + 1;
+                    break;
+                }
+            }
+            reordered.Insert(insertAt, carga);
         }
-
-        foreach (var part in SplitByType(concurso, cap))
-            yield return new PackUnit(s.NomeCriador, s,
-                NumAvesConcurso: part, NumAvesVenda: 0, NumAvesTransporte: 0, Tamanho: part);
-
-        foreach (var part in SplitByType(venda, cap))
-            yield return new PackUnit(s.NomeCriador, s,
-                NumAvesConcurso: 0, NumAvesVenda: part, NumAvesTransporte: 0, Tamanho: part);
-
-        foreach (var part in SplitByType(trPtBe + trBePt, cap))
-            yield return new PackUnit(s.NomeCriador, s,
-                NumAvesConcurso: 0, NumAvesVenda: 0, NumAvesTransporte: part, Tamanho: part);
+        return reordered;
     }
 
-    private static IEnumerable<int> SplitByType(int total, int cap)
+    // Peso da carga para este part por afinidade do tipo DOMINANTE do part.
+    // Se o part é misto (ex.: 4c + 10v), o tipo dominante é aquele com mais
+    // aves — desempatam-se por concurso > venda > transporte.
+    private static int TypeAffinity(DraftCarga c, PackUnit p)
     {
-        if (total <= 0) yield break;
-        var remaining = total;
-        while (remaining > cap)
+        var trTotal = p.NumAvesTransportePtBe + p.NumAvesTransporteBePt;
+        // Escolhe o tipo dominante do part.
+        if (p.NumAvesConcurso >= p.NumAvesVenda && p.NumAvesConcurso >= trTotal && p.NumAvesConcurso > 0)
+            return c.Submissoes.Sum(s => s.NumAvesConcurso);
+        if (p.NumAvesVenda >= trTotal && p.NumAvesVenda > 0)
+            return c.Submissoes.Sum(s => s.NumAvesVenda);
+        if (trTotal > 0)
+            return c.Submissoes.Sum(s => s.NumAvesTransporte);
+        return 0;
+    }
+
+    // Estrutura mutável usada durante o packing. Convertida em CargaPlan
+    // (record imutável) só depois de todas as zonas terem sido processadas.
+    private sealed class DraftCarga
+    {
+        public List<string> Zonas { get; } = new();
+        public List<CargaSubmissao> Submissoes { get; } = new();
+    }
+
+    // Divide a submissão no NÚMERO MÍNIMO de partes (ceil(ocupacao/cap)) —
+    // regra dominante para não fragmentar criadores por muitas cargas. Cada
+    // parte é preenchida gulosamente: primeiro c+v (que contam 1 por ave em
+    // ambos os sentidos), depois transporte emparelhado PtBe↔BePt (cada par
+    // usa 1 gaiola, pois o mesmo lugar carrega Vende à ida e Compra à volta),
+    // e por fim o resíduo unidireccional.
+    //
+    // Em modos direccionais só contam as aves que ocupam espaço nesse sentido.
+    private static IEnumerable<PackUnit> SplitSubmission(SubmissionInput s, int cap, PlanMode mode)
+    {
+        var contaPtBe = mode != PlanMode.BePt;
+        var contaBePt = mode != PlanMode.PtBe;
+
+        int remC     = s.NumAvesConcurso;
+        int remV     = s.NumAvesVenda;
+        int remPtBe  = contaPtBe ? s.NumAvesTransportePtBe : 0;
+        int remBePt  = contaBePt ? s.NumAvesTransporteBePt : 0;
+
+        // Ocupação total (com sharing intra-criador) — é isto que conta para cap.
+        int ocupTotal = remC + remV + Math.Max(remPtBe, remBePt);
+        if (ocupTotal <= 0) yield break;
+
+        while (remC + remV + remPtBe + remBePt > 0)
         {
-            yield return cap;
-            remaining -= cap;
+            int need = cap;   // gaiolas efectivas ainda por preencher nesta parte
+            int takeC = 0, takeV = 0, takePtBe = 0, takeBePt = 0;
+
+            // Fase 1 — enche a parte com c+v pelo maior bucket restante,
+            // para manter homogeneidade de tipo.
+            while (need > 0 && (remC > 0 || remV > 0))
+            {
+                if (remC >= remV && remC > 0)
+                { int t = Math.Min(remC, need); takeC += t; remC -= t; need -= t; }
+                else if (remV > 0)
+                { int t = Math.Min(remV, need); takeV += t; remV -= t; need -= t; }
+            }
+
+            // Fase 2 — pares Vende↔Compra do mesmo criador. Cada par usa 1
+            // gaiola (o lugar leva Vende à ida e traz Compra à volta).
+            if (need > 0 && remPtBe > 0 && remBePt > 0)
+            {
+                int pairs = Math.Min(Math.Min(remPtBe, remBePt), need);
+                takePtBe += pairs; takeBePt += pairs;
+                remPtBe -= pairs;  remBePt -= pairs;
+                need -= pairs;
+            }
+
+            // Fase 3 — resíduo unidireccional (só uma direção com aves).
+            if (need > 0 && remPtBe > 0)
+            {
+                int t = Math.Min(remPtBe, need);
+                takePtBe += t; remPtBe -= t; need -= t;
+            }
+            if (need > 0 && remBePt > 0)
+            {
+                int t = Math.Min(remBePt, need);
+                takeBePt += t; remBePt -= t; need -= t;
+            }
+
+            int ocup = takeC + takeV + Math.Max(takePtBe, takeBePt);
+            if (ocup <= 0) yield break;   // salvaguarda
+
+            yield return new PackUnit(s.NomeCriador, s,
+                NumAvesConcurso: takeC, NumAvesVenda: takeV,
+                NumAvesTransportePtBe: takePtBe, NumAvesTransporteBePt: takeBePt,
+                Tamanho: ocup);
         }
-        if (remaining > 0) yield return remaining;
     }
 
     private record PackUnit(
@@ -267,6 +381,7 @@ public static class TransportPlanner
         SubmissionInput Sub,
         int NumAvesConcurso,
         int NumAvesVenda,
-        int NumAvesTransporte,
+        int NumAvesTransportePtBe,
+        int NumAvesTransporteBePt,
         int Tamanho);
 }

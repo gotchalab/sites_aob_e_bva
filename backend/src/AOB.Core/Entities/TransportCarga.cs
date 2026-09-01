@@ -37,5 +37,14 @@ public class TransportCargaSubmission
     // DataJson só para listar. Actualizado quando a inscrição é editada.
     public int NumAvesConcurso { get; set; }
     public int NumAvesVenda { get; set; }
+    // Total físico de aves de transporte (soma das duas direções). Mantido
+    // para retrocompatibilidade com o snapshot antigo.
     public int NumAvesTransporte { get; set; }
+    // Split por direção do transporte. Guardado separado para o cálculo
+    // de ocupação usar max(PtBe, BePt) por criador — as gaiolas que levam
+    // aves PT→BE trazem aves BE→PT do mesmo criador (partilham espaço).
+    // Se ambos forem 0 e NumAvesTransporte > 0, é um snapshot antigo sem
+    // direção conhecida — trata-se como só-de-ida por segurança.
+    public int NumAvesTransportePtBe { get; set; }
+    public int NumAvesTransporteBePt { get; set; }
 }

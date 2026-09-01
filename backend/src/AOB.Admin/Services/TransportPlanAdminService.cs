@@ -29,13 +29,26 @@ public class TransportPlanAdminService(AppDbContext db)
         int SortOrder, string? Notas,
         List<CargaSubmissionRow> Submissoes)
     {
-        public int TotalAves => Submissoes.Sum(s => s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporte);
+        // Gaiolas ocupadas — é isto que compara com CapacidadePorCarga.
+        // Cada criador dentro da carga soma concurso + venda +
+        // max(transportePtBe, transporteBePt) porque as gaiolas dele
+        // fazem duplo turno (leva Vende, traz Compra).
+        public int TotalAves => Submissoes.Sum(s => s.Ocupacao);
+        public int TotalAvesFisicas => Submissoes.Sum(s =>
+            s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransportePtBe + s.NumAvesTransporteBePt);
     }
 
     public record CargaSubmissionRow(
         int Id, int SubmissionId, string NomeCriador,
-        int NumAvesConcurso, int NumAvesVenda, int NumAvesTransporte,
-        string ZonaNome, string? ZonaLocation);
+        int NumAvesConcurso, int NumAvesVenda,
+        int NumAvesTransportePtBe, int NumAvesTransporteBePt,
+        string ZonaNome, string? ZonaLocation)
+    {
+        public int NumAvesTransporte => NumAvesTransportePtBe + NumAvesTransporteBePt;
+        // Gaiolas efectivas deste criador nesta carga.
+        public int Ocupacao => NumAvesConcurso + NumAvesVenda
+            + Math.Max(NumAvesTransportePtBe, NumAvesTransporteBePt);
+    }
 
     public record ZoneSuggestion(
         int CollectionPointId, string Nome, string? Location, int SortOrder,
@@ -128,6 +141,8 @@ public class TransportPlanAdminService(AppDbContext db)
                 cs.NumAvesConcurso,
                 cs.NumAvesVenda,
                 cs.NumAvesTransporte,
+                cs.NumAvesTransportePtBe,
+                cs.NumAvesTransporteBePt,
             })
             .ToListAsync();
 
@@ -179,10 +194,31 @@ public class TransportPlanAdminService(AppDbContext db)
                 ? lst.Select(a =>
                 {
                     submissionMeta.TryGetValue(a.FormSubmissionId, out var s);
+
+                    // Fallback: snapshots antigos gravaram só NumAvesTransporte
+                    // (sem direção). Se PtBe+BePt = 0 mas NumAvesTransporte > 0,
+                    // usamos o rácio da inscrição como aproximação.
+                    var ptbe = a.NumAvesTransportePtBe;
+                    var bept = a.NumAvesTransporteBePt;
+                    if (ptbe + bept == 0 && a.NumAvesTransporte > 0 && s is not null)
+                    {
+                        var subTotal = s.NumAvesTransportePtBe + s.NumAvesTransporteBePt;
+                        if (subTotal > 0)
+                        {
+                            ptbe = (int)Math.Round(a.NumAvesTransporte * (double)s.NumAvesTransportePtBe / subTotal);
+                            bept = a.NumAvesTransporte - ptbe;
+                        }
+                        else
+                        {
+                            ptbe = a.NumAvesTransporte;   // desconhecido → assume ida
+                        }
+                    }
+
                     return new CargaSubmissionRow(
                         a.Id, a.FormSubmissionId,
                         s?.NomeCriador ?? "(desconhecido)",
-                        a.NumAvesConcurso, a.NumAvesVenda, a.NumAvesTransporte,
+                        a.NumAvesConcurso, a.NumAvesVenda,
+                        ptbe, bept,
                         s?.ZonaNome ?? "—", s?.ZonaLocation);
                 }).ToList()
                 : new List<CargaSubmissionRow>();
@@ -215,9 +251,13 @@ public class TransportPlanAdminService(AppDbContext db)
                 stats.Inscricoes, stats.Aves, cargas);
         }).ToList();
 
+        // Ocupação por inscrição (gaiolas efectivas): concurso + venda +
+        // max(transportePtBe, transporteBePt), porque para o MESMO criador as
+        // gaiolas Vende trazem Compra na volta.
         var totalAvesPorSubmissao = submissionRows.ToDictionary(
             r => r.SubmissionId,
-            r => r.NumAvesConcurso + r.NumAvesVenda + r.NumAvesTransporte);
+            r => r.NumAvesConcurso + r.NumAvesVenda
+                 + Math.Max(r.NumAvesTransportePtBe, r.NumAvesTransporteBePt));
 
         var elegiveis = submissionRows.Where(r => r.CollectionPointId is not null).ToList();
         var totais = new DirectionTotals(
@@ -238,7 +278,8 @@ public class TransportPlanAdminService(AppDbContext db)
 
     public async Task<string?> GeneratePlanAsync(
         int yearId,
-        TransportPlanner.PlanMode mode = TransportPlanner.PlanMode.Total)
+        TransportPlanner.PlanMode mode = TransportPlanner.PlanMode.Total,
+        bool cruzaZonas = true)
     {
         var y = await db.ConvoyageYears
             .Include(x => x.CollectionPoints)
@@ -271,7 +312,7 @@ public class TransportPlanAdminService(AppDbContext db)
             .ToList();
 
         var config = new TransportPlanner.PlannerConfig(
-            y.CapacidadePorCarga, y.MinPorCarga, y.NumCargasAlvo, mode);
+            y.CapacidadePorCarga, y.MinPorCarga, y.NumCargasAlvo, mode, cruzaZonas);
 
         var plan = TransportPlanner.Plan(plannerSubs, zoneInputs, config);
 
@@ -303,6 +344,8 @@ public class TransportPlanAdminService(AppDbContext db)
                     FormSubmissionId = s.SubmissionId,
                     NumAvesConcurso = s.NumAvesConcurso,
                     NumAvesVenda = s.NumAvesVenda,
+                    NumAvesTransportePtBe = s.NumAvesTransportePtBe,
+                    NumAvesTransporteBePt = s.NumAvesTransporteBePt,
                     NumAvesTransporte = s.NumAvesTransporte,
                 });
             }
@@ -342,19 +385,26 @@ public class TransportPlanAdminService(AppDbContext db)
         if (quantidade == total)
             return await MoveAssignmentAsync(yearId, assignmentId, targetCargaId);
 
-        // Divisão parcial. Retira das aves pela ordem: transporte, venda, concurso
-        // (preserva sempre o máximo de aves de concurso na carga original).
+        // Divisão parcial. Retira das aves pela ordem: transporte (BePt primeiro,
+        // depois PtBe), venda, concurso — preserva sempre o máximo de concurso
+        // na carga original.
         int remaining = quantidade;
-        int moveTransporte = Math.Min(existing.NumAvesTransporte, remaining);
-        remaining -= moveTransporte;
+        int moveBePt = Math.Min(existing.NumAvesTransporteBePt, remaining);
+        remaining -= moveBePt;
+        int movePtBe = Math.Min(existing.NumAvesTransportePtBe, remaining);
+        remaining -= movePtBe;
         int moveVenda = Math.Min(existing.NumAvesVenda, remaining);
         remaining -= moveVenda;
         int moveConcurso = Math.Min(existing.NumAvesConcurso, remaining);
 
+        int moveTransporte = moveBePt + movePtBe;
+
         // Actualiza a origem com o resto.
         existing.NumAvesConcurso -= moveConcurso;
         existing.NumAvesVenda -= moveVenda;
-        existing.NumAvesTransporte -= moveTransporte;
+        existing.NumAvesTransportePtBe -= movePtBe;
+        existing.NumAvesTransporteBePt -= moveBePt;
+        existing.NumAvesTransporte = existing.NumAvesTransportePtBe + existing.NumAvesTransporteBePt;
 
         if (targetCargaId is null)
         {
@@ -374,7 +424,10 @@ public class TransportPlanAdminService(AppDbContext db)
         {
             existingOnTarget.NumAvesConcurso += moveConcurso;
             existingOnTarget.NumAvesVenda += moveVenda;
-            existingOnTarget.NumAvesTransporte += moveTransporte;
+            existingOnTarget.NumAvesTransportePtBe += movePtBe;
+            existingOnTarget.NumAvesTransporteBePt += moveBePt;
+            existingOnTarget.NumAvesTransporte =
+                existingOnTarget.NumAvesTransportePtBe + existingOnTarget.NumAvesTransporteBePt;
         }
         else
         {
@@ -384,6 +437,8 @@ public class TransportPlanAdminService(AppDbContext db)
                 FormSubmissionId = existing.FormSubmissionId,
                 NumAvesConcurso = moveConcurso,
                 NumAvesVenda = moveVenda,
+                NumAvesTransportePtBe = movePtBe,
+                NumAvesTransporteBePt = moveBePt,
                 NumAvesTransporte = moveTransporte,
             });
         }
@@ -421,7 +476,10 @@ public class TransportPlanAdminService(AppDbContext db)
         {
             existingOnTarget.NumAvesConcurso += existing.NumAvesConcurso;
             existingOnTarget.NumAvesVenda += existing.NumAvesVenda;
-            existingOnTarget.NumAvesTransporte += existing.NumAvesTransporte;
+            existingOnTarget.NumAvesTransportePtBe += existing.NumAvesTransportePtBe;
+            existingOnTarget.NumAvesTransporteBePt += existing.NumAvesTransporteBePt;
+            existingOnTarget.NumAvesTransporte =
+                existingOnTarget.NumAvesTransportePtBe + existingOnTarget.NumAvesTransporteBePt;
             db.TransportCargaSubmissions.Remove(existing);
         }
         else
@@ -456,6 +514,8 @@ public class TransportPlanAdminService(AppDbContext db)
         {
             existingOnTarget.NumAvesConcurso = m.NumAvesConcurso;
             existingOnTarget.NumAvesVenda = m.NumAvesVenda;
+            existingOnTarget.NumAvesTransportePtBe = m.NumAvesTransportePtBe;
+            existingOnTarget.NumAvesTransporteBePt = m.NumAvesTransporteBePt;
             existingOnTarget.NumAvesTransporte = m.NumAvesTransporte;
         }
         else
@@ -466,6 +526,8 @@ public class TransportPlanAdminService(AppDbContext db)
                 FormSubmissionId = submissionId,
                 NumAvesConcurso = m.NumAvesConcurso,
                 NumAvesVenda = m.NumAvesVenda,
+                NumAvesTransportePtBe = m.NumAvesTransportePtBe,
+                NumAvesTransporteBePt = m.NumAvesTransporteBePt,
                 NumAvesTransporte = m.NumAvesTransporte,
             });
         }
@@ -692,6 +754,8 @@ public class TransportPlanAdminService(AppDbContext db)
                 NumAvesVenda: m.NumAvesVenda,
                 NumAvesTransportePtBe: m.NumAvesTransportePtBe,
                 NumAvesTransporteBePt: m.NumAvesTransporteBePt,
+                NumAvesVendaOferecidas: m.NumAvesVendaOferecidas,
+                NumAvesEspacosOferecidos: m.NumAvesEspacosOferecidos,
                 SocioBva: m.SocioBvaLabel,
                 TotalPago: m.TotalPago,
                 CargaAtribuida: CargaLabelFor(s.Id));
@@ -889,6 +953,7 @@ public class TransportPlanAdminService(AppDbContext db)
         string Nome, string Email, string Telefone, string Pais, string LocalRecolha,
         int NumAvesConcurso, int NumAvesVenda, int NumAvesTransporte,
         int NumAvesTransportePtBe, int NumAvesTransporteBePt,
+        int NumAvesVendaOferecidas, int NumAvesEspacosOferecidos,
         string SocioBvaLabel, string SocioBvaStatus, decimal TotalPago,
         List<AveMeta> Aves,
         List<AveMeta> AvesVenda,
@@ -1009,17 +1074,25 @@ public class TransportPlanAdminService(AppDbContext db)
                 _ => S("SocioBva", r) == "True" ? "JaSocio" : "NaoSocio",
             };
 
+            // Ofertas: valores gravados no DataJson pelo backoffice (0 se nunca
+            // foi editado). Clamp defensivo para nunca ficar acima da contagem
+            // real — evita totais negativos nas fórmulas do Excel.
+            var vendaOferecidas = Math.Clamp(I("NumAvesVendaOferecidas", r), 0, numVenda);
+            var espacosTransporte = Math.Max(numTransporteCompra, numTransporteVende);
+            var espacosOferecidos = Math.Clamp(I("NumAvesTransporteOferecidas", r), 0, espacosTransporte);
+
             return new SubmissionMeta(
                 S("NomeCompleto", r), S("Email", r), S("Telefone", r),
                 S("Pais", r), S("LocalRecolha", r),
                 numConcurso, numVenda, numTransporte,
                 numTransporteVende, numTransporteCompra,
+                vendaOferecidas, espacosOferecidos,
                 socioLabel, socioStatus, totalPago,
                 aves, avesVenda, avesTransporte);
         }
         catch
         {
-            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, 0, 0, "—", "NaoSocio", 0m,
+            return new SubmissionMeta("", "", "", "", "", 0, 0, 0, 0, 0, 0, 0, "—", "NaoSocio", 0m,
                 new(), new(), new());
         }
     }

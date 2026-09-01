@@ -77,3 +77,25 @@
 .aob-tooltip-list li:last-child {
     padding-bottom: 0;
 }
+
+.aob-tooltip-list li.aob-tooltip-current {
+    background: rgba(255, 193, 7, 0.12);
+    margin: 0 -0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    border-left: 3px solid #ffc107;
+}
+
+.aob-tooltip-current-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0 0.35rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #212529;
+    background: #ffc107;
+    border-radius: 0.2rem;
+    vertical-align: middle;
+}

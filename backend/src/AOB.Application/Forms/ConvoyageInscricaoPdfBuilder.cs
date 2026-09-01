@@ -61,6 +61,13 @@ public static class ConvoyageInscricaoPdfBuilder
             return null;
         }
 
+        // Se a inscrição não tem aves em nenhuma das secções visíveis do PDF
+        // (concurso + venda, mais transporte quando incluído), o ficheiro fica
+        // sem conteúdo útil. Saltar para não sujar o ZIP.
+        var totalVisibleBirds = (req.Aves?.Count ?? 0) + (req.AvesVenda?.Count ?? 0)
+            + (includeTransport ? (req.AvesTransporte?.Count ?? 0) : 0);
+        if (totalVisibleBirds == 0) return null;
+
         byte[]? logoBytes = null;
         var logoFile = $"logo-{submission.Site.Slug}.png";
         string[] logoCandidates =
