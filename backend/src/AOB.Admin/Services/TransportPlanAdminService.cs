@@ -698,15 +698,16 @@ public class TransportPlanAdminService(AppDbContext db)
         }
 
         // Descreve as aves de uma inscrição atribuídas a UMA carga, agrupadas por
-        // tipo (18 concurso, 5 venda, ...). Serve para clarificar splits na folha
-        // "Transportes" — quando uma inscrição está partida por várias cargas,
-        // cada linha mostra apenas as aves dessa carga.
+        // tipo. Para transporte, discrimina a direção (PT→BE / BE→PT) porque
+        // não são intercambiáveis na logística: Vende fica na Bélgica, Compra
+        // é recolhida lá e trazida.
         static string DescribeParte(CargaSubmissionRow s)
         {
             var parts = new List<string>();
-            if (s.NumAvesConcurso   > 0) parts.Add($"{s.NumAvesConcurso} concurso");
-            if (s.NumAvesVenda      > 0) parts.Add($"{s.NumAvesVenda} venda");
-            if (s.NumAvesTransporte > 0) parts.Add($"{s.NumAvesTransporte} transporte");
+            if (s.NumAvesConcurso     > 0) parts.Add($"{s.NumAvesConcurso} concurso");
+            if (s.NumAvesVenda        > 0) parts.Add($"{s.NumAvesVenda} venda");
+            if (s.NumAvesTransportePtBe > 0) parts.Add($"{s.NumAvesTransportePtBe} transporte PT→BE");
+            if (s.NumAvesTransporteBePt > 0) parts.Add($"{s.NumAvesTransporteBePt} transporte BE→PT");
             var detalhe = parts.Count == 0 ? "0" : string.Join(" + ", parts);
             return $"{s.NomeCriador.ToUpperInvariant()} ({detalhe})";
         }
