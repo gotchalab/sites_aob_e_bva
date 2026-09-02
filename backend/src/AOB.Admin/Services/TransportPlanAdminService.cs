@@ -714,14 +714,26 @@ public class TransportPlanAdminService(AppDbContext db)
 
         var transportes = overview.Cargas
             .OrderBy(c => c.SortOrder)
-            .Select(c => new TransportExcelExporter.TransporteRow(
-                Transportadora: c.TransportadoraNome,
-                Codigo: c.Codigo,
-                NumAves: c.TotalAves,
-                Zonas: c.ZonasLabel,
-                CriadoresLabel: string.Join(", ", c.Submissoes.Select(DescribeParte)),
-                Tipo: "Agapornis",
-                Sobras: Math.Max(0, overview.Config.CapacidadePorCarga - c.TotalAves)))
+            .Select(c =>
+            {
+                // Aves na IDA = concurso + venda + transporte-Vende (PT→BE).
+                var ida = c.Submissoes.Sum(s =>
+                    s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransportePtBe);
+                // Aves na VOLTA = concurso + venda + transporte-Compra (BE→PT).
+                // As trPtBe (Vende) ficam na Bélgica e não regressam.
+                var regresso = c.Submissoes.Sum(s =>
+                    s.NumAvesConcurso + s.NumAvesVenda + s.NumAvesTransporteBePt);
+                return new TransportExcelExporter.TransporteRow(
+                    Transportadora: c.TransportadoraNome,
+                    Codigo: c.Codigo,
+                    NumAves: c.TotalAves,
+                    Zonas: c.ZonasLabel,
+                    CriadoresLabel: string.Join(", ", c.Submissoes.Select(DescribeParte)),
+                    Tipo: "Agapornis",
+                    Sobras: Math.Max(0, overview.Config.CapacidadePorCarga - c.TotalAves),
+                    NumAvesIda: ida,
+                    NumAvesRegresso: regresso);
+            })
             .ToList();
 
         var submissoes = await db.FormSubmissions.AsNoTracking()
@@ -828,6 +840,163 @@ public class TransportPlanAdminService(AppDbContext db)
         return new EtiquetasResult(bytes, Slugify(point.Name));
     }
 
+    // Exporta um único PDF Avery 3421 com uma "secção" por transportadora
+    // (cada carga arranca numa folha nova, com o código T01/T02… + nome do
+    // transportador impressos na margem superior). O snapshot do plano só
+    // guarda contagens por (carga × inscrição × tipo × direcção), portanto a
+    // atribuição anilha→carga faz-se por consumo determinístico: as aves da
+    // inscrição na ordem em que aparecem no DataJson são distribuídas pelas
+    // cargas ordenadas por SortOrder. Isto garante que nenhuma anilha aparece
+    // em duas cargas e que a atribuição é reprodutível entre chamadas.
+    public async Task<EtiquetasResult?> ExportEtiquetasPorPlanoAsync(int yearId)
+    {
+        var year = await db.ConvoyageYears.AsNoTracking()
+            .FirstOrDefaultAsync(y => y.Id == yearId);
+        if (year is null) return null;
+
+        var cargas = await db.TransportCargas.AsNoTracking()
+            .Where(c => c.ConvoyageYearId == yearId)
+            .OrderBy(c => c.SortOrder)
+            .ToListAsync();
+
+        // Assignments ordenados por (carga.SortOrder, cs.Id) para dar sequência
+        // determinística tanto entre cargas como dentro de cada carga.
+        var assignments = await db.TransportCargaSubmissions.AsNoTracking()
+            .Where(cs => cs.TransportCarga.ConvoyageYearId == yearId)
+            .OrderBy(cs => cs.TransportCarga.SortOrder).ThenBy(cs => cs.Id)
+            .ToListAsync();
+
+        var subIds = assignments.Select(a => a.FormSubmissionId).Distinct().ToList();
+        var subs = await db.FormSubmissions.AsNoTracking()
+            .Where(f => subIds.Contains(f.Id))
+            .ToDictionaryAsync(f => f.Id, f => f);
+
+        // Parse-once por inscrição → 4 listas segmentadas (concurso / venda /
+        // transporte-vende / transporte-compra) para poder fatiar por carga.
+        var parsedById = subs.ToDictionary(
+            kv => kv.Key,
+            kv => BuildLabelBucketsFromJson(kv.Value.DataJson));
+
+        // Offsets consumidos por inscrição — cada carga posterior salta o que
+        // as anteriores já levaram.
+        var offsets = new Dictionary<int, (int c, int v, int tv, int tc)>();
+
+        var groups = new List<EtiquetasAvery3421PdfGenerator.EtiquetaGrupo>();
+        foreach (var carga in cargas)
+        {
+            var labels = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+            foreach (var a in assignments.Where(x => x.TransportCargaId == carga.Id))
+            {
+                if (!parsedById.TryGetValue(a.FormSubmissionId, out var p)) continue;
+
+                var (oc, ov, otv, otc) = offsets.TryGetValue(a.FormSubmissionId, out var cur)
+                    ? cur : (0, 0, 0, 0);
+
+                // Fallback para snapshots antigos que só têm NumAvesTransporte
+                // (sem split direccional): tratamos tudo como "Vende" (ida),
+                // mesma convenção que o resto do sistema.
+                var ptbe = a.NumAvesTransportePtBe;
+                var bept = a.NumAvesTransporteBePt;
+                if (ptbe + bept == 0 && a.NumAvesTransporte > 0)
+                    ptbe = a.NumAvesTransporte;
+
+                labels.AddRange(p.Concurso.Skip(oc).Take(a.NumAvesConcurso));
+                labels.AddRange(p.Venda.Skip(ov).Take(a.NumAvesVenda));
+                labels.AddRange(p.TranspVende.Skip(otv).Take(ptbe));
+                labels.AddRange(p.TranspCompra.Skip(otc).Take(bept));
+
+                offsets[a.FormSubmissionId] = (
+                    oc + a.NumAvesConcurso,
+                    ov + a.NumAvesVenda,
+                    otv + ptbe,
+                    otc + bept);
+            }
+
+            if (labels.Count == 0) continue;
+
+            var header = string.IsNullOrWhiteSpace(carga.TransportadoraNome)
+                ? carga.Codigo
+                : $"{carga.Codigo} · {carga.TransportadoraNome}";
+            groups.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaGrupo(header, labels));
+        }
+
+        var bytes = EtiquetasAvery3421PdfGenerator.Render(groups);
+        return new EtiquetasResult(bytes, "plano");
+    }
+
+    // Parse do DataJson que devolve as etiquetas já segmentadas por tipo/
+    // direcção — usado só pelo export por plano para poder fatiar por carga
+    // sem re-parsear o JSON várias vezes.
+    private sealed record LabelBuckets(
+        List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel> Concurso,
+        List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel> Venda,
+        List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel> TranspVende,
+        List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel> TranspCompra);
+
+    private static LabelBuckets BuildLabelBucketsFromJson(string json)
+    {
+        var concurso = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+        var venda = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+        var tVende = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+        var tCompra = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var r = doc.RootElement;
+            var nomeCompleto = GetStr(r, "NomeCompleto");
+            if (string.IsNullOrWhiteSpace(nomeCompleto))
+                return new LabelBuckets(concurso, venda, tVende, tCompra);
+            var nome = ShortenNome(nomeCompleto);
+
+            foreach (var a in EnumerateArray(r, "Aves"))
+            {
+                var anilha = GetStr(a, "Anilha");
+                if (string.IsNullOrWhiteSpace(anilha)) continue;
+                concurso.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
+                    Nome: nome, Anilha: anilha,
+                    LinhaDescricao: GetStr(a, "EspecieMutacao"),
+                    LinhaTipoOuSerie: FormatSerie(GetStr(a, "Serie"), GetStr(a, "PosicaoEquipa")),
+                    Tipo: EtiquetasAvery3421PdfGenerator.EtiquetaTipo.Concurso));
+            }
+
+            foreach (var a in EnumerateArray(r, "AvesVenda"))
+            {
+                var anilha = GetStr(a, "Anilha");
+                if (string.IsNullOrWhiteSpace(anilha)) continue;
+                venda.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
+                    Nome: nome, Anilha: anilha,
+                    LinhaDescricao: GetStr(a, "EspecieMutacao"),
+                    LinhaTipoOuSerie: "VENDAS",
+                    Tipo: EtiquetasAvery3421PdfGenerator.EtiquetaTipo.Venda));
+            }
+
+            foreach (var a in EnumerateArray(r, "AvesTransporte"))
+            {
+                var anilha = GetStr(a, "Anilha");
+                if (string.IsNullOrWhiteSpace(anilha)) continue;
+                var origem = GetStr(a, "Origem");
+                var isCompra = string.Equals(origem, "Compra", StringComparison.OrdinalIgnoreCase);
+                var destinatario = GetStr(a, "DestinatarioNome");
+                var linhaDesc = isCompra
+                    ? "BE→PT"
+                    : string.IsNullOrWhiteSpace(destinatario)
+                        ? ""
+                        : $"Entregar a: {ShortenNome(destinatario)}";
+                var label = new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
+                    Nome: nome, Anilha: anilha,
+                    LinhaDescricao: linhaDesc,
+                    LinhaTipoOuSerie: "TRANSPORTE",
+                    Tipo: EtiquetasAvery3421PdfGenerator.EtiquetaTipo.Transporte);
+                (isCompra ? tCompra : tVende).Add(label);
+            }
+        }
+        catch
+        {
+            // JSON corrompido — devolve o que conseguiu extrair.
+        }
+        return new LabelBuckets(concurso, venda, tVende, tCompra);
+    }
+
     public async Task<EtiquetasResult?> ExportEtiquetasPorInscricaoAsync(int yearId, int submissionId)
     {
         var sub = await db.FormSubmissions.AsNoTracking()
@@ -856,16 +1025,17 @@ public class TransportPlanAdminService(AppDbContext db)
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
 
-            string nome = GetStr(r, "NomeCompleto");
-            if (string.IsNullOrWhiteSpace(nome)) return result;
+            string nomeCompleto = GetStr(r, "NomeCompleto");
+            if (string.IsNullOrWhiteSpace(nomeCompleto)) return result;
+            string nome = ShortenNome(nomeCompleto);
 
-            // Concurso — Serie + EspecieMutacao + Anilha
+            // Concurso — Serie (+ letra da equipa) + EspecieMutacao + Anilha
             foreach (var a in EnumerateArray(r, "Aves"))
             {
                 var anilha = GetStr(a, "Anilha");
                 if (string.IsNullOrWhiteSpace(anilha)) continue;
                 var mutacao = GetStr(a, "EspecieMutacao");
-                var serie   = GetStr(a, "Serie");
+                var serie   = FormatSerie(GetStr(a, "Serie"), GetStr(a, "PosicaoEquipa"));
                 result.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
                     Nome: nome,
                     Anilha: anilha,
@@ -888,15 +1058,21 @@ public class TransportPlanAdminService(AppDbContext db)
                     Tipo: EtiquetasAvery3421PdfGenerator.EtiquetaTipo.Venda));
             }
 
-            // Transporte — "Entregar a: X" + Anilha, rótulo "TRANSPORTE"
+            // Transporte — "Entregar a: X" + Anilha, rótulo "TRANSPORTE".
+            // PT→BE (Vende): descrição "Entregar a: {nome curto do destinatário}".
+            // BE→PT (Compra): descrição "BE→PT" (o participante é o receptor).
             foreach (var a in EnumerateArray(r, "AvesTransporte"))
             {
                 var anilha = GetStr(a, "Anilha");
                 if (string.IsNullOrWhiteSpace(anilha)) continue;
+                var origem = GetStr(a, "Origem");
+                var isCompra = string.Equals(origem, "Compra", StringComparison.OrdinalIgnoreCase);
                 var destinatario = GetStr(a, "DestinatarioNome");
-                var linhaDesc = string.IsNullOrWhiteSpace(destinatario)
-                    ? ""
-                    : $"Entregar a: {destinatario}";
+                var linhaDesc = isCompra
+                    ? "BE→PT"
+                    : string.IsNullOrWhiteSpace(destinatario)
+                        ? ""
+                        : $"Entregar a: {ShortenNome(destinatario)}";
                 result.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaLabel(
                     Nome: nome,
                     Anilha: anilha,
@@ -910,6 +1086,27 @@ public class TransportPlanAdminService(AppDbContext db)
             // JSON corrompido: retorna lista parcial ou vazia.
         }
         return result;
+    }
+
+    // Nas etiquetas físicas só há espaço para "Nome Apelido" — reduzimos nomes
+    // compostos a primeiro + último token não vazio. Nome com um só token fica
+    // como está.
+    private static string ShortenNome(string? nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return "";
+        var parts = nome.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length <= 1 ? parts[0] : $"{parts[0]} {parts[^1]}";
+    }
+
+    // Para aves em equipa (Posicao A/B/C/D) juntamos a letra à série, ex.:
+    // "451/03 A". A posição sem série (não deveria acontecer) devolve só a
+    // letra; série sem posição fica inalterada.
+    private static string FormatSerie(string? serie, string? posicaoEquipa)
+    {
+        var s = (serie ?? "").Trim();
+        var p = (posicaoEquipa ?? "").Trim();
+        if (string.IsNullOrEmpty(p)) return s;
+        return string.IsNullOrEmpty(s) ? p : $"{s} {p}";
     }
 
     // Helpers de leitura tolerantes ao casing (Pascal vs camel) usados no JSON

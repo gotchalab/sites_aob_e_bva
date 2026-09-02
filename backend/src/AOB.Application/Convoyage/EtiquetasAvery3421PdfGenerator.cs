@@ -65,6 +65,12 @@ public static class EtiquetasAvery3421PdfGenerator
         string LinhaTipoOuSerie,
         EtiquetaTipo Tipo);
 
+    /// Grupo de etiquetas que começa sempre numa folha Avery nova.
+    /// Usado no export por plano de transporte: cada carga (T01, T02…) fica
+    /// numa folha independente, com o Header impresso na margem superior
+    /// (fora da zona dos autocolantes) para o operador identificar a carga.
+    public record EtiquetaGrupo(string Header, IReadOnlyList<EtiquetaLabel> Labels);
+
     // ── Layout Avery 3421 (mm → pt) ─────────────────────────────────────────
     private const double MmToPt = 72.0 / 25.4;
     private const int Cols = 3;
@@ -101,53 +107,68 @@ public static class EtiquetasAvery3421PdfGenerator
     private const double SizeDesc   = 7.5;
     private const double SizeTipo   = 8.5;
     private const double SizeNome   = 8.5;
+    // Header por grupo (código da carga + transportadora), impresso na margem
+    // superior do papel Avery — cabe em ~3.3mm.
+    private const double SizeHeader = 9.0;
 
     public static byte[] Render(IEnumerable<EtiquetaLabel> labels)
+        => Render(new[] { new EtiquetaGrupo("", (labels ?? Array.Empty<EtiquetaLabel>()).ToList()) });
+
+    /// Renderiza uma lista de grupos — cada grupo começa numa folha nova e o
+    /// Header (se não vazio) é impresso na margem superior de todas as folhas
+    /// desse grupo. Grupos vazios são ignorados. Se toda a lista estiver
+    /// vazia, devolve um PDF com uma folha em branco (evita PDF corrupto).
+    public static byte[] Render(IEnumerable<EtiquetaGrupo> groups)
     {
-        var list = labels?.ToList() ?? new List<EtiquetaLabel>();
+        var grupos = (groups ?? Array.Empty<EtiquetaGrupo>())
+            .Where(g => g.Labels is { Count: > 0 })
+            .ToList();
+
         var doc = new PdfDocument();
         doc.Info.Title = "Etiquetas Convoyage";
 
-        // Helvetica → em Windows/Linux modernos o FailsafeFontResolver mapeia
-        // para Arial (que é metricamente compatível com Helvetica para os
-        // caracteres latinos usados aqui).
         var fontAnilha = new XFont(FontFamily, SizeAnilha, XFontStyleEx.Regular);
         var fontDesc   = new XFont(FontFamily, SizeDesc,   XFontStyleEx.Regular);
         var fontTipo   = new XFont(FontFamily, SizeTipo,   XFontStyleEx.Bold);
         var fontNome   = new XFont(FontFamily, SizeNome,   XFontStyleEx.Bold);
+        var fontHeader = new XFont(FontFamily, SizeHeader, XFontStyleEx.Bold);
         var red        = new XSolidBrush(XColor.FromArgb(200, 30, 30));
         var black      = XBrushes.Black;
 
-        PdfPage? page = null;
-        XGraphics? g = null;
         int perPage = Cols * Rows;
 
-        try
+        foreach (var grupo in grupos)
         {
-            for (int i = 0; i < list.Count; i++)
+            PdfPage? page = null;
+            XGraphics? g = null;
+            try
             {
-                int posInPage = i % perPage;
-                if (posInPage == 0)
+                for (int i = 0; i < grupo.Labels.Count; i++)
                 {
-                    g?.Dispose();
-                    page = doc.AddPage();
-                    page.Size = PdfSharp.PageSize.A4;
-                    g = XGraphics.FromPdfPage(page);
+                    int posInPage = i % perPage;
+                    if (posInPage == 0)
+                    {
+                        g?.Dispose();
+                        page = doc.AddPage();
+                        page.Size = PdfSharp.PageSize.A4;
+                        g = XGraphics.FromPdfPage(page);
+                        DrawGroupHeader(g, grupo.Header, fontHeader, black);
+                    }
+
+                    int row = posInPage / Cols;
+                    int col = posInPage % Cols;
+
+                    double x = col * LabelWpt;
+                    double cellTop = CellTopPt + row * LabelHpt;
+
+                    DrawLabel(g!, grupo.Labels[i], x, cellTop,
+                        fontAnilha, fontDesc, fontTipo, fontNome, red, black);
                 }
-
-                int row = posInPage / Cols;
-                int col = posInPage % Cols;
-
-                double x = col * LabelWpt;
-                double cellTop = CellTopPt + row * LabelHpt;
-
-                DrawLabel(g!, list[i], x, cellTop,
-                    fontAnilha, fontDesc, fontTipo, fontNome, red, black);
             }
-        }
-        finally
-        {
-            g?.Dispose();
+            finally
+            {
+                g?.Dispose();
+            }
         }
 
         if (doc.PageCount == 0) doc.AddPage().Size = PdfSharp.PageSize.A4;
@@ -155,6 +176,19 @@ public static class EtiquetasAvery3421PdfGenerator
         using var ms = new MemoryStream();
         doc.Save(ms, closeStream: false);
         return ms.ToArray();
+    }
+
+    // O header (ex.: "T01 · João Silva") vai no topo da folha, dentro da
+    // margem de 8.8mm que fica acima da 1ª linha de autocolantes. Como essa
+    // área é papel-suporte (sem sticker), o texto não é impresso em cima
+    // de nenhuma etiqueta.
+    private static void DrawGroupHeader(XGraphics g, string? header, XFont font, XBrush brush)
+    {
+        if (string.IsNullOrWhiteSpace(header)) return;
+        var pageW = Cols * LabelWpt;
+        var y = 5.5 * MmToPt; // 5.5mm do topo — dentro da margem de 8.8mm
+        var fmt = new XStringFormat { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
+        g.DrawString(header, font, brush, new XPoint(pageW / 2.0, y), fmt);
     }
 
     private static void DrawLabel(

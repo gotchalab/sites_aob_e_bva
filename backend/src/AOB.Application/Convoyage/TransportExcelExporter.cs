@@ -12,7 +12,12 @@ public static class TransportExcelExporter
 {
     public record TransporteRow(
         string Transportadora, string Codigo, int NumAves,
-        string Zonas, string CriadoresLabel, string Tipo, int Sobras);
+        string Zonas, string CriadoresLabel, string Tipo, int Sobras,
+        // Aves que fisicamente ocupam o camião em cada sentido — as trPtBe
+        // (Vende) ficam na Bélgica, as trBePt (Compra) só ocupam na volta.
+        // Serve para calcular sobras por sentido de forma consistente.
+        int NumAvesIda,
+        int NumAvesRegresso);
 
     /// <summary>
     /// SocioBva deve ser um de: "Sócio", "Paga na inscrição", "Não sócio".
@@ -191,8 +196,18 @@ public static class TransportExcelExporter
     {
         var ws = wb.Worksheets.Add("Transportes");
 
-        //  A Transportadora  B Zonas  C Criadores  D Tipo  E Nº aves  F Sobras
-        var headers = new[] { "Transportadora", "Zonas", "Criadores", "Tipo", "Nº aves", "Sobras" };
+        //  A Transportadora  B Zonas  C Criadores  D Tipo
+        //  E Nº aves (gaiolas efectivas, max por criador entre PtBe/BePt)
+        //  F Sobras (contra E — critério de capacidade da carga)
+        //  G Nº aves ida       H Sobras ida
+        //  I Nº aves regresso  J Sobras regresso
+        var headers = new[]
+        {
+            "Transportadora", "Zonas", "Criadores", "Tipo",
+            "Nº aves", "Sobras",
+            "Nº aves ida", "Sobras ida",
+            "Nº aves regresso", "Sobras regresso",
+        };
         for (int i = 0; i < headers.Length; i++)
             ws.Cell(1, i + 1).Value = headers[i];
 
@@ -210,25 +225,40 @@ public static class TransportExcelExporter
             ws.Cell(r, 2).Value = row.Zonas;
             ws.Cell(r, 3).Value = row.CriadoresLabel;
             ws.Cell(r, 4).Value = string.IsNullOrWhiteSpace(row.Tipo) ? tipo : row.Tipo;
-            // Nº aves vem calculado do backend (contabiliza splits entre transportadoras
-            // que a folha Aves não consegue exprimir num único COUNTIF).
+            // Nº aves (gaiolas efectivas) — é o que compara com a capacidade.
             ws.Cell(r, 5).Value = row.NumAves;
-            // Sobras = capacidade - Nº aves (nunca negativo).
             ws.Cell(r, 6).FormulaA1 = $"MAX(0, {R_CAP} - $E{r})";
+            // Aves na ida: concurso + venda + transporte-Vende (PT→BE).
+            ws.Cell(r, 7).Value = row.NumAvesIda;
+            ws.Cell(r, 8).FormulaA1 = $"MAX(0, {R_CAP} - $G{r})";
+            // Aves na volta: concurso + venda + transporte-Compra (BE→PT).
+            ws.Cell(r, 9).Value = row.NumAvesRegresso;
+            ws.Cell(r, 10).FormulaA1 = $"MAX(0, {R_CAP} - $I{r})";
             r++;
         }
 
-        // Formatação condicional: transportadoras cheias/vazias.
+        // Formatação condicional:
+        //   - Nº aves acima da capacidade → vermelho + bold (overflow)
+        //   - Sobras > 0 → amarelo (qualquer buraco livre é sinalizado)
         if (rows.Count > 0)
         {
             var lastData = r - 1;
-            ws.Range(2, 5, lastData, 5).AddConditionalFormat()
-                .WhenGreaterThan(R_CAP)
-                .Fill.SetBackgroundColor(XLColor.FromArgb(255, 220, 220))
-                .Font.SetBold();
-            ws.Range(2, 6, lastData, 6).AddConditionalFormat()
-                .WhenGreaterThan(4)
-                .Fill.SetBackgroundColor(XLColor.FromArgb(255, 240, 200));
+            var amarelo = XLColor.FromArgb(255, 240, 200);
+            var vermelho = XLColor.FromArgb(255, 220, 220);
+
+            foreach (var col in new[] { 5, 7, 9 })
+            {
+                ws.Range(2, col, lastData, col).AddConditionalFormat()
+                    .WhenGreaterThan(R_CAP)
+                    .Fill.SetBackgroundColor(vermelho)
+                    .Font.SetBold();
+            }
+            foreach (var col in new[] { 6, 8, 10 })
+            {
+                ws.Range(2, col, lastData, col).AddConditionalFormat()
+                    .WhenGreaterThan(0)
+                    .Fill.SetBackgroundColor(amarelo);
+            }
         }
 
         var data = ws.Range(2, 1, Math.Max(2, r - 1), headers.Length);
@@ -242,6 +272,10 @@ public static class TransportExcelExporter
         ws.Column(4).Width = 14; // Tipo
         ws.Column(5).Width = 10; // Nº aves
         ws.Column(6).Width = 10; // Sobras
+        ws.Column(7).Width = 12; // Nº aves ida
+        ws.Column(8).Width = 12; // Sobras ida
+        ws.Column(9).Width = 14; // Nº aves regresso
+        ws.Column(10).Width = 14; // Sobras regresso
 
         ws.SheetView.FreezeRows(1);
 
@@ -250,10 +284,12 @@ public static class TransportExcelExporter
             var totalRow = r;
             ws.Cell(totalRow, 1).Value = "TOTAL";
             ws.Cell(totalRow, 1).Style.Font.Bold = true;
-            ws.Cell(totalRow, 5).FormulaA1 = $"SUM(E2:E{totalRow - 1})";
-            ws.Cell(totalRow, 5).Style.Font.Bold = true;
-            ws.Cell(totalRow, 6).FormulaA1 = $"SUM(F2:F{totalRow - 1})";
-            ws.Cell(totalRow, 6).Style.Font.Bold = true;
+            foreach (var col in new[] { 5, 6, 7, 8, 9, 10 })
+            {
+                var letter = XLHelper.GetColumnLetterFromNumber(col);
+                ws.Cell(totalRow, col).FormulaA1 = $"SUM({letter}2:{letter}{totalRow - 1})";
+                ws.Cell(totalRow, col).Style.Font.Bold = true;
+            }
         }
     }
 

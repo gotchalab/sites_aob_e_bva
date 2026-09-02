@@ -13,8 +13,10 @@ var outPath = outIdx >= 0 && outIdx + 1 < args.Length
 // Cargas fictícias (2 cargas).
 var transportes = new List<TransportExcelExporter.TransporteRow>
 {
-    new("Vilela Express",    "T01", 17, "Vilela; Barcelos",  "JOAO (5), MARIA (12)", "Agapornis", 0),
-    new("Vilela Express",    "T02",  8, "Barcelos",          "PEDRO (8)",            "Agapornis", 0),
+    new("Vilela Express",    "T01", 17, "Vilela; Barcelos",  "JOAO (5), MARIA (12)", "Agapornis", 0,
+        NumAvesIda: 17, NumAvesRegresso: 15),
+    new("Vilela Express",    "T02",  8, "Barcelos",          "PEDRO (8)",            "Agapornis", 0,
+        NumAvesIda: 8, NumAvesRegresso: 8),
 };
 
 // Inscrições fictícias (3 pessoas com diferentes estatutos e mix de aves).

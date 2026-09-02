@@ -46,6 +46,23 @@ public static class TransportEndpoints
             return Results.File(res.Bytes, "application/pdf", name);
         }).RequireAuthorization();
 
+        // Etiquetas Avery 3421 do plano inteiro — agrupadas por transportadora
+        // (T01, T02…), cada uma numa folha independente.
+        app.MapGet("/convoyage/{yearId:int}/plano/etiquetas.pdf", async (
+            int yearId, TransportPlanAdminService svc, AppDbContext db, HttpContext http) =>
+        {
+            var res = await svc.ExportEtiquetasPorPlanoAsync(yearId);
+            if (res is null) return Results.NotFound();
+
+            var year = await db.ConvoyageYears.AsNoTracking()
+                .Include(y => y.Site)
+                .FirstOrDefaultAsync(y => y.Id == yearId);
+
+            var name = BuildFileName(year, yearId, "etiquetas-plano-avery3421", "pdf");
+            http.Response.Headers.ContentDisposition = $"attachment; filename=\"{name}\"";
+            return Results.File(res.Bytes, "application/pdf", name);
+        }).RequireAuthorization();
+
         // Etiquetas Avery 3421 por inscrição individual.
         app.MapGet("/convoyage/{yearId:int}/inscricoes/{submissionId:int}/etiquetas.pdf", async (
             int yearId, int submissionId, TransportPlanAdminService svc, AppDbContext db, HttpContext http) =>

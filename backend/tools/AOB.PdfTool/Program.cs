@@ -15,6 +15,62 @@ var grid = args.Contains("--grid");
 var calibrate = args.Contains("--calibrate");
 var convoyage = args.Contains("--convoyage");
 var etiquetas = args.Contains("--etiquetas");
+
+// --render-pdf-only <input.pdf> -o <output.png>: só renderiza um PDF já existente
+// para PNG (mesma DPI dos outros outputs). Útil para diffing lado-a-lado.
+var renderIdx = Array.IndexOf(args, "--render-pdf-only");
+if (renderIdx >= 0 && renderIdx + 1 < args.Length)
+{
+    var inputPdf = args[renderIdx + 1];
+    var outIdxR = Array.IndexOf(args, "-o");
+    var outPngPath = outIdxR >= 0 && outIdxR + 1 < args.Length
+        ? args[outIdxR + 1]
+        : Path.ChangeExtension(inputPdf, ".png");
+    var pdfBytes = File.ReadAllBytes(inputPdf);
+    RenderPng(pdfBytes, outPngPath);
+    return;
+}
+
+// --diff-png <a.png> <b.png> -o <out.png>: overlay pixel-a-pixel para comparar
+// posições. Vermelho = só em A; Azul = só em B; Cinza = em ambos.
+var diffIdx = Array.IndexOf(args, "--diff-png");
+if (diffIdx >= 0 && diffIdx + 2 < args.Length)
+{
+    var pathA = args[diffIdx + 1];
+    var pathB = args[diffIdx + 2];
+    var outIdxD = Array.IndexOf(args, "-o");
+    var outDiff = outIdxD >= 0 && outIdxD + 1 < args.Length
+        ? args[outIdxD + 1]
+        : "diff.png";
+    using var bmpA = SkiaSharp.SKBitmap.Decode(pathA);
+    using var bmpB = SkiaSharp.SKBitmap.Decode(pathB);
+    var w = Math.Min(bmpA.Width, bmpB.Width);
+    var h = Math.Min(bmpA.Height, bmpB.Height);
+    using var diff = new SkiaSharp.SKBitmap(w, h);
+    int onlyA = 0, onlyB = 0, both = 0, none = 0;
+    for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++)
+    {
+        var pa = bmpA.GetPixel(x, y);
+        var pb = bmpB.GetPixel(x, y);
+        bool aInk = pa.Red < 240 || pa.Green < 240 || pa.Blue < 240;
+        bool bInk = pb.Red < 240 || pb.Green < 240 || pb.Blue < 240;
+        if (aInk && bInk) { diff.SetPixel(x, y, new SkiaSharp.SKColor(180, 180, 180)); both++; }
+        else if (aInk)    { diff.SetPixel(x, y, new SkiaSharp.SKColor(220, 0, 0)); onlyA++; }
+        else if (bInk)    { diff.SetPixel(x, y, new SkiaSharp.SKColor(0, 100, 220)); onlyB++; }
+        else              { diff.SetPixel(x, y, SkiaSharp.SKColors.White); none++; }
+    }
+    using var img = SkiaSharp.SKImage.FromBitmap(diff);
+    using var data = img.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+    using var fs = File.Create(outDiff);
+    data.SaveTo(fs);
+    var total = w * h;
+    Console.WriteLine($"diff → {outDiff}");
+    Console.WriteLine($"  só A (vermelho):  {onlyA,10:N0} px ({100.0 * onlyA / total:F3}%)");
+    Console.WriteLine($"  só B (azul):      {onlyB,10:N0} px ({100.0 * onlyB / total:F3}%)");
+    Console.WriteLine($"  ambos (cinza):    {both,10:N0} px ({100.0 * both / total:F3}%)");
+    return;
+}
 var outIdx = Array.IndexOf(args, "-o");
 var outPath = outIdx >= 0 && outIdx + 1 < args.Length
     ? args[outIdx + 1]

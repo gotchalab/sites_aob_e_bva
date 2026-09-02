@@ -348,6 +348,18 @@ else
     }
 
     @* ── Tabela de cargas planeadas ───────────────────────────────────── *@
+    @if (_overview.Cargas.Count > 0)
+    {
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-semibold">Cargas planeadas</div>
+            <a class="btn btn-sm btn-outline-danger"
+               href="@($"/convoyage/{YearId}/plano/etiquetas.pdf")"
+               download
+               title="PDF Avery 3421 com todas as etiquetas do plano, uma folha por transportadora">
+                <i class="bi bi-file-earmark-pdf"></i> Etiquetas por transportadora (PDF)
+            </a>
+        </div>
+    }
     <div class="table-responsive">
         <table class="table table-hover align-middle">
             <thead class="table-dark">
