@@ -225,6 +225,8 @@ else
                                 {
                                     <a class="btn btn-sm btn-outline-danger"
                                        href="@($"/convoyage/{YearId}/pontos/{s.CollectionPointId}/etiquetas.pdf")"
+                                       target="_blank"
+                                       rel="noopener"
                                        download
                                        title="Descarregar PDF Avery 3421 (33/folha)">
                                         <i class="bi bi-file-earmark-pdf"></i> PDF
@@ -352,8 +354,13 @@ else
     {
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">Cargas planeadas</div>
+            @* target="_blank" evita a intercepção da enhanced navigation do
+               Blazor Server para anchors internos — sem isto, em prod, o
+               browser chega a receber HTML (login/erro) em vez do PDF. *@
             <a class="btn btn-sm btn-outline-danger"
                href="@($"/convoyage/{YearId}/plano/etiquetas.pdf")"
+               target="_blank"
+               rel="noopener"
                download
                title="PDF Avery 3421 com todas as etiquetas do plano, uma folha por transportadora">
                 <i class="bi bi-file-earmark-pdf"></i> Etiquetas por transportadora (PDF)
