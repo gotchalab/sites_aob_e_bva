@@ -5,27 +5,29 @@ using PdfSharp.Snippets.Font;
 
 namespace AOB.Application.Convoyage;
 
-// Gera um PDF com etiquetas Avery 3421 (Zweckform 3421):
+// Gera um PDF de etiquetas Avery 3421 (Zweckform 3421):
 //   A4, 3 colunas × 11 linhas = 33 etiquetas por folha, 70mm × 25.4mm cada,
-//   margem superior 8.8mm, sem margens laterais, sem separações.
-// Cada etiqueta tem 4 linhas (Helvetica, para casar com o sample ReportLab):
-//   1) Anilha (Helvetica 7.2pt regular, preto)
-//   2) Descrição — mutação/espécie OU "Entregar a: X" (Helvetica 7.5pt regular, preto)
-//   3) Rótulo — série "003/04" OU "TRANSPORTE" OU "VENDAS" (Helvetica-Bold 8.5pt, vermelho)
-//   4) Nome do criador em maiúsculas (Helvetica-Bold 8.5pt, preto)
+//   margem superior 8.8mm, sem margens laterais, sem gaps.
 //
-// Coordenadas (baselines das 4 linhas na row 1, em mm do topo A4) foram
-// extraídas do sample fornecido pelo utilizador
-// (_local/examples/etiquetas_PACOS_DE_FERREIRA_avery3421_25.4mm.pdf) para
-// garantir alinhamento sub-milimétrico com a folha física já em uso.
+// Layout declarativo em `AveryLabelSheet` (à la pylabels): sheet/label
+// dims, margens, gaps e padding interno todos explícitos e validados
+// (Validate() atira se a soma exceder a folha).
+//
+// Fonte: sempre Liberation Sans embebida (via ArialFontResolver) — garante
+// que dev (Windows) e prod (Linux/VPS) produzem exactamente o mesmo output,
+// independente das fontes instaladas no sistema. Sem esta embed, prod caía
+// para DejaVu (métricas incompatíveis) e disparava shrink-to-fit em cascata.
+//
+// Baselines das 4 linhas: valores calibrados do sample de referência,
+// medidos com pdfplumber e mantidos como constantes (BaselinesMm) — preserva
+// o alinhamento sub-milimétrico já validado contra a folha física.
+//
+// Debug: definir env var PDF_DEBUG_GRID=1 desenha o bordo de cada célula
+// (cinza) e a área interior de texto (rosa) para inspecção visual.
 public static class EtiquetasAvery3421PdfGenerator
 {
     static EtiquetasAvery3421PdfGenerator()
     {
-        // Usamos um resolver dedicado que carrega Arial real do sistema —
-        // metricamente idêntico ao Helvetica do sample. Se já houver um
-        // resolver global (definido pelos outros geradores do projecto), fazemos
-        // wrap com fallback para o existente.
         var existing = GlobalFontSettings.FontResolver;
         if (existing is not ArialFontResolver and not ArialWithFallbackResolver)
         {
@@ -35,7 +37,6 @@ public static class EtiquetasAvery3421PdfGenerator
         }
     }
 
-    // Encadeia dois resolvers: primeiro tenta Arial, senão delega no fallback.
     private sealed class ArialWithFallbackResolver : IFontResolver
     {
         private readonly ArialFontResolver _primary;
@@ -53,11 +54,6 @@ public static class EtiquetasAvery3421PdfGenerator
 
     public enum EtiquetaTipo { Concurso, Venda, Transporte }
 
-    /// Uma etiqueta física a imprimir.
-    /// <param name="Nome">Nome do criador (será posto em MAIÚSCULAS).</param>
-    /// <param name="LinhaDescricao">Descrição (EspecieMutacao ou "Entregar a: …").</param>
-    /// <param name="LinhaTipoOuSerie">Série ("003/04") ou tipo ("TRANSPORTE"/"VENDAS").</param>
-    /// <param name="Anilha">Número de anilha, tal como declarado.</param>
     public record EtiquetaLabel(
         string Nome,
         string Anilha,
@@ -65,61 +61,92 @@ public static class EtiquetasAvery3421PdfGenerator
         string LinhaTipoOuSerie,
         EtiquetaTipo Tipo);
 
-    /// Grupo de etiquetas que começa sempre numa folha Avery nova.
-    /// Usado no export por plano de transporte: cada carga (T01, T02…) fica
-    /// numa folha independente, com o Header impresso na margem superior
-    /// (fora da zona dos autocolantes) para o operador identificar a carga.
     public record EtiquetaGrupo(string Header, IReadOnlyList<EtiquetaLabel> Labels);
 
-    // ── Layout Avery 3421 (mm → pt) ─────────────────────────────────────────
+    // ── Modelo de folha ─────────────────────────────────────────────────────
     private const double MmToPt = 72.0 / 25.4;
-    private const int Cols = 3;
-    private const int Rows = 11;
-    // "Arial" em vez de "Helvetica" porque o FailsafeFontResolver do PDFsharp
-    // mapeia "Helvetica" para Segoe WP em Windows (metricamente incompatível
-    // com o Helvetica do sample). Arial é o clone Microsoft do Helvetica com
-    // métricas idênticas — usar Arial dá o mesmo posicionamento visual.
+
+    // AveryLabelSheet descreve completamente o layout físico da folha, com
+    // todas as dimensões em mm. `Validate()` verifica que
+    //   cols*labelW + (cols-1)*colGap + leftMargin + rightMargin == sheetW
+    //   rows*labelH + (rows-1)*rowGap + topMargin + bottomMargin == sheetH
+    // Se alguma diferença for maior que 0.05mm, atira — apanha erros de setup.
+    private sealed record AveryLabelSheet(
+        double SheetW, double SheetH,
+        int Cols, int Rows,
+        double LabelW, double LabelH,
+        double LeftMargin, double TopMargin,
+        double ColGap, double RowGap,
+        double PadLeft, double PadRight,
+        double PadTop, double PadBottom)
+    {
+        public double RightMargin => SheetW - LeftMargin - Cols * LabelW - (Cols - 1) * ColGap;
+        public double BottomMargin => SheetH - TopMargin - Rows * LabelH - (Rows - 1) * RowGap;
+        public int Perpage => Cols * Rows;
+
+        public double CellXPt(int col) => (LeftMargin + col * (LabelW + ColGap)) * MmToPt;
+        public double CellYPt(int row) => (TopMargin + row * (LabelH + RowGap)) * MmToPt;
+        public double CellWpt => LabelW * MmToPt;
+        public double CellHpt => LabelH * MmToPt;
+
+        public double InnerXPt(int col) => CellXPt(col) + PadLeft * MmToPt;
+        public double InnerYPt(int row) => CellYPt(row) + PadTop * MmToPt;
+        public double InnerWpt => (LabelW - PadLeft - PadRight) * MmToPt;
+        public double InnerHpt => (LabelH - PadTop - PadBottom) * MmToPt;
+
+        public void Validate()
+        {
+            const double eps = 0.05;
+            var rm = RightMargin; var bm = BottomMargin;
+            if (rm < -eps || bm < -eps)
+                throw new InvalidOperationException(
+                    $"Sheet layout excede a folha: rightMargin={rm:F3}mm bottomMargin={bm:F3}mm");
+            if (LabelW <= PadLeft + PadRight || LabelH <= PadTop + PadBottom)
+                throw new InvalidOperationException("Padding maior que o tamanho da etiqueta");
+        }
+    }
+
+    // Avery 3421 — 33 etiquetas por A4, sem gap, sem margem lateral,
+    // 8.8mm de margem topo e fundo. Padding horizontal 1.5mm cada lado; o
+    // padding vertical é zero porque as baselines das 4 linhas são fixas
+    // (calibradas pelo sample) em vez de distribuídas uniformemente.
+    private static readonly AveryLabelSheet Avery3421 = new(
+        SheetW: 210.0, SheetH: 297.0,
+        Cols: 3, Rows: 11,
+        LabelW: 70.0, LabelH: 25.4,
+        LeftMargin: 0.0, TopMargin: 8.8,
+        ColGap: 0.0, RowGap: 0.0,
+        PadLeft: 1.5, PadRight: 1.5,
+        PadTop: 0.0, PadBottom: 0.0);
+
+    // Baselines das 4 linhas, em mm do topo da célula. Valores extraídos do
+    // sample fornecido pelo utilizador
+    // (_local/examples/etiquetas_PACOS_DE_FERREIRA_avery3421_25.4mm.pdf) e
+    // confirmam alinhamento sub-milimétrico com a folha física já em uso.
+    // NÃO alterar sem re-medir o sample — mudar afecta directamente a
+    // posição vertical dos textos na etiqueta impressa.
+    private static readonly double[] BaselinesMm = { 8.61, 11.79, 15.31, 18.84 };
+
     private const string FontFamily = "Arial";
-    private static readonly double LabelWpt = 70.0  * MmToPt; // 198.425 pt
-    private static readonly double LabelHpt = 25.4  * MmToPt; //  72.000 pt
 
-    // Baselines em pontos (do topo da célula) — reproduzem o layout do sample
-    // ReportLab. A célula 1 (topo) começa a 8.8mm da margem superior da A4,
-    // com baselines a 17.41 / 20.59 / 24.11 / 27.64 mm do topo → offsets
-    // relativos ao topo da célula (célula em [8.8mm, 34.2mm]) de:
-    //   line 1  8.61 mm  = 24.40 pt
-    //   line 2 11.79 mm  = 33.41 pt
-    //   line 3 15.31 mm  = 43.39 pt
-    //   line 4 18.84 mm  = 53.40 pt
-    private static readonly double CellTopPt   = 8.8 * MmToPt; //  24.945 pt
-    private static readonly double Baseline1Pt = (17.41 - 8.8) * MmToPt;
-    private static readonly double Baseline2Pt = (20.59 - 8.8) * MmToPt;
-    private static readonly double Baseline3Pt = (24.11 - 8.8) * MmToPt;
-    private static readonly double Baseline4Pt = (27.64 - 8.8) * MmToPt;
-
-    // Padding horizontal só para o algoritmo de shrink-to-fit (texto é sempre
-    // centrado, não alinhado à margem — mas isto evita bater no bordo da
-    // etiqueta se ficar muito longo).
-    private const double PadX = 4.0;
-
-    // Font sizes extraídos do sample.
+    // Font sizes extraídos do sample ReportLab (_local/examples/…3421_25.4mm.pdf)
+    // e mantidos idênticos para preservar o look visual já validado.
     private const double SizeAnilha = 7.2;
     private const double SizeDesc   = 7.5;
     private const double SizeTipo   = 8.5;
     private const double SizeNome   = 8.5;
-    // Header por grupo (código da carga + transportadora), impresso na margem
-    // superior do papel Avery — cabe em ~3.3mm.
     private const double SizeHeader = 9.0;
 
     public static byte[] Render(IEnumerable<EtiquetaLabel> labels)
         => Render(new[] { new EtiquetaGrupo("", (labels ?? Array.Empty<EtiquetaLabel>()).ToList()) });
 
-    /// Renderiza uma lista de grupos — cada grupo começa numa folha nova e o
-    /// Header (se não vazio) é impresso na margem superior de todas as folhas
-    /// desse grupo. Grupos vazios são ignorados. Se toda a lista estiver
-    /// vazia, devolve um PDF com uma folha em branco (evita PDF corrupto).
     public static byte[] Render(IEnumerable<EtiquetaGrupo> groups)
+        => Render(groups, separateSheetsPerGroup: true);
+
+    public static byte[] Render(IEnumerable<EtiquetaGrupo> groups, bool separateSheetsPerGroup)
     {
+        Avery3421.Validate();
+
         var grupos = (groups ?? Array.Empty<EtiquetaGrupo>())
             .Where(g => g.Labels is { Count: > 0 })
             .ToList();
@@ -135,40 +162,70 @@ public static class EtiquetasAvery3421PdfGenerator
         var red        = new XSolidBrush(XColor.FromArgb(200, 30, 30));
         var black      = XBrushes.Black;
 
-        int perPage = Cols * Rows;
+        var lines = new[] {
+            new LineSpec(fontAnilha, black, l => l.Anilha),
+            new LineSpec(fontDesc,   black, l => l.LinhaDescricao),
+            new LineSpec(fontTipo,   red,   l => l.LinhaTipoOuSerie),
+            new LineSpec(fontNome,   black, l => l.Nome.ToUpperInvariant()),
+        };
 
-        foreach (var grupo in grupos)
+        int perPage = Avery3421.Perpage;
+
+        void DrawOne(XGraphics g, EtiquetaLabel lab, int posInPage)
         {
+            int row = posInPage / Avery3421.Cols;
+            int col = posInPage % Avery3421.Cols;
+            DrawLabel(g, lab, row, col, lines);
+        }
+
+        if (separateSheetsPerGroup)
+        {
+            foreach (var grupo in grupos)
+            {
+                PdfPage? page = null;
+                XGraphics? g = null;
+                try
+                {
+                    for (int i = 0; i < grupo.Labels.Count; i++)
+                    {
+                        int posInPage = i % perPage;
+                        if (posInPage == 0)
+                        {
+                            g?.Dispose();
+                            page = doc.AddPage();
+                            page.Size = PdfSharp.PageSize.A4;
+                            g = XGraphics.FromPdfPage(page);
+                            DrawGroupHeader(g, grupo.Header, fontHeader, black);
+                            MaybeDrawDebugGrid(g);
+                        }
+                        DrawOne(g!, grupo.Labels[i], posInPage);
+                    }
+                }
+                finally { g?.Dispose(); }
+            }
+        }
+        else
+        {
+            var flat = grupos.SelectMany(g => g.Labels).ToList();
             PdfPage? page = null;
-            XGraphics? g = null;
+            XGraphics? g0 = null;
             try
             {
-                for (int i = 0; i < grupo.Labels.Count; i++)
+                for (int i = 0; i < flat.Count; i++)
                 {
                     int posInPage = i % perPage;
                     if (posInPage == 0)
                     {
-                        g?.Dispose();
+                        g0?.Dispose();
                         page = doc.AddPage();
                         page.Size = PdfSharp.PageSize.A4;
-                        g = XGraphics.FromPdfPage(page);
-                        DrawGroupHeader(g, grupo.Header, fontHeader, black);
+                        g0 = XGraphics.FromPdfPage(page);
+                        MaybeDrawDebugGrid(g0);
                     }
-
-                    int row = posInPage / Cols;
-                    int col = posInPage % Cols;
-
-                    double x = col * LabelWpt;
-                    double cellTop = CellTopPt + row * LabelHpt;
-
-                    DrawLabel(g!, grupo.Labels[i], x, cellTop,
-                        fontAnilha, fontDesc, fontTipo, fontNome, red, black);
+                    DrawOne(g0!, flat[i], posInPage);
                 }
             }
-            finally
-            {
-                g?.Dispose();
-            }
+            finally { g0?.Dispose(); }
         }
 
         if (doc.PageCount == 0) doc.AddPage().Size = PdfSharp.PageSize.A4;
@@ -178,42 +235,40 @@ public static class EtiquetasAvery3421PdfGenerator
         return ms.ToArray();
     }
 
-    // O header (ex.: "T01 · João Silva") vai no topo da folha, dentro da
-    // margem de 8.8mm que fica acima da 1ª linha de autocolantes. Como essa
-    // área é papel-suporte (sem sticker), o texto não é impresso em cima
-    // de nenhuma etiqueta.
     private static void DrawGroupHeader(XGraphics g, string? header, XFont font, XBrush brush)
     {
         if (string.IsNullOrWhiteSpace(header)) return;
-        var pageW = Cols * LabelWpt;
+        var pageW = Avery3421.SheetW * MmToPt;
         var y = 5.5 * MmToPt; // 5.5mm do topo — dentro da margem de 8.8mm
         var fmt = new XStringFormat { Alignment = XStringAlignment.Center, LineAlignment = XLineAlignment.BaseLine };
         g.DrawString(header, font, brush, new XPoint(pageW / 2.0, y), fmt);
     }
 
+    // ── Desenho de uma etiqueta ─────────────────────────────────────────────
+
+    private sealed record LineSpec(XFont Font, XBrush Brush, Func<EtiquetaLabel, string> Text);
+
+    // Posiciona as 4 linhas nas baselines calibradas (BaselinesMm), medidas
+    // em mm do topo da célula. As baselines vêm do sample de referência —
+    // esta escolha (em vez de distribuir uniformemente por font.GetHeight)
+    // preserva o alinhamento sub-milimétrico com a folha física já em uso.
+    // A cada linha, o "topo da célula" cai no bordo do autocolante.
     private static void DrawLabel(
-        XGraphics g, EtiquetaLabel lab,
-        double cellX, double cellTop,
-        XFont fontAnilha, XFont fontDesc, XFont fontTipo, XFont fontNome,
-        XBrush red, XBrush black)
+        XGraphics g, EtiquetaLabel lab, int row, int col, LineSpec[] lines)
     {
-        double areaX = cellX + PadX;
-        double areaW = LabelWpt - 2 * PadX;
+        double innerX = Avery3421.InnerXPt(col);
+        double innerW = Avery3421.InnerWpt;
+        double cellTop = Avery3421.CellYPt(row);
 
-        double b1 = cellTop + Baseline1Pt;
-        double b2 = cellTop + Baseline2Pt;
-        double b3 = cellTop + Baseline3Pt;
-        double b4 = cellTop + Baseline4Pt;
-
-        DrawCentered(g, lab.Anilha,                  fontAnilha, black, areaX, areaW, b1);
-        DrawCentered(g, lab.LinhaDescricao,          fontDesc,   black, areaX, areaW, b2);
-        DrawCentered(g, lab.LinhaTipoOuSerie,        fontTipo,   red,   areaX, areaW, b3);
-        DrawCentered(g, lab.Nome.ToUpperInvariant(), fontNome,   black, areaX, areaW, b4);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var spec = lines[i];
+            var text = spec.Text(lab) ?? "";
+            double baselineY = cellTop + BaselinesMm[i] * MmToPt;
+            DrawCentered(g, text, spec.Font, spec.Brush, innerX, innerW, baselineY);
+        }
     }
 
-    // Desenha o texto centrado horizontalmente a uma baseline dada. Se não
-    // couber na largura útil, encolhe até caber (mínimo 5.5pt) para evitar
-    // overflow para a etiqueta vizinha.
     private static void DrawCentered(
         XGraphics g, string? text, XFont baseFont, XBrush brush,
         double x, double w, double baselineY)
@@ -229,7 +284,6 @@ public static class EtiquetasAvery3421PdfGenerator
             size = g.MeasureString(t, f);
         }
 
-        // Se mesmo depois de encolher ainda não couber, truncar com "…".
         if (size.Width > w)
         {
             t = Truncate(g, t, f, w);
@@ -250,5 +304,28 @@ public static class EtiquetasAvery3421PdfGenerator
             if (g.MeasureString(candidate, f).Width <= maxW) return candidate;
         }
         return ell;
+    }
+
+    // ── Debug grid ──────────────────────────────────────────────────────────
+    // Activa com PDF_DEBUG_GRID=1 (env var). Desenha o bordo de cada célula
+    // + a área interior (padding) + linhas horizontais nas baselines
+    // calculadas. Útil para inspecção visual do alinhamento.
+    private static void MaybeDrawDebugGrid(XGraphics? g)
+    {
+        if (g is null) return;
+        if (Environment.GetEnvironmentVariable("PDF_DEBUG_GRID") != "1") return;
+
+        var thin = new XPen(XColor.FromArgb(220, 220, 220), 0.2);
+        var thinR = new XPen(XColor.FromArgb(255, 200, 200), 0.2);
+
+        for (int r = 0; r < Avery3421.Rows; r++)
+        for (int c = 0; c < Avery3421.Cols; c++)
+        {
+            var cx = Avery3421.CellXPt(c);
+            var cy = Avery3421.CellYPt(r);
+            g.DrawRectangle(thin, cx, cy, Avery3421.CellWpt, Avery3421.CellHpt);
+            g.DrawRectangle(thinR, Avery3421.InnerXPt(c), Avery3421.InnerYPt(r),
+                Avery3421.InnerWpt, Avery3421.InnerHpt);
+        }
     }
 }

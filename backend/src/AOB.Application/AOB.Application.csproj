@@ -31,4 +31,13 @@
     </Content>
   </ItemGroup>
 
+  <!-- Fontes embebidas para o gerador Avery 3421 — Liberation Sans é o clone
+       open-source (SIL OFL) com métricas idênticas a Arial/Helvetica. Embutir
+       evita dependência do sistema (msttcorefonts / DejaVu) que causa
+       shrink-to-fit inconsistente entre dev (Windows/Arial) e prod (Linux). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Convoyage\fonts\LiberationSans-Regular.ttf" />
+    <EmbeddedResource Include="Convoyage\fonts\LiberationSans-Bold.ttf" />
+  </ItemGroup>
+
 </Project>

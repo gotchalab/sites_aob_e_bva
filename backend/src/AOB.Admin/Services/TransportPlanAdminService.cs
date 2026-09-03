@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using AOB.Application.Convoyage;
 using AOB.Core.Entities;
@@ -819,6 +820,12 @@ public class TransportPlanAdminService(AppDbContext db)
 
     public record EtiquetasResult(byte[] Bytes, string ScopeSlug);
 
+    // Modos de agrupamento suportados pelo export do plano.
+    // FolhaPorTransportadora: cada carga (T01, T02…) numa folha nova (default histórico).
+    // Seguidas: um único fluxo contínuo de etiquetas, sem quebras — ocupa menos folhas
+    // Avery quando as cargas têm poucas etiquetas, ao custo de perder a separação física.
+    public enum PlanoEtiquetasMode { FolhaPorTransportadora, Seguidas }
+
     public async Task<EtiquetasResult?> ExportEtiquetasPorPontoAsync(int yearId, int pointId)
     {
         var point = await db.ConvoyageCollectionPoints.AsNoTracking()
@@ -848,7 +855,9 @@ public class TransportPlanAdminService(AppDbContext db)
     // inscrição na ordem em que aparecem no DataJson são distribuídas pelas
     // cargas ordenadas por SortOrder. Isto garante que nenhuma anilha aparece
     // em duas cargas e que a atribuição é reprodutível entre chamadas.
-    public async Task<EtiquetasResult?> ExportEtiquetasPorPlanoAsync(int yearId)
+    public async Task<EtiquetasResult?> ExportEtiquetasPorPlanoAsync(
+        int yearId,
+        PlanoEtiquetasMode mode = PlanoEtiquetasMode.FolhaPorTransportadora)
     {
         var year = await db.ConvoyageYears.AsNoTracking()
             .FirstOrDefaultAsync(y => y.Id == yearId);
@@ -920,8 +929,68 @@ public class TransportPlanAdminService(AppDbContext db)
             groups.Add(new EtiquetasAvery3421PdfGenerator.EtiquetaGrupo(header, labels));
         }
 
-        var bytes = EtiquetasAvery3421PdfGenerator.Render(groups);
-        return new EtiquetasResult(bytes, "plano");
+        var separateSheets = mode == PlanoEtiquetasMode.FolhaPorTransportadora;
+        var bytes = EtiquetasAvery3421PdfGenerator.Render(groups, separateSheets);
+        var slug = separateSheets ? "plano" : "plano-seguidas";
+        return new EtiquetasResult(bytes, slug);
+    }
+
+    // ZIP com um PDF por ponto de recolha — equivale a clicar em cada botão
+    // "PDF" da tabela superior mas devolve tudo num único download. Ponto sem
+    // inscrições/etiquetas é ignorado.
+    public async Task<EtiquetasResult?> ExportEtiquetasPorPontoZipAsync(int yearId)
+    {
+        var year = await db.ConvoyageYears.AsNoTracking()
+            .FirstOrDefaultAsync(y => y.Id == yearId);
+        if (year is null) return null;
+
+        var points = await db.ConvoyageCollectionPoints.AsNoTracking()
+            .Where(p => p.ConvoyageYearId == yearId)
+            .OrderBy(p => p.SortOrder)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
+
+        // Pré-carrega todas as inscrições do ano com ponto atribuído para
+        // evitar N+1 (1 query por ponto).
+        var subsByPoint = await db.FormSubmissions.AsNoTracking()
+            .Where(f => f.ConvoyageYearId == yearId
+                     && f.FormType == FormType.InscricaoConvoyage
+                     && f.LocalRecolhaId != null)
+            .OrderBy(f => f.SubmittedAt)
+            .GroupBy(f => f.LocalRecolhaId!.Value)
+            .ToDictionaryAsync(g => g.Key, g => g.ToList());
+
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in points)
+            {
+                if (!subsByPoint.TryGetValue(p.Id, out var subs) || subs.Count == 0)
+                    continue;
+
+                var labels = new List<EtiquetasAvery3421PdfGenerator.EtiquetaLabel>();
+                foreach (var s in subs)
+                    labels.AddRange(BuildLabelsFromJson(s.DataJson));
+                if (labels.Count == 0) continue;
+
+                var pdfBytes = EtiquetasAvery3421PdfGenerator.Render(labels);
+
+                var slug = Slugify(p.Name);
+                if (string.IsNullOrEmpty(slug)) slug = $"ponto-{p.Id}";
+                var baseName = $"etiquetas-{slug}";
+                var name = $"{baseName}.pdf";
+                var n = 2;
+                while (!usedNames.Add(name))
+                    name = $"{baseName}-{n++}.pdf";
+
+                var entry = zip.CreateEntry(name, CompressionLevel.Fastest);
+                using var es = entry.Open();
+                es.Write(pdfBytes, 0, pdfBytes.Length);
+            }
+        }
+
+        return new EtiquetasResult(ms.ToArray(), "plano-por-ponto");
     }
 
     // Parse do DataJson que devolve as etiquetas já segmentadas por tipo/

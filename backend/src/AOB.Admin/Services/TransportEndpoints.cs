@@ -46,21 +46,45 @@ public static class TransportEndpoints
             return Results.File(res.Bytes, "application/pdf", name);
         }).RequireAuthorization();
 
-        // Etiquetas Avery 3421 do plano inteiro — agrupadas por transportadora
-        // (T01, T02…), cada uma numa folha independente.
+        // Etiquetas Avery 3421 do plano inteiro. modo=seguidas concatena todas
+        // as cargas sem quebra de folha (aproveita ao máximo os autocolantes);
+        // por defeito cada carga (T01, T02…) ocupa uma folha independente.
         app.MapGet("/convoyage/{yearId:int}/plano/etiquetas.pdf", async (
-            int yearId, TransportPlanAdminService svc, AppDbContext db, HttpContext http) =>
+            int yearId, string? modo, TransportPlanAdminService svc, AppDbContext db, HttpContext http) =>
         {
-            var res = await svc.ExportEtiquetasPorPlanoAsync(yearId);
+            var mode = string.Equals(modo, "seguidas", StringComparison.OrdinalIgnoreCase)
+                ? TransportPlanAdminService.PlanoEtiquetasMode.Seguidas
+                : TransportPlanAdminService.PlanoEtiquetasMode.FolhaPorTransportadora;
+            var res = await svc.ExportEtiquetasPorPlanoAsync(yearId, mode);
             if (res is null) return Results.NotFound();
 
             var year = await db.ConvoyageYears.AsNoTracking()
                 .Include(y => y.Site)
                 .FirstOrDefaultAsync(y => y.Id == yearId);
 
-            var name = BuildFileName(year, yearId, "etiquetas-plano-avery3421", "pdf");
+            var suffix = mode == TransportPlanAdminService.PlanoEtiquetasMode.Seguidas
+                ? "etiquetas-plano-seguidas-avery3421"
+                : "etiquetas-plano-avery3421";
+            var name = BuildFileName(year, yearId, suffix, "pdf");
             http.Response.Headers.ContentDisposition = $"attachment; filename=\"{name}\"";
             return Results.File(res.Bytes, "application/pdf", name);
+        }).RequireAuthorization();
+
+        // ZIP com um PDF Avery 3421 por ponto de recolha do ano — bundle do
+        // que a coluna "Etiquetas" da tabela por ponto oferece linha a linha.
+        app.MapGet("/convoyage/{yearId:int}/plano/etiquetas-por-ponto.zip", async (
+            int yearId, TransportPlanAdminService svc, AppDbContext db, HttpContext http) =>
+        {
+            var res = await svc.ExportEtiquetasPorPontoZipAsync(yearId);
+            if (res is null) return Results.NotFound();
+
+            var year = await db.ConvoyageYears.AsNoTracking()
+                .Include(y => y.Site)
+                .FirstOrDefaultAsync(y => y.Id == yearId);
+
+            var name = BuildFileName(year, yearId, "etiquetas-por-ponto-avery3421", "zip");
+            http.Response.Headers.ContentDisposition = $"attachment; filename=\"{name}\"";
+            return Results.File(res.Bytes, "application/zip", name);
         }).RequireAuthorization();
 
         // Etiquetas Avery 3421 por inscrição individual.

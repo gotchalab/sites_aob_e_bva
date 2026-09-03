@@ -354,17 +354,72 @@ else
     {
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">Cargas planeadas</div>
-            @* target="_blank" evita a intercepção da enhanced navigation do
-               Blazor Server para anchors internos — sem isto, em prod, o
-               browser chega a receber HTML (login/erro) em vez do PDF. *@
-            <a class="btn btn-sm btn-outline-danger"
-               href="@($"/convoyage/{YearId}/plano/etiquetas.pdf")"
-               target="_blank"
-               rel="noopener"
-               download
-               title="PDF Avery 3421 com todas as etiquetas do plano, uma folha por transportadora">
-                <i class="bi bi-file-earmark-pdf"></i> Etiquetas por transportadora (PDF)
-            </a>
+            @* Dropdown gerido pelo Blazor (sem depender do bootstrap.bundle.js
+               que não está carregado no admin). Cada link usa target="_blank"
+               para evitar a intercepção da enhanced navigation do Blazor Server. *@
+            <div class="position-relative">
+                @* Backdrop invisível para fechar ao clicar fora — o Blazor
+                   Server aqui não tem bootstrap.bundle.js para gerir o dropdown
+                   nativamente, portanto simulamos manualmente o click-outside. *@
+                @if (_showEtiquetasMenu)
+                {
+                    <div class="position-fixed top-0 start-0 w-100 h-100"
+                         style="z-index:1040; background:transparent;"
+                         @onclick="CloseEtiquetasMenu"></div>
+                }
+                <button type="button" class="btn btn-sm btn-outline-danger dropdown-toggle position-relative"
+                        style="z-index:1050;"
+                        @onclick="ToggleEtiquetasMenu"
+                        @onclick:stopPropagation="true">
+                    <i class="bi bi-printer"></i> Imprimir etiquetas
+                </button>
+                @if (_showEtiquetasMenu)
+                {
+                    <ul class="dropdown-menu show shadow"
+                        style="display:block; right:0; left:auto; min-width:340px; z-index:1060;"
+                        @onclick:stopPropagation="true">
+                        <li class="dropdown-header small text-muted">Um único PDF</li>
+                        <li>
+                            <a class="dropdown-item d-flex align-items-start gap-2"
+                               href="@($"/convoyage/{YearId}/plano/etiquetas.pdf?modo=seguidas")"
+                               target="_blank" rel="noopener" download
+                               @onclick="CloseEtiquetasMenu">
+                                <i class="bi bi-layers text-success mt-1"></i>
+                                <span>
+                                    <strong>Todas seguidas</strong>
+                                    <div class="small text-muted">Sem quebras — aproveita ao máximo cada folha Avery.</div>
+                                </span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item d-flex align-items-start gap-2"
+                               href="@($"/convoyage/{YearId}/plano/etiquetas.pdf")"
+                               target="_blank" rel="noopener" download
+                               @onclick="CloseEtiquetasMenu">
+                                <i class="bi bi-file-earmark-break text-primary mt-1"></i>
+                                <span>
+                                    <strong>Uma folha por transportadora</strong>
+                                    <div class="small text-muted">Cada T01/T02… começa numa folha nova (mais desperdício).</div>
+                                </span>
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider" /></li>
+                        <li class="dropdown-header small text-muted">Um ficheiro por pessoa</li>
+                        <li>
+                            <a class="dropdown-item d-flex align-items-start gap-2"
+                               href="@($"/convoyage/{YearId}/plano/etiquetas-por-ponto.zip")"
+                               target="_blank" rel="noopener" download
+                               @onclick="CloseEtiquetasMenu">
+                                <i class="bi bi-file-earmark-zip text-warning mt-1"></i>
+                                <span>
+                                    <strong>ZIP por ponto de recolha</strong>
+                                    <div class="small text-muted">Um PDF por cada ponto/pessoa, empacotados num ZIP.</div>
+                                </span>
+                            </a>
+                        </li>
+                    </ul>
+                }
+            </div>
         </div>
     }
     <div class="table-responsive">
@@ -598,6 +653,10 @@ else
     private Dictionary<int, int> _moveQty = new();
     private TransportPlanner.PlanMode? _lastMode;
     private bool _cruzaZonas = true;
+    private bool _showEtiquetasMenu;
+
+    private void ToggleEtiquetasMenu() => _showEtiquetasMenu = !_showEtiquetasMenu;
+    private void CloseEtiquetasMenu() => _showEtiquetasMenu = false;
 
     private static string ModeLabel(TransportPlanner.PlanMode m) => m switch
     {
