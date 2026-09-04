@@ -337,13 +337,19 @@ else
                                value="@GetCampeonato(y.Id, y.Campeonato)"
                                @oninput="e => SetCampeonato(y.Id, e.Value?.ToString() ?? string.Empty)" />
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label small text-muted mb-1">Matrícula TRACES</label>
                         <input type="text" class="form-control form-control-sm"
                                maxlength="50"
                                placeholder="ex.: DE082122025"
                                value="@GetMatricula(y.Id, y.MatriculaTraces)"
                                @oninput="e => SetMatricula(y.Id, e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Data TRACES</label>
+                        <input type="date" class="form-control form-control-sm"
+                               value="@GetTracesDate(y.Id, y.TracesDate)"
+                               @oninput="e => SetTracesDate(y.Id, e.Value?.ToString() ?? string.Empty)" />
                     </div>
                     <div class="col-md-auto">
                         <button class="btn btn-sm btn-primary"
@@ -733,6 +739,7 @@ else
     // ── Declaração TRACES ─────────────────────────────────────────────────────
     private readonly Dictionary<int, string> _tracesCampeonato = new();
     private readonly Dictionary<int, string> _tracesMatricula = new();
+    private readonly Dictionary<int, string> _tracesDate = new();
     private readonly Dictionary<int, string> _tracesFeedback = new();
     private readonly HashSet<int> _tracesIsError = new();
 
@@ -744,6 +751,13 @@ else
         => _tracesMatricula.TryGetValue(yearId, out var v) ? v : (current ?? "");
     private void SetMatricula(int yearId, string v) => _tracesMatricula[yearId] = v;
 
+    private string GetTracesDate(int yearId, DateOnly? current)
+    {
+        if (_tracesDate.TryGetValue(yearId, out var v)) return v;
+        return current.HasValue ? current.Value.ToString("yyyy-MM-dd") : "";
+    }
+    private void SetTracesDate(int yearId, string v) => _tracesDate[yearId] = v;
+
     private async Task SaveTracesAsync(int yearId)
     {
         _tracesFeedback.Remove(yearId);
@@ -752,9 +766,11 @@ else
         var year = Years?.FirstOrDefault(y => y.Id == yearId);
         var camp = GetCampeonato(yearId, year?.Campeonato);
         var mat = GetMatricula(yearId, year?.MatriculaTraces);
+        var dateStr = GetTracesDate(yearId, year?.TracesDate);
+        DateOnly? date = string.IsNullOrWhiteSpace(dateStr) ? null : DateOnly.Parse(dateStr);
 
         _saving = true;
-        var err = await Convoyage.UpdateTracesFieldsAsync(yearId, camp, mat);
+        var err = await Convoyage.UpdateTracesFieldsAsync(yearId, camp, mat, date);
         _saving = false;
         if (err is not null)
         {
@@ -765,6 +781,7 @@ else
         _tracesFeedback[yearId] = "Guardado.";
         _tracesCampeonato.Remove(yearId);
         _tracesMatricula.Remove(yearId);
+        _tracesDate.Remove(yearId);
         await ReloadAsync();
     }
 

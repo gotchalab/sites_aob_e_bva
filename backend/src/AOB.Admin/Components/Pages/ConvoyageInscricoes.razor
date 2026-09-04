@@ -81,11 +81,11 @@
                     {
                         <li>
                             <a class="dropdown-item d-flex align-items-center gap-2"
-                               href="@TracesZipUrl"
+                               href="@TracesPdfUrl"
                                target="_blank"
                                @onclick="CloseExportMenu">
-                                <i class="bi bi-file-earmark-zip text-primary"></i>
-                                <span>ZIP das Declarações TRACES</span>
+                                <i class="bi bi-file-earmark-pdf text-primary"></i>
+                                <span>PDF das Declarações TRACES</span>
                             </a>
                         </li>
                     }
@@ -94,8 +94,8 @@
                         <li>
                             <span class="dropdown-item disabled d-flex align-items-center gap-2"
                                   title="Configura Campeonato + Matrícula TRACES no ano para activar">
-                                <i class="bi bi-file-earmark-zip text-muted"></i>
-                                <span>ZIP TRACES (indisponível)</span>
+                                <i class="bi bi-file-earmark-pdf text-muted"></i>
+                                <span>PDF TRACES (indisponível)</span>
                             </span>
                         </li>
                     }
@@ -467,10 +467,10 @@ else
         !string.IsNullOrWhiteSpace(y.Campeonato) &&
         !string.IsNullOrWhiteSpace(y.MatriculaTraces);
 
-    private string TracesZipUrl =>
+    private string TracesPdfUrl =>
         int.TryParse(StatusFilter, out var st)
-            ? $"/convoyage/{SelectedYearId}/traces/zip?status={st}"
-            : $"/convoyage/{SelectedYearId}/traces/zip";
+            ? $"/convoyage/{SelectedYearId}/traces/pdf?status={st}"
+            : $"/convoyage/{SelectedYearId}/traces/pdf";
 
     // ── Dropdown "Descarregar" ───────────────────────────────────────────
     // Sem Bootstrap JS neste projecto: controlamos abertura por estado. O

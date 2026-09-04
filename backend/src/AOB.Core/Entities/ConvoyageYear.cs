@@ -26,8 +26,10 @@ public class ConvoyageYear
     // MatriculaTraces: número emitido pela autoridade sanitária para o
     // transporte (ex: "DE082122025"). Se ambos forem null, o botão TRACES no
     // admin fica desativado.
+    // TracesDate: data do transporte/evento, exibida no PDF da declaração TRACES.
     public string? Campeonato { get; set; }
     public string? MatriculaTraces { get; set; }
+    public DateOnly? TracesDate { get; set; }
 
     // Planeamento de transporte (F2)
     public int NumCargasAlvo { get; set; } = 23;

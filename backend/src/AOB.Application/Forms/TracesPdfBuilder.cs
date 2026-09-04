@@ -40,6 +40,8 @@ public static class TracesPdfBuilder
         if (string.IsNullOrWhiteSpace(year.Campeonato) || string.IsNullOrWhiteSpace(year.MatriculaTraces))
             return null;
 
+        var tracesDateStr = year.TracesDate?.ToString("dd/MM/yyyy") ?? "";
+
         string nome = "", email = "", telefone = "", numeroStam = "", morada = "", cp = "", loc = "";
         string? assinaturaRel = null;
         try
@@ -146,7 +148,7 @@ public static class TracesPdfBuilder
             AssinaturaPngBase64: null);
 
         var bytes = TracesDeclarationPdfGenerator.Render(
-            req, year.Campeonato!, year.MatriculaTraces!,
+            req, year.Campeonato!, year.MatriculaTraces!, tracesDateStr,
             especieAnilha, sigBytes, fonpLogo, bvaLogo);
 
         var safeNome = SafeFileName(nome);

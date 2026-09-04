@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Net.Http.Headers;
+using PdfSharp.Pdf;
+using PdfSharp.Pdf.IO;
 
 namespace AOB.Admin.Services;
 
@@ -221,10 +223,11 @@ public static class AuthEndpoints
             return Results.Empty;
         }).RequireAuthorization();
 
-        // Bulk: ZIP com todas as Declarações TRACES do ano (opcionalmente filtradas
-        // por estado). Regenera cada PDF via TracesPdfBuilder para garantir que
-        // reflecte os dados actuais do ano + assinaturas persistidas.
-        app.MapGet("/convoyage/{yearId:int}/traces/zip", async (
+        // Bulk: PDF único com todas as Declarações TRACES do ano (opcionalmente
+        // filtradas por estado). Regenera cada PDF via TracesPdfBuilder para
+        // reflectir os dados actuais do ano + assinaturas persistidas, e depois
+        // funde-os num único documento pela ordem dos IDs.
+        app.MapGet("/convoyage/{yearId:int}/traces/pdf", async (
             int yearId,
             [FromQuery] int? status,
             AppDbContext db,
@@ -245,38 +248,30 @@ public static class AuthEndpoints
             if (status.HasValue) q = q.Where(f => f.Status == (FormStatus)status.Value);
             var ids = await q.OrderBy(f => f.Id).Select(f => f.Id).ToListAsync(ct);
 
-            using var mem = new MemoryStream();
-            using (var zip = new ZipArchive(mem, ZipArchiveMode.Create, leaveOpen: true))
+            using var merged = new PdfDocument();
+            merged.Info.Title = $"Declarações TRACES — {year.Year}";
+            foreach (var id in ids)
             {
-                var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var id in ids)
-                {
-                    AOB.Application.Forms.TracesPdfResult? r;
-                    try { r = await AOB.Application.Forms.TracesPdfBuilder.BuildAsync(db, env, config, id, null, ct); }
-                    catch { continue; }
-                    if (r is null) continue;
+                AOB.Application.Forms.TracesPdfResult? r;
+                try { r = await AOB.Application.Forms.TracesPdfBuilder.BuildAsync(db, env, config, id, null, ct); }
+                catch { continue; }
+                if (r is null) continue;
 
-                    var entryName = $"{id:D5} - {r.FileName}";
-                    var candidate = entryName;
-                    var n = 1;
-                    while (!used.Add(candidate))
-                    {
-                        n++;
-                        var stem = Path.GetFileNameWithoutExtension(entryName);
-                        var ext = Path.GetExtension(entryName);
-                        candidate = $"{stem} ({n}){ext}";
-                    }
-
-                    var entry = zip.CreateEntry(candidate, CompressionLevel.NoCompression);
-                    using var s = entry.Open();
-                    await s.WriteAsync(r.Bytes, ct);
-                }
+                using var srcStream = new MemoryStream(r.Bytes);
+                using var src = PdfReader.Open(srcStream, PdfDocumentOpenMode.Import);
+                for (var i = 0; i < src.PageCount; i++)
+                    merged.AddPage(src.Pages[i]);
             }
+
+            if (merged.PageCount == 0) return Results.NotFound();
+
+            using var mem = new MemoryStream();
+            merged.Save(mem, closeStream: false);
             mem.Position = 0;
 
-            var zipName = BuildTracesZipName(year, yearId);
-            http.Response.Headers.ContentDisposition = ContentDispositionHeader("attachment", zipName);
-            http.Response.ContentType = "application/zip";
+            var pdfName = BuildTracesPdfName(year, yearId);
+            http.Response.Headers.ContentDisposition = ContentDispositionHeader("attachment", pdfName);
+            http.Response.ContentType = "application/pdf";
             http.Response.Headers.CacheControl = "no-store, must-revalidate";
             await mem.CopyToAsync(http.Response.Body, ct);
             return Results.Empty;
@@ -457,9 +452,9 @@ public static class AuthEndpoints
         return string.Join("-", parts) + ".zip";
     }
 
-    private static string BuildTracesZipName(ConvoyageYear? year, int fallbackId)
+    private static string BuildTracesPdfName(ConvoyageYear? year, int fallbackId)
     {
-        if (year is null) return $"convoyage-{fallbackId}-traces.zip";
+        if (year is null) return $"convoyage-{fallbackId}-traces.pdf";
         var parts = new List<string> { "convoyage" };
         var siteRaw = year.Site?.Slug ?? year.Site?.Name ?? "";
         if (!string.IsNullOrWhiteSpace(siteRaw)) parts.Add(SlugFrom(siteRaw));
@@ -467,7 +462,7 @@ public static class AuthEndpoints
         var descRaw = year.Description ?? "";
         if (!string.IsNullOrWhiteSpace(descRaw)) parts.Add(SlugFrom(descRaw));
         parts.Add("traces");
-        return string.Join("-", parts) + ".zip";
+        return string.Join("-", parts) + ".pdf";
     }
 
     // Kestrel rejeita non-ASCII (ex.: "é" 0xE9) em headers. RFC 6266/5987 exige

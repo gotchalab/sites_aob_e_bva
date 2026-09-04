@@ -16,6 +16,7 @@ public class ConvoyageAdminService(AppDbContext db)
         string? RegulamentoTitle,
         string? Campeonato,
         string? MatriculaTraces,
+        DateOnly? TracesDate,
         PricingConfig Pricing);
 
     public record PricingConfig(
@@ -40,6 +41,7 @@ public class ConvoyageAdminService(AppDbContext db)
                 RegulamentoTitle = y.RegulamentoDownload != null ? y.RegulamentoDownload.Title : null,
                 y.Campeonato,
                 y.MatriculaTraces,
+                y.TracesDate,
                 y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
                 y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
                 y.TarifaAdquirenteSocio, y.TarifaAdquirenteNaoSocio,
@@ -54,7 +56,7 @@ public class ConvoyageAdminService(AppDbContext db)
             y.NumCargasAlvo, y.CapacidadePorCarga, y.MinPorCarga, y.TransportadorasJson ?? "{}",
             y.RegistrationClosesAt,
             y.RegulamentoDownloadId, y.RegulamentoTitle,
-            y.Campeonato, y.MatriculaTraces,
+            y.Campeonato, y.MatriculaTraces, y.TracesDate,
             new PricingConfig(
                 y.PrecoInscricao, y.PrecoAveBva, y.PrecoGaiola,
                 y.TarifaTransporteSocio, y.TarifaTransporteNaoSocio,
@@ -100,12 +102,13 @@ public class ConvoyageAdminService(AppDbContext db)
     /// Campeonato: nome do concurso destino (ex: "EUROPASHAU26 Karlsruhe").
     /// MatriculaTraces: matrícula emitida pela autoridade sanitária.
     /// Ambos são normalizados (trim); vazio → null.
-    public async Task<string?> UpdateTracesFieldsAsync(int yearId, string? campeonato, string? matricula)
+    public async Task<string?> UpdateTracesFieldsAsync(int yearId, string? campeonato, string? matricula, DateOnly? tracesDate = null)
     {
         var y = await db.ConvoyageYears.FirstOrDefaultAsync(x => x.Id == yearId);
         if (y is null) return "Ano não encontrado.";
         y.Campeonato = string.IsNullOrWhiteSpace(campeonato) ? null : campeonato.Trim();
         y.MatriculaTraces = string.IsNullOrWhiteSpace(matricula) ? null : matricula.Trim();
+        y.TracesDate = tracesDate;
         await db.SaveChangesAsync();
         return null;
     }

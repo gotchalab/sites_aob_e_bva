@@ -23,6 +23,7 @@ public static class TracesDeclarationPdfGenerator
         InscricaoConvoyageRequest r,
         string campeonato,
         string matriculaTraces,
+        string tracesDate,
         List<(string Especie, string Anilha)> aves,
         byte[] assinaturaPng,
         byte[]? fonpLogo,
@@ -216,7 +217,9 @@ public static class TracesDeclarationPdfGenerator
             // Linha de assinatura
             g.DrawLine(new XPen(XColor.FromArgb(0, 0, 0), 0.5),
                 signX, assinaturaBlockY, signX + signW, assinaturaBlockY);
-            g.DrawString(r.NomeCompleto ?? "", fontBody, ink,
+            var nomeAssinatura = (r.NomeCompleto ?? "") +
+                (string.IsNullOrEmpty(tracesDate) ? "" : " — " + tracesDate);
+            g.DrawString(nomeAssinatura, fontBody, ink,
                 new XPoint(signX, assinaturaBlockY + 16));
 
             // ── Rodapé FONP ────────────────────────────────────────────────
